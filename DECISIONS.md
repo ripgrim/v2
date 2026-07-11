@@ -641,6 +641,11 @@ is untouched.
   repo owner can't test the gate on their own PRs (they're exempt), so this
   lets solo end-to-end testing exercise the full pipeline without a second
   account. Not a production toggle; documented as a testing affordance.
+  FOLLOW-UP (next session touching the worker): fence it — refuse
+  `=true` when `NODE_ENV=production` (same pattern as `resolveAuthPosture`).
+  It fails toward MORE blocking (maintainers get gated), so it's not a
+  security hole, but a forgotten `=true` in prod blocks a customer's own
+  maintainers → support-ticket generator.
 - **Correction to the step-7 "block review 403s on own PRs" note:** it does
   NOT. The block action posts the request-changes review under the App
   INSTALLATION identity (`tripwire-dev[bot]`), which is distinct from the PR

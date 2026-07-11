@@ -501,7 +501,8 @@ since step 6, editor emits it last (round-trip proven) · moderation = paused
 run (moderation.integration.test.ts).
 
 ### §7 PR surface
-One comment: verdict line + ONE sentence + shields button + `<!-- tripwire:run -->`
+One comment: verdict line + ONE sentence, then a `for maintainers` dropdown
+holding the hosted-PNG "View on Tripwire" button + `<!-- tripwire:run -->`
 marker, upsert never append (comment.ts, snapshot + fake-fetch tests) · one
 `tripwire` check per head SHA, pending → verdict, updated in place, never a
 workflow file (check.ts) · same-step emission (pr-surface.ts) · branch

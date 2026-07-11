@@ -56,9 +56,15 @@ SHOULD HAPPEN: the event row appears at the top of /events within ~2s,
 no refresh — first end-to-end proof.
 
 ## 5. MVP heartbeat — sockpuppet PR blocked, merge button dead (closes step 7 done-when)
+STATUS: block + one-comment + failing `tripwire` check + request-changes review
+are PROVEN live (Boring-Software-Inc/scratch#1 via TRIPWIRE_DISABLE_EXEMPTION;
+ai-review caught the exfil + injection at confidence 1.0). REMAINING here: mark
+the check required and watch the merge button die (step 2), and push-to-edit
+(step 4) — the last unproven §7 behaviors.
+
 Prereqs: items 1–4. Use a second GitHub account (or ask a friend) whose
 account is <7 days old OR temporarily set the default account-age threshold
-higher than your account's age.
+higher than your account's age (or `TRIPWIRE_DISABLE_EXEMPTION=true` solo).
 1. api + worker + tunnel running (`.env` fully filled — worker needs
    GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY; set APP_URL=http://localhost:3000).
 2. Scratch repo → Settings → Branches → protect `main` → require status
@@ -66,8 +72,10 @@ higher than your account's age.
    check run reports).
 3. Open a PR from the sockpuppet account.
 SHOULD HAPPEN: a `tripwire` check appears pending during evaluation, then
-fails; ONE comment: "**tripwire: blocked** — N of M rules failed; merge is
-held." with the view-run badge; the merge button is dead.
+fails; ONE comment — the verdict line "**tripwire: blocked** — this change
+tripped N of M rules…" with a `for maintainers` dropdown holding the View on
+Tripwire button; a request-changes review deferring to that comment; the merge
+button is dead.
 4. Push a new commit to the same PR.
 SHOULD HAPPEN: the comment is EDITED (same comment, no second one); a fresh
 `tripwire` check appears on the new SHA.
