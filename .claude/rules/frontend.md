@@ -51,6 +51,12 @@ single-use, presentational.
 - The SSE stream merges into the Query cache — the live event list is a cache
   update, not a parallel state system.
 
+## Runtime caveat (web head)
+Server code in `apps/web` (server functions, start.ts middleware) executes on
+**Node** (the nitro runtime), NOT Bun. No `Bun.*` globals anywhere in
+`apps/web` or in packages it imports at runtime; shared utils must stay
+portable (`generateId`'s Bun-fast-path + Node-fallback is the precedent).
+
 ## useEffect policy
 Keep it down. Server sync → a query. Derived state → `useMemo`. Stable callback
 deps → refs. Audited by `/you-might-not-need-an-effect` and friends via

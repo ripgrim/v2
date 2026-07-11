@@ -441,13 +441,13 @@ apps/web/src/lib/*.functions.ts; zero internal REST), Hono (apps/api),
 Postgres+Drizzle (packages/db), pg-boss (packages/db/src/queue.ts,
 transactional enqueue proven in apps/api/src/webhooks.integration.test.ts),
 SSE via LISTEN/NOTIFY (apps/api/src/routes/stream.ts), Better Auth GitHub-only
-(packages/db/src/auth.ts), AI SDK + Anthropic (apps/worker/src/ai/generate.ts),
+(packages/db/src/auth.ts), AI SDK via OpenRouter (apps/worker/src/ai/generate.ts; AI_REVIEW_MODEL default, rule config wins),
 React Flow last (apps/web/src/components/workflows/editor/), UUIDv7
 (packages/utils/src/id.ts — Bun.randomUUIDv7), pino everywhere (zero
 console.log outside scripts/check output), Zod in contracts.
 
 ### §3 Monorepo layout + arrows
-Exact §3 tree; apps/mcp = agents.md only. Arrows enforced by
+§3 tree + the owner-added `packages/auth` (spec amended); apps/mcp = agents.md only. Arrows enforced by
 scripts/check-boundaries.ts (allow-list mirrors the spec block verbatim),
 green in CI (.github/workflows/ci.yml) since commit one.
 
@@ -524,9 +524,11 @@ moderation queue) · SSE merges into cache (events.query.ts) · one sanctioned
 useEffect · kebab-case files · seo.ts authored (demo had none).
 
 ### §10 Auth
-Better Auth GitHub-only (createAuth) · user.id UUIDv7; GitHub identity ONLY in
-account + forge_identities (databaseHook) · moderation_items.decided_by FK →
-user.id · contributors never authenticate (scored subjects live in event data).
+Better Auth GitHub-only (@tripwire/auth/server createAuth, served by the WEB
+head via start.ts request middleware — vite proxy is dead under nitro; spec
+§10 records the transport) · user.id UUIDv7; GitHub identity ONLY in account +
+forge_identities (databaseHook) · moderation_items.decided_by FK → user.id ·
+contributors never authenticate (scored subjects live in event data).
 
 ### §11 Testing
 Unit (per-rule over fixture contexts; fast-check properties: range, red-flags-

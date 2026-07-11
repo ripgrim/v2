@@ -23,6 +23,8 @@ core          ← worker ONLY           (pure: imports contracts + utils only.
                                        NO I/O, no db, no forge, no AI SDK, no octokit.
                                        Effects are INJECTED)
 db            ← worker, api, web      (schema + services)
+auth          ← web, api              (./server sessions + posture guard,
+                                       ./client browser; imports db + utils)
 forge-github  ← worker, api           (api uses webhook verify only)
 ui            ← web                   (primitives; no app logic, no data fetching)
 ```

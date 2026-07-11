@@ -44,7 +44,7 @@ Postgres when deployed, compute anywhere that runs Bun).
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Runtime / PM / tests | **Bun** (workspaces, `bun test`) | Never npm/npx; use `bun`/`bunx` |
+| Runtime / PM / tests | **Bun** (workspaces, `bun test`) | Never npm/npx; use `bun`/`bunx`. CAVEAT: the web head's server code executes on **Node** (nitro runtime) — no `Bun.*` globals in `apps/web` or anything it imports; shared utils stay portable (`generateId` precedent) |
 | Language | **TypeScript strict, ESM only** | No `any`; `unknown` + guards |
 | Lint/format | **Biome** | One config at root; CI + pre-commit |
 | Frontend | **TanStack Start + Router** | Design comes from the redesign demo |
@@ -55,7 +55,7 @@ Postgres when deployed, compute anywhere that runs Bun).
 | Queue | **pg-boss** | Same DB. Transactional enqueue |
 | Realtime | **SSE** from `apps/api`, fed by Postgres LISTEN/NOTIFY | Fallback: 2s cursor polling — decide at build step 4, not before |
 | Auth | **Better Auth** — GitHub OAuth only at launch | Neutral `user` + `forge_identities`; see §10 |
-| Review agent | **AI SDK** (`ai`), Anthropic provider first | No eve, no Chat SDK, no LangChain. See §8 |
+| Review agent | **AI SDK** (`ai`), provider-agnostic — **OpenRouter** default via `AI_REVIEW_MODEL` slug; explicit rule config wins | No eve, no Chat SDK, no LangChain. See §8 |
 | Workflow editor | **React Flow (xyflow)** | Built LAST (step 10) |
 | IDs | **UUIDv7** everywhere | Time-sortable → index locality for the event store |
 | Logging | **pino**, request IDs threaded into worker jobs | Never `console.log` |
@@ -72,6 +72,7 @@ tripwire/
 ├── biome.json  bunfig.toml  package.json  tsconfig.base.json
 ├── docker-compose.yml            # local postgres (+ api/worker services at deploy time)
 ├── packages/
+│   ├── auth/                     # @tripwire/auth — Better Auth factory (./server) + browser client (./client)
 │   ├── contracts/                # @tripwire/contracts — Zod schemas + types. THE shared language
 │   ├── forge/                    # @tripwire/forge — ForgeAdapter interface + types ONLY
 │   ├── core/                     # @tripwire/core — pure engine: rules, executor, scoring
@@ -96,6 +97,9 @@ core          ← worker ONLY           (pure: imports contracts + utils only.
                                        NO I/O, no db, no forge, no AI SDK, no octokit.
                                        Effects are INJECTED — see §8)
 db            ← worker, api, web      (schema + services)
+auth          ← web, api              (./server: createAuth + fail-closed posture
+                                       guard; ./client: browser client, never
+                                       imports server code. imports db + utils)
 forge-github  ← worker, api           (api uses webhook verify only)
 ui            ← web                   (primitives; no app logic, no data fetching)
 apps import packages; packages NEVER import apps; nothing imports core except worker.
@@ -212,6 +216,13 @@ DB conventions: snake_case columns (Drizzle maps to camelCase), `timestamptz`
 always, every jsonb column has a contracts schema validated **on write**.
 > Note in db/agents.md: services may split into `packages/services` if they outgrow
 > db. **Do not create that package before then.**
+
+### `packages/auth` — sessions (owner-added post-step-8; layout amendment in DECISIONS.md)
+Two entrypoints, deliberately split so the client bundle can never pull server
+code: `./server` (Better Auth instance factory over `@tripwire/db`'s schema +
+`resolveAuthPosture` — missing BETTER_AUTH_SECRET refuses to serve when
+NODE_ENV=production, stands open in dev) and `./client` (the browser auth
+client). The HTTP surface is mounted by the WEB head (see §10).
 
 ### `packages/ui` — primitives only
 Design-system primitives (button, input, card, dialog, badge, chart shells…) lifted
@@ -365,7 +376,9 @@ SDK, never a second engine.
 ## 8. Review agent (locked decisions)
 
 - Runtime: **AI SDK** called from the **worker**, inside rule `ai-review@1`.
-  Provider-agnostic: model is a config string (Anthropic first).
+  Provider-agnostic: **OpenRouter** (`@openrouter/ai-sdk-provider`,
+  `OPENROUTER_API_KEY`); the model is a slug — `AI_REVIEW_MODEL` env is the
+  default, explicit rule config wins; the resolved model persists in the trace.
 - **Inversion keeps core pure:** `evaluate` receives an injected `generate()` fn
   and pre-fetched context. Core never imports the AI SDK or the adapter.
 - **Bounded tool loop, not an open agent:** tools are thin wrappers over the
@@ -478,6 +491,14 @@ Primitives → `packages/ui`. Custom app UI → here. Extract when 50+ lines, us
 
 - Better Auth, **GitHub OAuth only** at launch (every day-1 user is a GitHub
   maintainer). Email/magic-link → cut list.
+- **Transport (learned during live bring-up):** the WEB head serves
+  `/api/auth/*` itself via a `createStart` request middleware (`src/start.ts`)
+  — same-origin cookies, OAuth callback on the web origin, no proxy. WHY: vite
+  `server.proxy` never fires under the nitro-owned request pipeline, and this
+  @tanstack/react-start version has no file-based server routes; the request
+  middleware runs before routing and is the sanctioned interception point.
+  The same middleware is the precedent for any endpoint the browser must
+  reach same-origin with credentials (e.g. the SSE proxy).
 - **Nothing in the schema ever references a GitHub ID as a user identifier.**
   Domain tables FK to `user.id` (UUIDv7). GitHub identity lives in exactly two
   places: Better Auth's `account` table (sign-in) and `forge_identities`
@@ -681,7 +702,8 @@ exists is the same scope creep that killed v1, typing faster.
    comment and produces a fresh check on the new SHA.
    **Steps 1–7 = the MVP heartbeat.**
 8. **Run page + rules UI + auth** — real run_steps evidence rendering; rule
-   config CRUD; Better Auth GitHub OAuth gating the dashboard.
+   config CRUD; Better Auth GitHub OAuth gating the dashboard (served from
+   the web head via start.ts request middleware — see §10 transport).
 9. **ai-review port** — §8, lifted from the eve demo.
 10. **Moderation queue → Home rollups → React Flow editor** (editor last: the
     engine has eaten workflow JSON since step 6, so the hardest UI lands on a
