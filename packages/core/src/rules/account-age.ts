@@ -1,3 +1,4 @@
+import { accountAgeConfigSchema } from "@tripwire/contracts";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
 
@@ -10,9 +11,7 @@ const DAY_MS = 86_400_000;
 export const accountAge = defineRule({
 	id: "account-age",
 	version: 1,
-	configSchema: z.object({
-		minDays: z.number().int().min(0),
-	}),
+	configSchema: accountAgeConfigSchema,
 	resultSchema: z.object({
 		accountAgeDays: z.number(),
 		minDays: z.number(),

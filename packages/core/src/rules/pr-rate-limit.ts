@@ -1,3 +1,4 @@
+import { prRateLimitConfigSchema } from "@tripwire/contracts";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
 
@@ -33,10 +34,7 @@ function intervalCov(timesMs: number[]): number | null {
 export const prRateLimit = defineRule({
 	id: "pr-rate-limit",
 	version: 1,
-	configSchema: z.object({
-		maxPerWindow: z.number().int().min(1),
-		windowHours: z.number().min(0.1).default(24),
-	}),
+	configSchema: prRateLimitConfigSchema,
 	resultSchema: z.object({
 		count: z.number(),
 		maxPerWindow: z.number(),

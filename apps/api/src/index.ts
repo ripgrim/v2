@@ -1,4 +1,4 @@
-import { createBoss, createDb } from "@tripwire/db";
+import { type Auth, createAuth, createBoss, createDb } from "@tripwire/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import pino from "pino";
@@ -18,6 +18,18 @@ export function createApi(deps: ApiDeps) {
 	});
 	app.use("/events/*", cors({ origin: deps.webOrigin, allowMethods: ["GET"] }));
 	app.get("/healthz", (c) => c.json({ ok: true }));
+	if (deps.auth) {
+		const auth = deps.auth;
+		app.use(
+			"/api/auth/*",
+			cors({
+				origin: deps.webOrigin,
+				allowMethods: ["GET", "POST"],
+				credentials: true,
+			}),
+		);
+		app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+	}
 	app.route("/webhooks", webhooks);
 	app.route("/events", stream);
 	return app;
@@ -32,7 +44,25 @@ if (import.meta.main) {
 	}
 	const { db, pool } = createDb();
 	const boss = await createBoss();
+	const authSecret = process.env.BETTER_AUTH_SECRET;
+	const ghClientId = process.env.GITHUB_OAUTH_CLIENT_ID;
+	const ghClientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+	const auth: Auth | null = authSecret
+		? createAuth({
+				db,
+				secret: authSecret,
+				baseUrl: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+				github:
+					ghClientId && ghClientSecret
+						? { clientId: ghClientId, clientSecret: ghClientSecret }
+						: null,
+			})
+		: null;
+	if (!auth) {
+		logger.warn("BETTER_AUTH_SECRET not set — auth endpoints disabled");
+	}
 	const app = createApi({
+		auth,
 		db,
 		pool,
 		boss,

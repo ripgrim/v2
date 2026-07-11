@@ -358,3 +358,33 @@ is untouched.
   row stays recorded).
 - **GithubHttp** extracted (get/post/patch/put; used by reads AND actions —
   the 2+ consumer bar).
+
+### Step 8 — Run page + rules UI + auth
+
+- **Dep added: `better-auth`** — §2-locked choice. Instance factory
+  `createAuth` lives in `@tripwire/db` (auth is database-backed; db is the one
+  package all three heads may import). The api head mounts the HTTP handler at
+  `/api/auth/*`; the web head instantiates the SAME config for session reads —
+  stateless instances over one database.
+- **`/api/auth` is vite-proxied to the api head** so cookies stay same-origin
+  in dev; at deploy the reverse proxy (Caddy, per §13 deploy note) does the
+  same. Keeps "NO internal REST" intact — auth is Better Auth's own protocol
+  surface, not dashboard data.
+- **Auth gate stands OPEN when `BETTER_AUTH_SECRET` is unset** (root
+  beforeLoad checks `authEnabled`). Local dev before the OAuth app exists
+  stays usable; the queue item closes it. Logged prominently.
+- **forge_identities row created via Better Auth databaseHook** on github
+  account creation (§10: identity in exactly two places).
+- **Rule config schemas moved to `contracts/rules.ts`** + `RULE_CATALOG`
+  (AUTHORED — morning review target): rule config crosses UI → jsonb → worker
+  boundaries, which is contracts' definition. Core imports its config schemas
+  from contracts now (single source); evidence schemas stay in core. The
+  catalog carries UI names/blurbs/defaults; the registry stays engine truth.
+- **Rules UI edits config as validated JSON** (textarea + zod safeParse server-
+  side and client-side error surfacing) — boring; per-field forms can come
+  with the editor work. `dep added: none` (uses existing demo primitives).
+- **Run page** renders run_steps evidence raw (`EvidenceView` JSON) — §6
+  "evidence makes the run page real"; ai-findings.tsx arrives with step 9.
+- **`getStartContext().request`** is how server functions read headers in
+  this @tanstack/react-start version (dep `@tanstack/start-storage-context`
+  pinned to the workspace's existing transitive version).

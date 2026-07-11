@@ -1,3 +1,4 @@
+import { englishOnlyConfigSchema } from "@tripwire/contracts";
 import { truncate } from "@tripwire/utils";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
@@ -28,9 +29,7 @@ function nonLatinRatio(text: string): { ratio: number; letters: number } {
 export const englishOnly = defineRule({
 	id: "english-only",
 	version: 1,
-	configSchema: z.object({
-		maxNonLatinRatio: z.number().min(0).max(1).default(0.5),
-	}),
+	configSchema: englishOnlyConfigSchema,
 	resultSchema: z.object({
 		ratio: z.number(),
 		lettersExamined: z.number(),

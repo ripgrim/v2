@@ -1,3 +1,4 @@
+import { minMergedPrsConfigSchema } from "@tripwire/contracts";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
 
@@ -8,9 +9,7 @@ import { defineRule } from "./define.ts";
 export const minMergedPrs = defineRule({
 	id: "min-merged-prs",
 	version: 1,
-	configSchema: z.object({
-		min: z.number().int().min(0),
-	}),
+	configSchema: minMergedPrsConfigSchema,
 	resultSchema: z.object({
 		mergedInRepo: z.number(),
 		min: z.number(),

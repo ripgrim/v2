@@ -245,3 +245,46 @@ typecheck:  10/10 workspaces exit 0
 boundaries: ✓ passed
 tests:      80 pass, 0 fail (199 expect) across 16 files
 ```
+
+---
+
+## Step 7 — Actions + the PR surface — 2400bdd
+
+**Scope:** comment presenter + upsert, tripwire check run (pending → verdict,
+per-SHA upsert), executeAction + assembled ForgeAdapter, worker pr-surface
+(§5.6b pending check, §5.12 rows-first + mark-executed, §5.13 comment+check
+from one persistence step).
+
+**Machine-verified:**
+```
+bun test packages/forge-github → 17 pass (3 comment snapshots vs golden files;
+  condensedness: exactly 3 lines — verdict+sentence / badge / marker;
+  upsert creates-once-then-edits; check creates-then-patches same SHA;
+  pending → in_progress without conclusion)
+bun test apps/worker →
+✓ blocked run ⇒ pending check, block+comment+check rows recorded AND executed;
+  retry is a no-op (fake adapter call log: pending:sha → failure:sha,
+  comment starts "**tripwire: blocked**"; all rows status=executed;
+  re-emit executes nothing)
+full suite: 90 pass, 0 fail — ran 4x consecutively clean after teardown
+hardening (one intermittent teardown flake fixed)
+```
+
+**Awaiting live verification:** QUEUE #5 — the step-7 done-when (sockpuppet PR
+blocked, required check kills merge button, new commit edits comment + fresh
+check). Steps 1–7 = the MVP heartbeat; #5 is the heartbeat check.
+
+**Decisions:** DECISIONS.md "Step 7" — block-is-the-check, verdict-scoped
+idempotency keys, direct pending check, empty request-review payload,
+GithubHttp extraction.
+
+**Needs Grim's eyes:** comment copy (constitution voice); check summary
+format; the block-action-does-nothing call.
+
+**Checks:**
+```
+biome:      Checked 289 files. No fixes applied.
+typecheck:  10/10 workspaces exit 0
+boundaries: ✓ passed
+tests:      90 pass, 0 fail (3 snapshots, 221 expect)
+```

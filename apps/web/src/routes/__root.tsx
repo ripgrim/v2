@@ -3,11 +3,13 @@ import {
 	createRootRouteWithContext,
 	HeadContent,
 	Outlet,
+	redirect,
 	Scripts,
 } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "#/components/ui/sonner";
+import { getSessionInfo } from "#/lib/auth.functions";
 import { siteConfig } from "#/lib/site-config";
 
 import appCss from "../styles.css?url";
@@ -15,6 +17,20 @@ import appCss from "../styles.css?url";
 export const Route = createRootRouteWithContext<{
 	queryClient: QueryClient;
 }>()({
+	/**
+	 * §10 — Better Auth gates the dashboard. When auth env is absent (local
+	 * dev before the OAuth app exists) the gate stands open; see
+	 * VERIFICATION-QUEUE.
+	 */
+	beforeLoad: async ({ location }) => {
+		if (location.pathname === "/login") {
+			return;
+		}
+		const session = await getSessionInfo();
+		if (session.authEnabled && !session.user) {
+			throw redirect({ to: "/login" });
+		}
+	},
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },

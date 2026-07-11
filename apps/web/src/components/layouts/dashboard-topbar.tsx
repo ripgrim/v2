@@ -1,6 +1,7 @@
 import {
 	ActivityIcon,
 	Analytics01Icon,
+	CheckListIcon,
 	Logout01Icon,
 	MoonIcon,
 	Queue01Icon,
@@ -27,6 +28,7 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
 import { useHasMounted } from "#/hooks/use-has-mounted";
+import { authClient } from "#/lib/auth-client";
 import { siteConfig } from "#/lib/site-config";
 
 interface DashboardTopbarProps {
@@ -53,6 +55,7 @@ export function DashboardTopbar({ moderator, counts }: DashboardTopbarProps) {
 			<div className="hidden shrink-0 items-center gap-0.5 md:flex">
 				<NavLink to="/" label="Queue" icon={Queue01Icon} value={counts.queue} />
 				<NavLink to="/events" label="Events" icon={ActivityIcon} />
+				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
 				<NavLink
 					to="/automod"
 					label="Automod"
@@ -142,7 +145,16 @@ function UserMenu({
 					Settings
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem className="text-destructive focus:text-destructive">
+				<DropdownMenuItem
+					className="text-destructive focus:text-destructive"
+					onClick={() =>
+						authClient.signOut({
+							fetchOptions: {
+								onSuccess: () => window.location.assign("/login"),
+							},
+						})
+					}
+				>
 					<HugeiconsIcon icon={Logout01Icon} size={14} strokeWidth={2} />
 					Log out
 				</DropdownMenuItem>

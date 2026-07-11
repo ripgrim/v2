@@ -98,3 +98,102 @@ export const ruleResultSchema = z.object({
 	evaluatedAt: z.iso.datetime(),
 });
 export type RuleResult = z.infer<typeof ruleResultSchema>;
+
+/**
+ * AUTHORED — per-rule config schemas. They live here (not in core) because
+ * rule config crosses boundaries: Rules UI form → rule_configs jsonb →
+ * worker. Core imports these for its defineRule definitions; evidence
+ * schemas stay with the rules.
+ */
+export const accountAgeConfigSchema = z.object({
+	minDays: z.number().int().min(0),
+});
+export const minMergedPrsConfigSchema = z.object({
+	min: z.number().int().min(0),
+});
+export const prRateLimitConfigSchema = z.object({
+	maxPerWindow: z.number().int().min(1),
+	windowHours: z.number().min(0.1).default(24),
+});
+export const maxFilesChangedConfigSchema = z.object({
+	max: z.number().int().min(1),
+});
+export const englishOnlyConfigSchema = z.object({
+	maxNonLatinRatio: z.number().min(0).max(1).default(0.5),
+});
+export const cryptoAddressConfigSchema = z.object({});
+export const honeypotConfigSchema = z.object({
+	paths: z.array(z.string()).min(1),
+});
+export const profileReadmeConfigSchema = z.object({
+	minLength: z.number().int().min(1).default(32),
+});
+
+/** UI-facing catalog of launch rules. The registry (core) is engine truth. */
+export const RULE_CATALOG = [
+	{
+		ruleId: "account-age",
+		version: 1,
+		name: "account age",
+		blurb: "the contributor's forge account must be at least N days old.",
+		configSchema: accountAgeConfigSchema,
+		defaultConfig: { minDays: 7 },
+	},
+	{
+		ruleId: "min-merged-prs",
+		version: 1,
+		name: "merged change requests",
+		blurb: "requires N merged change requests in this repo.",
+		configSchema: minMergedPrsConfigSchema,
+		defaultConfig: { min: 0 },
+	},
+	{
+		ruleId: "pr-rate-limit",
+		version: 1,
+		name: "rate limit",
+		blurb:
+			"caps change requests per window; spray patterns surface in evidence.",
+		configSchema: prRateLimitConfigSchema,
+		defaultConfig: { maxPerWindow: 5, windowHours: 24 },
+	},
+	{
+		ruleId: "max-files-changed",
+		version: 1,
+		name: "max files changed",
+		blurb: "caps the number of files a change request may touch.",
+		configSchema: maxFilesChangedConfigSchema,
+		defaultConfig: { max: 200 },
+	},
+	{
+		ruleId: "english-only",
+		version: 1,
+		name: "english only",
+		blurb: "title/comment must be predominantly latin-script.",
+		configSchema: englishOnlyConfigSchema,
+		defaultConfig: { maxNonLatinRatio: 0.5 },
+	},
+	{
+		ruleId: "crypto-address",
+		version: 1,
+		name: "crypto address",
+		blurb: "blocks cryptocurrency addresses in titles, comments, and diffs.",
+		configSchema: cryptoAddressConfigSchema,
+		defaultConfig: {},
+	},
+	{
+		ruleId: "honeypot",
+		version: 1,
+		name: "honeypot paths",
+		blurb: "no legitimate change request touches these paths.",
+		configSchema: honeypotConfigSchema,
+		defaultConfig: { paths: [".github/workflows/**"] },
+	},
+	{
+		ruleId: "profile-readme",
+		version: 1,
+		name: "profile readme",
+		blurb: "requires a minimum of profile text — identity investment.",
+		configSchema: profileReadmeConfigSchema,
+		defaultConfig: { minLength: 32 },
+	},
+] as const;

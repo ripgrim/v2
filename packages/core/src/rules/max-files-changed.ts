@@ -1,3 +1,4 @@
+import { maxFilesChangedConfigSchema } from "@tripwire/contracts";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
 
@@ -8,9 +9,7 @@ import { defineRule } from "./define.ts";
 export const maxFilesChanged = defineRule({
 	id: "max-files-changed",
 	version: 1,
-	configSchema: z.object({
-		max: z.number().int().min(1),
-	}),
+	configSchema: maxFilesChangedConfigSchema,
 	resultSchema: z.object({
 		filesChanged: z.number(),
 		max: z.number(),

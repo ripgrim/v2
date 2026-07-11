@@ -1,3 +1,4 @@
+import { cryptoAddressConfigSchema } from "@tripwire/contracts";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
 
@@ -31,7 +32,7 @@ function scan(text: string, location: string) {
 export const cryptoAddress = defineRule({
 	id: "crypto-address",
 	version: 1,
-	configSchema: z.object({}),
+	configSchema: cryptoAddressConfigSchema,
 	resultSchema: z.object({
 		matches: z.array(
 			z.object({ kind: z.string(), value: z.string(), location: z.string() }),

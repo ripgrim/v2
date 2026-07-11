@@ -1,3 +1,4 @@
+import { profileReadmeConfigSchema } from "@tripwire/contracts";
 import { z } from "zod";
 import { defineRule } from "./define.ts";
 
@@ -9,9 +10,7 @@ import { defineRule } from "./define.ts";
 export const profileReadme = defineRule({
 	id: "profile-readme",
 	version: 1,
-	configSchema: z.object({
-		minLength: z.number().int().min(1).default(32),
-	}),
+	configSchema: profileReadmeConfigSchema,
 	resultSchema: z.object({
 		hasProfileText: z.boolean(),
 		length: z.number(),
