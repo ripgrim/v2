@@ -1,0 +1,23 @@
+# Local infrastructure. Step 1 ships Postgres only; api/worker/Caddy services
+# join at deploy time (spec §13). pg-boss shares this same database.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: tripwire-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tripwire
+      POSTGRES_PASSWORD: tripwire
+      POSTGRES_DB: tripwire
+    ports:
+      - "5432:5432"
+    volumes:
+      - tripwire-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripwire -d tripwire"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tripwire-pgdata:

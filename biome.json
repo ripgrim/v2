@@ -1,0 +1,19 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
+	"extends": ["ultracite/biome/react"],
+	"files": {
+		"includes": [
+			"**",
+			"!**/src/routeTree.gen.ts",
+			"!**/*.gen.ts",
+			"!**/src/styles.css",
+			"!**/dist",
+			"!**/.output",
+			"!**/.tanstack",
+			"!**/.vercel",
+			"!**/drizzle",
+			"!.agents",
+			"!skills-lock.json"
+		]
+	}
+}

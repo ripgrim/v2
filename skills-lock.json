@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-auth-mcp": {
+      "source": "better-auth/agent-auth",
+      "sourceType": "github",
+      "skillPath": "skills/agent-auth-mcp/SKILL.md",
+      "computedHash": "b3c03dd1a57be9a3199e73157aa15c9b5d7210f253daaf4d42757f6611fb9bc6"
+    },
+    "ai-sdk": {
+      "source": "vercel/ai",
+      "sourceType": "github",
+      "skillPath": "skills/use-ai-sdk/SKILL.md",
+      "computedHash": "0883204d11b055e968dee697c5858e68064c27dfd4deb6310212895daa65c5ad"
+    },
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/best-practices/SKILL.md",
+      "computedHash": "61ba0ef64ed2e7c424401cc848ca33dd6d790a720c44727717dc0c5cba5fc122"
+    },
+    "better-auth-plugins": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/platforms/auth/better-auth/better-auth-plugins/SKILL.md",
+      "computedHash": "a904a7c877a815f5c61745d72284212d53303d168e339694493b38db0f6fd377"
+    },
+    "better-auth-security-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "security/SKILL.md",
+      "computedHash": "7a230edf3a24ce18162cb4379f59b6a19b8d24ca04db530609d0f15cede556dc"
+    },
+    "hono": {
+      "source": "yusukebe/hono-skill",
+      "sourceType": "github",
+      "skillPath": "skills/hono/SKILL.md",
+      "computedHash": "220e5e1b12bbaeec49ec362b6e2262d77632d0536e9758bba9acbbc323fef990"
+    },
+    "hono-api-scaffolder": {
+      "source": "jezweb/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare/skills/hono-api-scaffolder/SKILL.md",
+      "computedHash": "214b99dbb9875f5d1228a2cd7db0815cf6cbf36d3f7defaf4ab801898badaf59"
+    },
+    "hono-core": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/javascript/frameworks/hono/hono-core/SKILL.md",
+      "computedHash": "279bff420c9f5e89be373fb491d69b423356175b4968c9230d00ae4002721520"
+    },
+    "hono-testing": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "skillPath": "toolchains/javascript/frameworks/hono/hono-testing/SKILL.md",
+      "computedHash": "ea35bffcb1fc9278e46e2b625529f1c4623360ab35d9d9096850535fb99e81ba"
+    },
+    "hono-typescript": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "hono-typescript/SKILL.md",
+      "computedHash": "3a6f5fecba6736272630126d3d84c75c737228af925258cd1298c7b24c98e97a"
+    },
+    "organization-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/organization/SKILL.md",
+      "computedHash": "27627eb3a13bd44eff3a5d890f96e7db052b623db90e01684f759abe3e7fe56b"
+    },
+    "pg-boss": {
+      "source": "blink-new/claude",
+      "sourceType": "github",
+      "skillPath": "skills/pg-boss/SKILL.md",
+      "computedHash": "2f3a7e45b866705437b7723637267c2a9925e75007c5b878b56d87f6b04895c8"
+    },
+    "tanstack-start": {
+      "source": "tanstack-skills/tanstack-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/tanstack-start/skills/tanstack-start/SKILL.md",
+      "computedHash": "e9d8355fe3e47b118e739081f1123c52aa0ecde57da840722177e1ad5caf9908"
+    },
+    "tanstack-start-best-practices": {
+      "source": "deckardger/tanstack-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tanstack-start/SKILL.md",
+      "computedHash": "8b073187405a10f9997158f9139a9664cc801595d2fe63d542a0bac9bf2152f5"
+    },
+    "two-factor-authentication-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/twoFactor/SKILL.md",
+      "computedHash": "a6f720042e5a090909e0d519a6a50a7eb8179553cd5315f0bbad852a6d20dac8"
+    },
+    "zod": {
+      "source": "pproenca/dot-skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/zod/SKILL.md",
+      "computedHash": "c69b5133b65643317236707f2cd3e521b4fc6e5ee5fd6c6c00cf62a37dfd0144"
+    },
+    "zod-schema-validation": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "zod-schema-validation/SKILL.md",
+      "computedHash": "f3fd474dfced1090e24af93eeabb3d85cd96e93e188cbbcc97202f5f85781b28"
+    },
+    "zod-validation-utilities": {
+      "source": "giuseppe-trisciuoglio/developer-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/developer-kit-typescript/skills/zod-validation-utilities/SKILL.md",
+      "computedHash": "9785b925118b719c6f2c34b3d1fb2052a272d2efee4853ced86b8d6be5a7b061"
+    }
+  }
+}

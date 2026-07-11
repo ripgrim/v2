@@ -1,0 +1,7 @@
+[install]
+# Workspaces hoist to the root node_modules; packages resolve each other by name.
+exact = false
+
+[test]
+# bun test discovers *.test.ts across every workspace.
+root = "."
