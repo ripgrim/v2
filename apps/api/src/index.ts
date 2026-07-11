@@ -75,6 +75,10 @@ if (import.meta.main) {
 		: null;
 	if (!auth) {
 		logger.warn("BETTER_AUTH_SECRET not set — auth endpoints disabled");
+	} else if (!(ghClientId && ghClientSecret)) {
+		logger.warn(
+			"GITHUB_OAUTH_CLIENT_ID/SECRET not set — sign-in will fail with PROVIDER_NOT_FOUND (VERIFICATION-QUEUE #6)",
+		);
 	}
 	const app = createApi({
 		auth,

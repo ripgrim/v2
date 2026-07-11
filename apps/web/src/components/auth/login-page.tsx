@@ -1,5 +1,6 @@
 import { GithubIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
 import { authClient } from "#/lib/auth-client";
 import { siteConfig } from "#/lib/site-config";
@@ -21,9 +22,18 @@ export function LoginPage() {
 					iconLeft={
 						<HugeiconsIcon icon={GithubIcon} size={16} strokeWidth={2} />
 					}
-					onClick={() =>
-						authClient.signIn.social({ provider: "github", callbackURL: "/" })
-					}
+					onClick={async () => {
+						const { error } = await authClient.signIn.social({
+							provider: "github",
+							callbackURL: "/",
+						});
+						if (error) {
+							toast(
+								error.message ??
+									"sign-in failed — is the github oauth app configured?",
+							);
+						}
+					}}
 				>
 					continue with github
 				</Button>
