@@ -8,4 +8,12 @@
 
 export type { Db } from "./client.ts";
 export { createDb, schema } from "./client.ts";
+export { applyMigrations } from "./migrate.ts";
+export {
+	createBoss,
+	PROCESS_EVENT_QUEUE,
+	type ProcessEventJob,
+} from "./queue.ts";
 export * from "./schema/index.ts";
+export * as eventServices from "./services/events.ts";
+export { createTestDatabase, type TestDatabase } from "./testing.ts";

@@ -16,7 +16,8 @@
 		"@tripwire/contracts": "workspace:*",
 		"@tripwire/utils": "workspace:*",
 		"drizzle-orm": "^0.45.2",
-		"pg": "^8.22.0"
+		"pg": "^8.22.0",
+		"pg-boss": "^12.26.0"
 	},
 	"devDependencies": {
 		"@types/pg": "^8.20.0",

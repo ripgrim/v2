@@ -215,3 +215,36 @@ is untouched.
   contracts validation happens at normalize (§5.5).
 - **Better Auth tables hand-written** to the adapter's standard column set now
   (step 2 owns schema); Better Auth itself (dep + config) arrives in step 8.
+
+### Step 3 — GitHub App + ingest
+
+- **Deps added:** `hono` (apps/api — §2-locked), `pino` (§2-locked),
+  `pg-boss@12` (@tripwire/db — §2-locked), `pg`/`@types/pg` (api, for types),
+  `zod` (forge-github — domain-internal parsers, §2 allows), and dev-only
+  `@octokit/webhooks-examples` (fixture source, below).
+- **Transactional enqueue (§5.2):** pg-boss 12 `insert()` accepts a per-call
+  `db.executeSql` — the job insert runs on the SAME pg client/transaction as
+  the events insert. No job without a row, no row without a job. Proven by
+  integration test.
+- **testcontainers DROPPED:** `@testcontainers/postgresql` hangs under Bun —
+  `start()` never resolves even with `Wait.forListeningPorts()` (containers
+  come up healthy; the dockerode stream plumbing never settles). Replaced with
+  `packages/db/src/testing.ts` `createTestDatabase()` — a docker-CLI-managed
+  throwaway postgres:17 container. Same §11 guarantee (REAL postgres, real tx,
+  real constraints), zero deps. Integration suite runs in ~1.6s.
+- **Fixture provenance:** octokit-maintained captured payloads
+  (`@octokit/webhooks-examples`, real GitHub deliveries) extracted into
+  `forge-github/fixtures/` with PROVENANCE.md. Queue item 3 replaces them with
+  self-captured deliveries once the App is live — octokit captures are real
+  but not from OUR App's permission set.
+- **AUTHORED — morning review target: `contracts/check.ts`** — verbatim from
+  §7's CheckState definition.
+- **ForgeAdapter interface authored** (forge/src/index.ts) from §4: inbound
+  verify/normalize, reads (getDiff/getCommits/readFile/getContributorProfile),
+  `execute(ForgeAction)` incl. `set-check`. `adapter.ts` object lands when
+  reads exist (step 6) — interface-only until then keeps step scope honest.
+- **normalize mapping judgment:** PR actions `reopened` and `ready_for_review`
+  both map to `change-request.opened` (gate re-evaluates); all other PR
+  actions are not ingested (null). `issue_comment` only `created`.
+- **No octokit anywhere:** App JWT is RS256 via node:crypto; installation
+  tokens fetched with plain fetch + cached (client/auth.ts).
