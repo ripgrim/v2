@@ -22,12 +22,15 @@ const VERDICT_TO_CONCLUSION: Record<Verdict, CheckState["conclusion"]> = {
 export function verdictSentence(
 	verdict: Verdict,
 	stats: { evaluated: number; failed: number },
+	degraded = false,
 ): string {
 	if (verdict === "block") {
 		return `${stats.failed} of ${stats.evaluated} rules failed; merge is held.`;
 	}
 	if (verdict === "needs_review") {
-		return "awaiting moderation — a maintainer decides next.";
+		return degraded
+			? "sent to review — evaluation degraded."
+			: "awaiting moderation — a maintainer decides next.";
 	}
 	return `all ${stats.evaluated} rules passed.`;
 }
@@ -72,6 +75,8 @@ export interface EmitSurfaceInput {
 	verdict: Verdict;
 	event: NormalizedEvent;
 	stats: { evaluated: number; failed: number };
+	/** Fail-closed floor fired — the sentence names the degradation. */
+	degraded?: boolean;
 	/** Workflow-emitted action rows still awaiting execution. */
 	pendingActionRows: {
 		id: string;
@@ -93,7 +98,7 @@ export async function emitPrSurface(
 	const number = event.changeRequest.number;
 	const sha = event.changeRequest.headSha;
 	const runUrl = `${deps.appUrl}/runs/${runId}`;
-	const sentence = verdictSentence(verdict, input.stats);
+	const sentence = verdictSentence(verdict, input.stats, input.degraded);
 
 	const surfaceRows = await runServices.recordActions(db, runId, [
 		{

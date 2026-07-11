@@ -66,6 +66,8 @@ export interface RunWorkflowsResult {
 	paused: boolean;
 	actionRows: { id: string; kind: string; payload: Record<string, unknown> }[];
 	stats: { evaluated: number; failed: number };
+	/** True when the fail-closed floor fired (evaluation degraded). */
+	degraded: boolean;
 }
 
 export async function runWorkflows(
@@ -80,6 +82,7 @@ export async function runWorkflows(
 		paused: false,
 		actionRows: [],
 		stats: { evaluated: 0, failed: 0 },
+		degraded: false,
 	};
 
 	const custom = await repoServices.listEnabledWorkflows(
@@ -98,7 +101,7 @@ export async function runWorkflows(
 	}
 
 	const now = new Date().toISOString();
-	const ctx = await buildRuleContext(
+	const { ctx, degradedReads } = await buildRuleContext(
 		event,
 		deps.reads,
 		now,
@@ -128,14 +131,52 @@ export async function runWorkflows(
 		});
 	}
 
-	const verdict = worstVerdict(executions.map((e) => e.result.verdict));
-	const paused = executions.some((e) => e.result.pausedAtNodeId !== null);
+	let verdict = worstVerdict(executions.map((e) => e.result.verdict));
+	let paused = executions.some((e) => e.result.pausedAtNodeId !== null);
 	const steps: StepRecord[] = executions.flatMap((execution) =>
 		execution.result.steps.map((step) => ({
 			...step,
 			nodeId: `${execution.definition.id}:${step.nodeId}`,
 		})),
 	);
+
+	/**
+	 * Fail-closed floor (amends the step-6 composition): ONE skipped rule
+	 * still conducts as pass — a flaky read must not block a human — but a
+	 * run whose evaluation is mostly guesswork never passes. All-skipped or
+	 * skipped ≥ 50% of rule nodes ⇒ needs_review, routed to moderation.
+	 */
+	const ruleSteps0 = steps.filter((step) => step.nodeKind === "rule");
+	const skippedCount = ruleSteps0.filter(
+		(step) => step.status === "skipped",
+	).length;
+	const degraded =
+		ruleSteps0.length > 0 &&
+		skippedCount * 2 >= ruleSteps0.length &&
+		verdict === "pass";
+	if (degraded) {
+		verdict = "needs_review";
+		paused = true;
+		const startedAt = new Date().toISOString();
+		steps.push({
+			nodeId: "run:degradation",
+			nodeKind: "gate",
+			status: "skipped",
+			input: { rule: "fail-closed floor" },
+			output: {
+				degradedReads,
+				skippedRules: skippedCount,
+				ruleNodes: ruleSteps0.length,
+			},
+			startedAt,
+			finishedAt: startedAt,
+			durationMs: 0,
+		});
+		logger.warn(
+			{ degradedReads, skippedCount, ruleNodes: ruleSteps0.length },
+			"evaluation degraded — fail-closed floor routes run to moderation",
+		);
+	}
 
 	const runId = await runServices.createRun(db, {
 		eventId,
@@ -156,6 +197,12 @@ export async function runWorkflows(
 			});
 		}
 	}
+	if (degraded) {
+		await moderationServices.createModerationItem(db, {
+			runId,
+			nodeId: "run:degraded",
+		});
+	}
 
 	const actionRows = await runServices.recordActions(
 		db,
@@ -172,13 +219,12 @@ export async function runWorkflows(
 		),
 	);
 
-	const ruleSteps = steps.filter((step) => step.nodeKind === "rule");
 	const stats = {
-		evaluated: ruleSteps.length,
-		failed: ruleSteps.filter((step) => step.status === "fail").length,
+		evaluated: ruleSteps0.length,
+		failed: ruleSteps0.filter((step) => step.status === "fail").length,
 	};
 	logger.info({ runId, verdict, paused, steps: steps.length }, "run persisted");
-	return { runId, verdict, paused, actionRows, stats };
+	return { runId, verdict, paused, actionRows, stats, degraded };
 }
 
 export function makeEvaluator(ctx: RuleContext, logger: Logger) {

@@ -23,20 +23,28 @@ export interface WorkerReads {
 	): Promise<ContributorProfile>;
 }
 
+export interface BuiltRuleContext {
+	ctx: RuleContext;
+	/** Reads that failed — the run-level degradation evidence (fail-closed floor). */
+	degradedReads: string[];
+}
+
 export async function buildRuleContext(
 	event: NormalizedEvent,
 	reads: WorkerReads | null,
 	now: string,
 	logger: Logger,
 	generate?: AiReviewGenerate,
-): Promise<RuleContext> {
+): Promise<BuiltRuleContext> {
 	const number = "changeRequest" in event ? event.changeRequest.number : null;
 	const repo = event.repo.fullName;
+	const degradedReads: string[] = [];
 
 	const guard = async <T>(name: string, fn: () => Promise<T>) => {
 		try {
 			return await fn();
 		} catch (error) {
+			degradedReads.push(name);
 			logger.warn(
 				{ read: name, error: getErrorMessage(error) },
 				"context read degraded",
@@ -59,7 +67,7 @@ export async function buildRuleContext(
 			: Promise.resolve(null),
 	]);
 
-	return {
+	const ctx: RuleContext = {
 		event,
 		now,
 		generate,
@@ -92,4 +100,5 @@ export async function buildRuleContext(
 				}
 			: null,
 	};
+	return { ctx, degradedReads };
 }

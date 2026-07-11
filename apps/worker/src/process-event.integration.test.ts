@@ -310,7 +310,7 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 		expect(runRows.rows[0].n).toBe(0);
 	});
 
-	test("degraded reads (all throw) ⇒ rules skip, run passes, nothing blocked", async () => {
+	test("degraded reads (all throw) ⇒ fail-closed floor: needs_review + moderation item, never pass", async () => {
 		const raw = await fixtureRaw();
 		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
 			deliveryId: "worker-run-3",
@@ -338,17 +338,85 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 			{ eventId },
 		);
 		const runRows = await pool.query(
-			"SELECT id, verdict FROM runs WHERE event_id = $1",
+			"SELECT id, status, verdict FROM runs WHERE event_id = $1",
+			[eventId],
+		);
+		expect(runRows.rows[0].verdict).toBe("needs_review");
+		expect(runRows.rows[0].status).toBe("paused");
+
+		const degradation = await pool.query(
+			"SELECT output FROM run_steps WHERE run_id = $1 AND node_id = 'run:degradation'",
+			[runRows.rows[0].id],
+		);
+		expect(degradation.rowCount).toBe(1);
+		expect(degradation.rows[0].output.degradedReads).toEqual([
+			"diff",
+			"commits",
+			"contributor",
+		]);
+
+		const items = await pool.query(
+			"SELECT node_id FROM moderation_items WHERE run_id = $1",
+			[runRows.rows[0].id],
+		);
+		expect(items.rows[0].node_id).toBe("run:degraded");
+	});
+
+	test("partial degradation (minority skipped) ⇒ still pass", async () => {
+		const raw = await fixtureRaw();
+		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+			deliveryId: "worker-run-4",
+			rawKind: "pull_request",
+			raw,
+		});
+		if (!eventId) {
+			throw new Error("insert failed");
+		}
+		await processEvent(
+			{
+				db,
+				pool,
+				logger,
+				adapter: null,
+				makeGenerate: () => () =>
+					Promise.resolve({
+						output: {
+							verdict: "pass",
+							confidence: 0.9,
+							summary: "clean.",
+							findings: [],
+						},
+						trace: {},
+					}),
+				appUrl: "http://localhost:3000",
+				reads: {
+					getDiff: () =>
+						Promise.resolve([
+							{
+								path: "src/app.ts",
+								status: "modified" as const,
+								additions: 1,
+								deletions: 1,
+							},
+						]),
+					getCommits: () => Promise.resolve([]),
+					getContributorProfile: () =>
+						Promise.reject(new Error("profile fetch failed")),
+				},
+			},
+			{ eventId },
+		);
+		const runRows = await pool.query(
+			"SELECT id, status, verdict FROM runs WHERE event_id = $1",
 			[eventId],
 		);
 		expect(runRows.rows[0].verdict).toBe("pass");
-		const steps = await pool.query(
-			"SELECT status FROM run_steps WHERE run_id = $1 AND node_kind = 'rule'",
+		expect(runRows.rows[0].status).toBe("completed");
+		const skipped = await pool.query(
+			"SELECT count(*)::int AS n FROM run_steps WHERE run_id = $1 AND node_kind = 'rule' AND status = 'skipped'",
 			[runRows.rows[0].id],
 		);
-		expect(
-			steps.rows.every((s) => s.status === "skipped" || s.status === "pass"),
-		).toBe(true);
+		expect(skipped.rows[0].n).toBe(1);
 	});
 });
 

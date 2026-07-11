@@ -35,6 +35,17 @@ export async function resumeRun(
 	}
 	const normalized = event.normalized as NormalizedEvent;
 
+	if (item.nodeId === "run:degraded") {
+		await resumeDegradedRun(
+			deps,
+			item.runId,
+			job.decision,
+			normalized,
+			runData,
+		);
+		return;
+	}
+
 	const [wfId, pausedNode] = splitNodeId(item.nodeId);
 	const snapshot = z
 		.array(workflowDefinitionSchema)
@@ -47,7 +58,7 @@ export async function resumeRun(
 
 	const outcomes = deriveOutcomes(definition, runData.steps, wfId);
 	const now = new Date().toISOString();
-	const ctx = await buildRuleContext(
+	const { ctx } = await buildRuleContext(
 		normalized,
 		deps.reads,
 		now,
@@ -111,6 +122,51 @@ export async function resumeRun(
 		{ runId: item.runId, decision: job.decision, verdict: result.verdict },
 		"moderated run resumed",
 	);
+}
+
+/**
+ * Fail-closed floor resume: no workflow node paused this run — degradation
+ * did. approve ⇒ pass; deny ⇒ block (with the block recorded and executed).
+ */
+async function resumeDegradedRun(
+	deps: ProcessEventDeps,
+	runId: string,
+	decision: "approve" | "deny",
+	normalized: NormalizedEvent,
+	runData: NonNullable<Awaited<ReturnType<typeof runServices.getRunWithSteps>>>,
+): Promise<void> {
+	const verdict = decision === "approve" ? "pass" : "block";
+	await runServices.completeRun(deps.db, runId, verdict);
+	const actionRows =
+		decision === "deny"
+			? await runServices.recordActions(deps.db, runId, [
+					{
+						kind: "block",
+						payload: { reason: "degraded evaluation denied by maintainer" },
+						idempotencyKey: "block:degraded:deny",
+					},
+				])
+			: [];
+	const ruleSteps = runData.steps.filter((step) => step.nodeKind === "rule");
+	await emitPrSurface(
+		{
+			db: deps.db,
+			adapter: deps.adapter,
+			logger: deps.logger,
+			appUrl: deps.appUrl,
+		},
+		{
+			runId,
+			verdict,
+			event: normalized,
+			stats: {
+				evaluated: ruleSteps.length,
+				failed: ruleSteps.filter((step) => step.status === "fail").length,
+			},
+			pendingActionRows: actionRows,
+		},
+	);
+	deps.logger.info({ runId, decision, verdict }, "degraded run resumed");
 }
 
 function splitNodeId(nodeId: string): [string, string | null] {

@@ -104,6 +104,7 @@ export async function processEvent(
 			verdict: result.verdict,
 			event: normalized,
 			stats: result.stats,
+			degraded: result.degraded,
 			pendingActionRows: result.actionRows,
 		});
 	}

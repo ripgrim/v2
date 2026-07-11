@@ -12,8 +12,11 @@ earlier ones. Machine-provable parts are already proven in all-summaries.md.
 3. Webhook URL: leave placeholder for now (item 2 sets it). Webhook secret:
    generate one (`openssl rand -hex 32`) and put it in `.env` as
    `GITHUB_WEBHOOK_SECRET` (copy `.env.example` → `.env`).
-4. Permissions (§13.3): Pull requests **Read & write** · Checks **Read &
-   write** · Contents **Read-only** · Metadata **Read-only**.
+4. Permissions (§13.3, amended): Pull requests **Read & write** · Checks
+   **Read & write** · **Issues Read & write** (the comment upsert posts via
+   the Issues API — without it queue #5 403s) · Contents **Read-only** ·
+   Metadata **Read-only**. Optional: Organization Members **Read-only** if
+   you want org-membership exemption to work on org repos.
 5. Subscribe to events: **Pull request**, **Issue comment**. (Push comes free
    with contents; optional now.)
 6. Create the App → note App ID → `.env` `GITHUB_APP_ID`. Generate a private
@@ -68,7 +71,13 @@ held." with the view-run badge; the merge button is dead.
 4. Push a new commit to the same PR.
 SHOULD HAPPEN: the comment is EDITED (same comment, no second one); a fresh
 `tripwire` check appears on the new SHA.
-5. `/capture-fixture` the deliveries afterwards.
+5. Degraded-path sub-check (fail-closed floor): after the block succeeds,
+   break the worker's GitHub creds (set GITHUB_APP_PRIVATE_KEY to garbage,
+   restart the worker), open one more PR.
+   SHOULD HAPPEN: verdict needs_review, NEUTRAL check ("sent to review —
+   evaluation degraded"), a run:degraded item on /moderation — never a green
+   pass. Restore creds after.
+6. `/capture-fixture` the deliveries afterwards.
 
 ## 6. GitHub OAuth app + sign-in (closes step 8 auth done-when)
 1. github.com → Settings → Developer settings → OAuth Apps → New OAuth App.

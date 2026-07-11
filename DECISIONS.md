@@ -454,3 +454,30 @@ is untouched.
 - **Flake fixes:** docker-run retry (3 attempts) in createTestDatabase; the
   account-age integration fixture now sets creation 2d+1h back — the old 2d
   margin floored to 1 whenever the profile fetch timestamp trailed ctx.now.
+
+
+---
+
+## Hardening session (2026-07-11, pre-live)
+
+### Unit 1 — fail-closed floor (AMENDS the step-6 "skipped conducts as pass" entry)
+
+- Single-rule skip still conducts as pass — one flaky read must not block a
+  human. UNCHANGED.
+- NEW FLOOR in run verdict derivation (worker/run-workflows): if every rule
+  node skipped, or skipped ≥ 50% of rule nodes, a would-be `pass` becomes
+  `needs_review` — paused run + `run:degraded` moderation item. Block stays
+  block (strictly stronger). Rationale: an attacker who can starve our reads
+  (rate-limit burn) must not mint green checks.
+- Degradation evidence persists as a synthetic run step (`run:degradation`,
+  output = { degradedReads, skippedRules, ruleNodes }) — no schema migration,
+  renders on the run page.
+- Resume semantics for the synthetic item: approve ⇒ pass; deny ⇒ block with
+  a recorded+executed block action (resume-run/resumeDegradedRun).
+- Comment/check copy for the degraded case: "sent to review — evaluation
+  degraded." (constitution voice), check neutral per §7.
+- Note: ai-review skipping for lack of an API key counts toward the floor by
+  the formula — running keyless with sparse workflows can floor runs; that is
+  fail-closed working as intended, not a bug.
+- Queue amendments landed here: Issues R&W permission at #1 (comment upsert
+  is Issues API); degraded-path sub-check at #5.
