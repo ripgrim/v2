@@ -1,4 +1,4 @@
-import { type Auth, createAuth } from "@tripwire/db";
+import { type Auth, createAuth, resolveAuthPosture } from "@tripwire/db";
 import { getDb } from "#/lib/server/db";
 
 /**
@@ -13,7 +13,11 @@ export function getAuth(): Auth | null {
 		return instance;
 	}
 	const secret = process.env.BETTER_AUTH_SECRET;
-	if (!secret) {
+	const posture = resolveAuthPosture({
+		secret,
+		nodeEnv: process.env.NODE_ENV,
+	});
+	if (posture === "open-dev" || !secret) {
 		instance = null;
 		return instance;
 	}

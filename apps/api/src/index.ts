@@ -1,4 +1,10 @@
-import { type Auth, createAuth, createBoss, createDb } from "@tripwire/db";
+import {
+	type Auth,
+	createAuth,
+	createBoss,
+	createDb,
+	resolveAuthPosture,
+} from "@tripwire/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import pino from "pino";
@@ -45,6 +51,15 @@ if (import.meta.main) {
 	const { db, pool } = createDb();
 	const boss = await createBoss();
 	const authSecret = process.env.BETTER_AUTH_SECRET;
+	try {
+		resolveAuthPosture({
+			secret: authSecret,
+			nodeEnv: process.env.NODE_ENV,
+		});
+	} catch (error) {
+		logger.error({ error }, "auth posture check failed — refusing to boot");
+		process.exit(1);
+	}
 	const ghClientId = process.env.GITHUB_OAUTH_CLIENT_ID;
 	const ghClientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
 	const auth: Auth | null = authSecret

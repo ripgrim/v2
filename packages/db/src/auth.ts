@@ -81,3 +81,26 @@ function eqUserId(userId: string) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+export type AuthPosture = "enabled" | "open-dev";
+
+/**
+ * Fail-closed guard (hardening unit 2): the open-gate fallback exists ONLY
+ * for local dev before the OAuth app exists. In production a missing
+ * BETTER_AUTH_SECRET refuses to boot — a missing env var must never silently
+ * publish the dashboard.
+ */
+export function resolveAuthPosture(input: {
+	secret: string | undefined;
+	nodeEnv: string | undefined;
+}): AuthPosture {
+	if (input.secret) {
+		return "enabled";
+	}
+	if (input.nodeEnv === "production") {
+		throw new Error(
+			"BETTER_AUTH_SECRET is not set — refusing to serve in production (auth gate would stand open)",
+		);
+	}
+	return "open-dev";
+}

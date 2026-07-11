@@ -6,7 +6,12 @@
  * Every jsonb column has a contracts schema validated ON WRITE (services).
  */
 
-export { type Auth, createAuth } from "./auth.ts";
+export {
+	type Auth,
+	type AuthPosture,
+	createAuth,
+	resolveAuthPosture,
+} from "./auth.ts";
 export type { Db } from "./client.ts";
 export { createDb, schema } from "./client.ts";
 export { applyMigrations } from "./migrate.ts";

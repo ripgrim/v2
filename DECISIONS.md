@@ -481,3 +481,11 @@ is untouched.
   fail-closed working as intended, not a bug.
 - Queue amendments landed here: Issues R&W permission at #1 (comment upsert
   is Issues API); degraded-path sub-check at #5.
+
+### Unit 2 — auth gate fail-closed in production
+
+- `resolveAuthPosture` (db/auth.ts): secret ⇒ enabled; no secret + dev ⇒
+  open-dev (unchanged local ergonomics); no secret + NODE_ENV=production ⇒
+  throw. The api head exits at boot on the throw; the web head's getAuth
+  throws per request (no single boot hook in the vite/nitro server) — either
+  way production never silently publishes the dashboard. Guard unit-tested.
