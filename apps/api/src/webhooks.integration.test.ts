@@ -45,8 +45,8 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-	await boss?.stop({ close: true });
-	await pool?.end();
+	await boss?.stop({ close: true, graceful: false }).catch(() => undefined);
+	await pool?.end().catch(() => undefined);
 	await container?.stop();
 });
 

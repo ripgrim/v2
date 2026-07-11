@@ -1,10 +1,12 @@
 import type { Db } from "@tripwire/db";
 import { eventServices } from "@tripwire/db";
+import type { ForgeAdapter } from "@tripwire/forge";
 import { normalizeWebhook } from "@tripwire/forge-github";
 import { getErrorMessage } from "@tripwire/utils";
 import type { Pool } from "pg";
 import type { Logger } from "pino";
 import type { WorkerReads } from "../context.ts";
+import { emitPendingCheck, emitPrSurface } from "./pr-surface.ts";
 import { runWorkflows } from "./run-workflows.ts";
 
 export interface ProcessEventDeps {
@@ -13,6 +15,10 @@ export interface ProcessEventDeps {
 	logger: Logger;
 	/** null ⇒ no forge credentials; rules skip on missing context (§6). */
 	reads: WorkerReads | null;
+	/** null ⇒ actions recorded but not executed (no credentials). */
+	adapter: ForgeAdapter | null;
+	/** Base URL for run deep links. */
+	appUrl: string;
 }
 
 /**
@@ -75,5 +81,26 @@ export async function processEvent(
 		"event normalized",
 	);
 
-	await runWorkflows({ db, logger, reads: deps.reads }, normalized, event.id);
+	const surfaceDeps = {
+		db,
+		adapter: deps.adapter,
+		logger,
+		appUrl: deps.appUrl,
+	};
+	await emitPendingCheck(surfaceDeps, normalized);
+
+	const result = await runWorkflows(
+		{ db, logger, reads: deps.reads },
+		normalized,
+		event.id,
+	);
+	if (result.runId && result.verdict) {
+		await emitPrSurface(surfaceDeps, {
+			runId: result.runId,
+			verdict: result.verdict,
+			event: normalized,
+			stats: result.stats,
+			pendingActionRows: result.actionRows,
+		});
+	}
 }

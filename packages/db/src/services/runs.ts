@@ -110,13 +110,22 @@ export async function recordActions(
 		payload: action.payload,
 		idempotencyKey: action.idempotencyKey,
 	}));
-	await db
+	const inserted = await db
 		.insert(runActions)
 		.values(rows)
 		.onConflictDoNothing({
 			target: [runActions.runId, runActions.idempotencyKey],
+		})
+		.returning({
+			id: runActions.id,
+			kind: runActions.kind,
+			payload: runActions.payload,
 		});
-	return rows.map(({ id, kind, payload }) => ({ id, kind, payload }));
+	return inserted.map((row) => ({
+		id: row.id,
+		kind: row.kind,
+		payload: row.payload as Record<string, unknown>,
+	}));
 }
 
 export async function markActionExecuted(

@@ -5,7 +5,12 @@ import {
 	type ProcessEventJob,
 	repoServices,
 } from "@tripwire/db";
-import { GithubReads, InstallationTokenCache } from "@tripwire/forge-github";
+import type { ForgeAdapter } from "@tripwire/forge";
+import {
+	createGithubAdapter,
+	GithubReads,
+	InstallationTokenCache,
+} from "@tripwire/forge-github";
 import pino from "pino";
 import type { WorkerReads } from "./context.ts";
 import { processEvent } from "./jobs/process-event.ts";
@@ -22,17 +27,18 @@ if (import.meta.main) {
 	const appId = process.env.GITHUB_APP_ID;
 	const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
 	let reads: WorkerReads | null = null;
+	let adapter: ForgeAdapter | null = null;
 	if (appId && privateKey) {
 		const tokens = new InstallationTokenCache({ appId, privateKey });
-		reads = new GithubReads({
-			tokenFor: async (repoFullName) => {
-				const repo = await repoServices.getRepoByFullName(db, repoFullName);
-				if (!repo?.installationId) {
-					throw new Error(`no installation for ${repoFullName}`);
-				}
-				return await tokens.getToken(repo.installationId);
-			},
-		});
+		const tokenFor = async (repoFullName: string) => {
+			const repo = await repoServices.getRepoByFullName(db, repoFullName);
+			if (!repo?.installationId) {
+				throw new Error(`no installation for ${repoFullName}`);
+			}
+			return await tokens.getToken(repo.installationId);
+		};
+		reads = new GithubReads({ tokenFor });
+		adapter = createGithubAdapter({ tokenFor });
 	} else {
 		logger.warn(
 			"GITHUB_APP_* env missing — forge reads disabled, rules will skip",
@@ -46,6 +52,8 @@ if (import.meta.main) {
 					db,
 					pool,
 					reads,
+					adapter,
+					appUrl: process.env.APP_URL ?? "http://localhost:3000",
 					logger: logger.child({ eventId: job.data.eventId }),
 				},
 				job.data,

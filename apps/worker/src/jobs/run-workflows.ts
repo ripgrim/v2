@@ -62,6 +62,7 @@ export interface RunWorkflowsResult {
 	verdict: Verdict | null;
 	paused: boolean;
 	actionRows: { id: string; kind: string; payload: Record<string, unknown> }[];
+	stats: { evaluated: number; failed: number };
 }
 
 export async function runWorkflows(
@@ -75,6 +76,7 @@ export async function runWorkflows(
 		verdict: null,
 		paused: false,
 		actionRows: [],
+		stats: { evaluated: 0, failed: 0 },
 	};
 
 	const custom = await repoServices.listEnabledWorkflows(
@@ -152,8 +154,13 @@ export async function runWorkflows(
 		),
 	);
 
+	const ruleSteps = steps.filter((step) => step.nodeKind === "rule");
+	const stats = {
+		evaluated: ruleSteps.length,
+		failed: ruleSteps.filter((step) => step.status === "fail").length,
+	};
 	logger.info({ runId, verdict, paused, steps: steps.length }, "run persisted");
-	return { runId, verdict, paused, actionRows };
+	return { runId, verdict, paused, actionRows, stats };
 }
 
 function makeEvaluator(ctx: RuleContext, logger: Logger) {

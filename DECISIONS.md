@@ -333,3 +333,28 @@ is untouched.
   octokit); contributor profile composes /users, merged-PR search, recent-PR
   search (timestamps for CoV), collaborator permission, profile README.
   Every read degrades independently to a null context piece.
+
+### Step 7 — Actions + the PR surface
+
+- **`block` executes no forge call of its own** — the failing `tripwire`
+  check IS the block (§7: required status ⇒ dead merge button). Closing PRs
+  is deliberately not tripwire's job. The block action still exists as a
+  workflow node/verdict carrier and is recorded/executed as a row.
+- **Comment/check idempotency keys carry the verdict**
+  (`comment:<nr>:<verdict>`, `check:<sha>:<verdict>`): a retry of the same
+  verdict conflicts (no double call), while a moderation resume with a NEW
+  verdict inserts fresh rows and re-edits/re-emits. Cross-run artifact
+  identity stays with the adapter's upsert (marker / check_name+sha).
+- **Comment presenter is structurally condensed:** verdict line + one
+  collapsed sentence + one shields badge + hidden marker — 3 lines, snapshot-
+  golden. Copy follows constitution.md (blocked/passed/sent to review,
+  lowercase, no exclamation).
+- **Pending check (§5.6b) is executed directly, not recorded as a run action
+  row** — it precedes the run's existence (rows FK run_id); the final check
+  from the persistence step supersedes it.
+- **`request-review` executes with an empty reviewer payload for now** —
+  reviewer selection is a params question for the workflow editor (step 10);
+  GitHub then falls back to suggested reviewers or errors harmlessly (caught,
+  row stays recorded).
+- **GithubHttp** extracted (get/post/patch/put; used by reads AND actions —
+  the 2+ consumer bar).

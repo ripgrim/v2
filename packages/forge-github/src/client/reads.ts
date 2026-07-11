@@ -11,11 +11,9 @@ import type {
  * the MVP ceiling — evidence records the truncation.
  */
 
-export interface GithubReadsOptions {
-	tokenFor(repoFullName: string): Promise<string>;
-	apiBase?: string;
-	fetchImpl?: typeof fetch;
-}
+import { GithubHttp, type GithubHttpOptions } from "./http.ts";
+
+export type GithubReadsOptions = GithubHttpOptions;
 
 const STATUS_MAP: Record<string, DiffFile["status"]> = {
 	added: "added",
@@ -28,27 +26,14 @@ const STATUS_MAP: Record<string, DiffFile["status"]> = {
 };
 
 export class GithubReads {
-	private readonly apiBase: string;
-	private readonly fetchImpl: typeof fetch;
+	private readonly http: GithubHttp;
 
-	constructor(private readonly options: GithubReadsOptions) {
-		this.apiBase = options.apiBase ?? "https://api.github.com";
-		this.fetchImpl = options.fetchImpl ?? fetch;
+	constructor(options: GithubReadsOptions) {
+		this.http = new GithubHttp(options);
 	}
 
-	private async get(repoFullName: string, path: string): Promise<unknown> {
-		const token = await this.options.tokenFor(repoFullName);
-		const res = await this.fetchImpl(`${this.apiBase}${path}`, {
-			headers: {
-				authorization: `Bearer ${token}`,
-				accept: "application/vnd.github+json",
-				"x-github-api-version": "2022-11-28",
-			},
-		});
-		if (!res.ok) {
-			throw new Error(`GET ${path} failed: ${res.status}`);
-		}
-		return await res.json();
+	private get(repoFullName: string, path: string): Promise<unknown> {
+		return this.http.get(repoFullName, path);
 	}
 
 	async getDiff(repoFullName: string, number: number): Promise<DiffFile[]> {

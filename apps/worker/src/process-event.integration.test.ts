@@ -33,8 +33,8 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-	await boss?.stop({ close: true });
-	await pool?.end();
+	await boss?.stop({ close: true, graceful: false }).catch(() => undefined);
+	await pool?.end().catch(() => undefined);
 	await container?.stop();
 });
 
@@ -66,7 +66,17 @@ describe("processEvent", () => {
 		if (!eventId) {
 			throw new Error("insert failed");
 		}
-		await processEvent({ db, pool, logger, reads: null }, { eventId });
+		await processEvent(
+			{
+				db,
+				pool,
+				logger,
+				reads: null,
+				adapter: null,
+				appUrl: "http://localhost:3000",
+			},
+			{ eventId },
+		);
 
 		const row = await pool.query(
 			"SELECT kind, repo_full_name, actor_login, subject_number, head_sha, normalized, quarantined FROM events WHERE id = $1",
@@ -96,7 +106,14 @@ describe("processEvent", () => {
 		);
 		const before = row.rows[0].normalized_at;
 		await processEvent(
-			{ db, pool, logger, reads: null },
+			{
+				db,
+				pool,
+				logger,
+				reads: null,
+				adapter: null,
+				appUrl: "http://localhost:3000",
+			},
 			{ eventId: row.rows[0].id },
 		);
 		const after = await pool.query(
@@ -115,7 +132,17 @@ describe("processEvent", () => {
 		if (!eventId) {
 			throw new Error("insert failed");
 		}
-		await processEvent({ db, pool, logger, reads: null }, { eventId });
+		await processEvent(
+			{
+				db,
+				pool,
+				logger,
+				reads: null,
+				adapter: null,
+				appUrl: "http://localhost:3000",
+			},
+			{ eventId },
+		);
 		const row = await pool.query(
 			"SELECT quarantined, quarantine_reason, raw, normalized FROM events WHERE id = $1",
 			[eventId],
@@ -139,7 +166,17 @@ describe("processEvent", () => {
 		if (!eventId) {
 			throw new Error("insert failed");
 		}
-		await processEvent({ db, pool, logger, reads: null }, { eventId });
+		await processEvent(
+			{
+				db,
+				pool,
+				logger,
+				reads: null,
+				adapter: null,
+				appUrl: "http://localhost:3000",
+			},
+			{ eventId },
+		);
 		const row = await pool.query(
 			"SELECT normalized_at, quarantined FROM events WHERE id = $1",
 			[eventId],
@@ -188,7 +225,14 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 			throw new Error("insert failed");
 		}
 		await processEvent(
-			{ db, pool, logger, reads: freshAccountReads },
+			{
+				db,
+				pool,
+				logger,
+				reads: freshAccountReads,
+				adapter: null,
+				appUrl: "http://localhost:3000",
+			},
 			{ eventId },
 		);
 
@@ -213,12 +257,14 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 		expect(ageStep.evidence.evidence.accountAgeDays).toBe(2);
 
 		const actions = await pool.query(
-			"SELECT kind, status, idempotency_key FROM run_actions WHERE run_id = $1",
+			"SELECT kind, status, idempotency_key FROM run_actions WHERE run_id = $1 ORDER BY kind",
 			[run.id],
 		);
-		expect(actions.rowCount).toBe(1);
-		expect(actions.rows[0].kind).toBe("block");
-		expect(actions.rows[0].status).toBe("recorded");
+		expect(actions.rows.map((r) => [r.kind, r.status])).toEqual([
+			["block", "recorded"],
+			["comment", "recorded"],
+			["set-check", "recorded"],
+		]);
 	});
 
 	test("maintainer PR ⇒ exempt, no run", async () => {
@@ -236,6 +282,8 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 				db,
 				pool,
 				logger,
+				adapter: null,
+				appUrl: "http://localhost:3000",
 				reads: {
 					...freshAccountReads,
 					getContributorProfile: () =>
@@ -270,6 +318,8 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 				db,
 				pool,
 				logger,
+				adapter: null,
+				appUrl: "http://localhost:3000",
 				reads: {
 					getDiff: failing,
 					getCommits: failing,
@@ -290,5 +340,120 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 		expect(
 			steps.rows.every((s) => s.status === "skipped" || s.status === "pass"),
 		).toBe(true);
+	});
+});
+
+describe("PR surface (§5.12–13, §7)", () => {
+	function fakeAdapter() {
+		const executed: { kind: string; detail: string }[] = [];
+		return {
+			executed,
+			adapter: {
+				forge: "github" as const,
+				verifyWebhook: () => true,
+				normalizeWebhook: () => null,
+				getDiff: () => Promise.resolve([]),
+				getCommits: () => Promise.resolve([]),
+				readFile: () => Promise.resolve(null),
+				getContributorProfile: () => Promise.reject(new Error("unused")),
+				execute: (action: {
+					kind: string;
+					check?: { sha: string; conclusion: string };
+					body?: string;
+				}) => {
+					executed.push({
+						kind: action.kind,
+						detail:
+							action.kind === "set-check"
+								? `${action.check?.conclusion}:${action.check?.sha.slice(0, 7)}`
+								: (action.body?.split("\n")[0] ?? ""),
+					});
+					return Promise.resolve({ externalId: `ext-${executed.length}` });
+				},
+			},
+		};
+	}
+
+	test("blocked run ⇒ pending check, block+comment+check rows recorded AND executed; retry is a no-op", async () => {
+		const raw = await fixtureRaw();
+		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+			deliveryId: "surface-1",
+			rawKind: "pull_request",
+			raw,
+		});
+		if (!eventId) {
+			throw new Error("insert failed");
+		}
+		const fake = fakeAdapter();
+		const deps = {
+			db,
+			pool,
+			logger,
+			adapter: fake.adapter as never,
+			appUrl: "https://tripwire.sh",
+			reads: {
+				getDiff: () => Promise.resolve([]),
+				getCommits: () => Promise.resolve([]),
+				getContributorProfile: () =>
+					Promise.resolve({
+						login: "sockpuppet",
+						externalId: "999",
+						createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+						followers: 0,
+						following: 0,
+						publicRepos: 0,
+						profileText: null,
+						mergedInRepo: 0,
+						recentChangeRequestTimes: [],
+						isOrgMember: false,
+						isMaintainer: false,
+					}),
+			},
+		};
+		await processEvent(deps, { eventId });
+
+		const pendingCheck = fake.executed.find((e) =>
+			e.detail.startsWith("pending"),
+		);
+		expect(pendingCheck).toBeDefined();
+		const finalCheck = fake.executed.find((e) =>
+			e.detail.startsWith("failure"),
+		);
+		expect(finalCheck).toBeDefined();
+		const comment = fake.executed.find((e) => e.kind === "comment");
+		expect(comment?.detail).toContain("**tripwire: blocked**");
+
+		const runRow = await pool.query("SELECT id FROM runs WHERE event_id = $1", [
+			eventId,
+		]);
+		const actions = await pool.query(
+			"SELECT kind, status, external_id FROM run_actions WHERE run_id = $1 ORDER BY kind",
+			[runRow.rows[0].id],
+		);
+		expect(actions.rows.map((r) => [r.kind, r.status])).toEqual([
+			["block", "executed"],
+			["comment", "executed"],
+			["set-check", "executed"],
+		]);
+
+		const executedBefore = fake.executed.length;
+		const { emitPrSurface } = await import("./jobs/pr-surface.ts");
+		await emitPrSurface(
+			{
+				db,
+				adapter: fake.adapter as never,
+				logger,
+				appUrl: "https://tripwire.sh",
+			},
+			{
+				runId: runRow.rows[0].id,
+				verdict: "block",
+				event: (await eventServices.getEventById(db, eventId))
+					?.normalized as never,
+				stats: { evaluated: 5, failed: 1 },
+				pendingActionRows: [],
+			},
+		);
+		expect(fake.executed.length).toBe(executedBefore);
 	});
 });

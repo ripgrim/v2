@@ -1,0 +1,183 @@
+import type { CheckState, NormalizedEvent, Verdict } from "@tripwire/contracts";
+import type { Db } from "@tripwire/db";
+import { runServices } from "@tripwire/db";
+import type { ForgeAdapter } from "@tripwire/forge";
+import { renderCommentBody } from "@tripwire/forge-github";
+import { getErrorMessage } from "@tripwire/utils";
+import type { Logger } from "pino";
+
+/**
+ * §5.13 + §7: the two PR artifacts — ONE upserted comment (the face) and ONE
+ * `tripwire` check per head SHA (the gate) — emitted from the same
+ * persistence step so they can never disagree. Both are recorded as action
+ * rows FIRST (§5.12) and marked executed after.
+ */
+
+const VERDICT_TO_CONCLUSION: Record<Verdict, CheckState["conclusion"]> = {
+	pass: "success",
+	block: "failure",
+	needs_review: "neutral",
+};
+
+export function verdictSentence(
+	verdict: Verdict,
+	stats: { evaluated: number; failed: number },
+): string {
+	if (verdict === "block") {
+		return `${stats.failed} of ${stats.evaluated} rules failed; merge is held.`;
+	}
+	if (verdict === "needs_review") {
+		return "awaiting moderation — a maintainer decides next.";
+	}
+	return `all ${stats.evaluated} rules passed.`;
+}
+
+export interface PrSurfaceDeps {
+	db: Db;
+	adapter: ForgeAdapter | null;
+	logger: Logger;
+	/** Base URL for run deep links, e.g. https://tripwire.sh or localhost web. */
+	appUrl: string;
+}
+
+/** §5.6b — hold the merge button DURING evaluation, not just after. */
+export async function emitPendingCheck(
+	deps: PrSurfaceDeps,
+	event: NormalizedEvent,
+): Promise<void> {
+	if (!deps.adapter || !("changeRequest" in event)) {
+		return;
+	}
+	try {
+		await deps.adapter.execute({
+			kind: "set-check",
+			repoFullName: event.repo.fullName,
+			check: {
+				sha: event.changeRequest.headSha,
+				conclusion: "pending",
+				summary: "tripwire is evaluating this change request.",
+				detailsUrl: deps.appUrl,
+			},
+		});
+	} catch (error) {
+		deps.logger.warn(
+			{ error: getErrorMessage(error) },
+			"pending check emission failed",
+		);
+	}
+}
+
+export interface EmitSurfaceInput {
+	runId: string;
+	verdict: Verdict;
+	event: NormalizedEvent;
+	stats: { evaluated: number; failed: number };
+	/** Workflow-emitted action rows still awaiting execution. */
+	pendingActionRows: {
+		id: string;
+		kind: string;
+		payload: Record<string, unknown>;
+	}[];
+}
+
+export async function emitPrSurface(
+	deps: PrSurfaceDeps,
+	input: EmitSurfaceInput,
+): Promise<void> {
+	const { db, adapter, logger } = deps;
+	const { event, runId, verdict } = input;
+	if (!("changeRequest" in event)) {
+		return;
+	}
+	const repoFullName = event.repo.fullName;
+	const number = event.changeRequest.number;
+	const sha = event.changeRequest.headSha;
+	const runUrl = `${deps.appUrl}/runs/${runId}`;
+	const sentence = verdictSentence(verdict, input.stats);
+
+	const surfaceRows = await runServices.recordActions(db, runId, [
+		{
+			kind: "comment",
+			payload: {
+				number,
+				body: renderCommentBody({ verdict, sentence, runUrl }),
+			},
+			idempotencyKey: `comment:${number}:${verdict}`,
+		},
+		{
+			kind: "set-check",
+			payload: {
+				sha,
+				conclusion: VERDICT_TO_CONCLUSION[verdict],
+				summary: `tripwire: ${verdict === "needs_review" ? "sent to review" : verdict === "block" ? "blocked" : "passed"} — ${sentence}`,
+				detailsUrl: runUrl,
+			},
+			idempotencyKey: `check:${sha}:${verdict}`,
+		},
+	]);
+
+	if (!adapter) {
+		logger.warn(
+			{ runId },
+			"no forge credentials — actions recorded, not executed",
+		);
+		return;
+	}
+
+	for (const row of [...input.pendingActionRows, ...surfaceRows]) {
+		try {
+			const result = await adapter.execute(
+				toForgeAction(row, repoFullName, number),
+			);
+			await runServices.markActionExecuted(db, row.id, result.externalId);
+		} catch (error) {
+			logger.error(
+				{ actionId: row.id, kind: row.kind, error: getErrorMessage(error) },
+				"action execution failed — row stays recorded for retry",
+			);
+		}
+	}
+}
+
+function toForgeAction(
+	row: { kind: string; payload: Record<string, unknown> },
+	repoFullName: string,
+	number: number,
+) {
+	switch (row.kind) {
+		case "comment":
+			return {
+				kind: "comment" as const,
+				repoFullName,
+				number: (row.payload.number as number) ?? number,
+				body: row.payload.body as string,
+			};
+		case "set-check":
+			return {
+				kind: "set-check" as const,
+				repoFullName,
+				check: {
+					sha: row.payload.sha as string,
+					conclusion: row.payload.conclusion as CheckState["conclusion"],
+					summary: row.payload.summary as string,
+					detailsUrl: row.payload.detailsUrl as string,
+				},
+			};
+		case "label":
+			return {
+				kind: "label" as const,
+				repoFullName,
+				number,
+				labels: (row.payload.labels as string[]) ?? [],
+			};
+		case "request-review":
+			return { kind: "request-review" as const, repoFullName, number };
+		default:
+			return {
+				kind: "block" as const,
+				repoFullName,
+				number,
+				reason: "workflow verdict",
+			};
+	}
+}

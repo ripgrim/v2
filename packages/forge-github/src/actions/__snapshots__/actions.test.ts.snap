@@ -1,0 +1,25 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`renderCommentBody — snapshot golden files blocked 1`] = `
+"**tripwire: blocked** — 2 of 6 rules failed; merge is held.
+
+[![tripwire run](https://img.shields.io/badge/tripwire-view_run-d1242f)](https://tripwire.sh/runs/0198abcd)
+<!-- tripwire:run -->
+"
+`;
+
+exports[`renderCommentBody — snapshot golden files passed 1`] = `
+"**tripwire: passed** — all 6 rules passed.
+
+[![tripwire run](https://img.shields.io/badge/tripwire-view_run-2ea043)](https://tripwire.sh/runs/0198abcd)
+<!-- tripwire:run -->
+"
+`;
+
+exports[`renderCommentBody — snapshot golden files sent to review 1`] = `
+"**tripwire: sent to review** — awaiting moderation — a maintainer decides next.
+
+[![tripwire run](https://img.shields.io/badge/tripwire-view_run-bf8700)](https://tripwire.sh/runs/0198abcd)
+<!-- tripwire:run -->
+"
+`;

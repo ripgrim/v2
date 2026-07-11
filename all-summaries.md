@@ -202,3 +202,46 @@ typecheck:  10/10 workspaces exit 0
 boundaries: ✓ passed
 tests:      68 pass, 0 fail (161 expect) across 15 files
 ```
+
+---
+
+## Step 6 — Executor + hardcoded workflow — 497e80d
+
+**Scope:** workflow DAG contract, validator (cycles/reachability/arity),
+executor (topo walk, gate short-circuit, pause/resume, timed step records),
+runs/repos db services (snapshot, evidence-validated steps, rows-first
+actions), GithubReads, worker orchestration (join, exemption, degradation),
+hand-seeded default workflow.
+
+**Machine-verified — done-when "runs + steps persisted with workflow snapshot":**
+```
+bun test packages/core/src/workflow → 9 pass (pass/block/skip/pause+resume/
+  timings; validate: cycles, unreachable, bad refs, misplaced approve edges)
+bun test apps/worker →
+✓ fresh-account PR ⇒ run persisted with snapshot, steps, verdict block, action row
+    run.workflow_snapshot[0].id = "default@1", verdict=block,
+    account-age evidence {accountAgeDays: 2}, block action status=recorded
+✓ maintainer PR ⇒ exempt, no run
+✓ degraded reads (all throw) ⇒ rules skip, run passes, nothing blocked
+7 pass, 0 fail [1.69s]
+```
+(One transient failure in a combined run — parallel test containers; clean
+rerun 80/80. Watch for flakiness.)
+
+**Awaiting live verification:** reads against real GitHub (creds) — covered by
+queue items; no new queue entry (step 7's live check covers the pipeline).
+
+**Decisions:** DECISIONS.md "Step 6" — DAG semantics (skipped conducts as
+pass), verdict derivation + join, resume model, injected evaluator, maintainer
+exemption at run level, default workflow thresholds, fetch-only reads.
+
+**Needs Grim's eyes:** workflow.ts contract (authored, review DAG semantics);
+default workflow thresholds; exemption behavior (no run for maintainers).
+
+**Checks:**
+```
+biome:      Checked 282 files. No fixes applied.
+typecheck:  10/10 workspaces exit 0
+boundaries: ✓ passed
+tests:      80 pass, 0 fail (199 expect) across 16 files
+```
