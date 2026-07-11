@@ -1,15 +1,17 @@
 import { z } from "zod";
 
 /**
- * Contributor domain, extracted from the demo's `src/lib/contributor.types.ts`
- * — the shape behind the `/profile/$userHandle` page.
+ * Contributor domain (spec §4 `contributor.ts`: ContributorSummary, signal
+ * shapes). Extracted from the demo's `contributor.types.ts` —
+ * `ContributorSummary` was the demo's `ContributorProfile`; the shape behind
+ * the `/profile/$userHandle` page. Signal shapes land with the scoring step.
  */
 
 export const contributionYearSchema = z.object({
 	/** Total contributions across the rendered window. */
 	total: z.number(),
 	/** 53 weeks × 7 days of intensity levels (0–4), oldest week first. */
-	weeks: z.array(z.array(z.number())),
+	weeks: z.array(z.array(z.number().min(0).max(4))),
 });
 export type ContributionYear = z.infer<typeof contributionYearSchema>;
 
@@ -47,11 +49,11 @@ export const contributorActivitySchema = z.object({
 	title: z.string(),
 	detail: z.string(),
 	/** ISO timestamp; rendered via formatRelativeTime. */
-	at: z.string(),
+	at: z.iso.datetime(),
 });
 export type ContributorActivity = z.infer<typeof contributorActivitySchema>;
 
-export const contributorProfileSchema = z.object({
+export const contributorSummarySchema = z.object({
 	handle: z.string(),
 	/** Single-letter avatar fallback (uppercased first char of the handle). */
 	initial: z.string(),
@@ -65,4 +67,4 @@ export const contributorProfileSchema = z.object({
 	repoStats: contributorRepoStatsSchema,
 	activity: z.array(contributorActivitySchema),
 });
-export type ContributorProfile = z.infer<typeof contributorProfileSchema>;
+export type ContributorSummary = z.infer<typeof contributorSummarySchema>;

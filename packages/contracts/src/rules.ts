@@ -1,8 +1,13 @@
 import { z } from "zod";
+import { threadKindSchema } from "./insights.ts";
 import { itemTypeSchema, modStatSchema } from "./moderation.ts";
-import { threadKindSchema } from "./repo-analytics.ts";
 
-/** Automod domain, extracted from the demo's `src/lib/automod.types.ts`. */
+/**
+ * Rules domain (spec §4 `rules.ts`, §6). Extracted from the demo's
+ * `automod.types.ts` — `Rule` was the demo's `AutomodRule`, `RuleMatch` its
+ * `AutomodMatch`. The §6 `RuleResult` envelope lands with the rules-registry
+ * build step.
+ */
 
 export const ruleCategorySchema = z.enum([
 	"blocklist",
@@ -27,23 +32,25 @@ export const matchVerdictSchema = z.enum([
 ]);
 export type MatchVerdict = z.infer<typeof matchVerdictSchema>;
 
-export const automodMatchSchema = z.object({
+/** One firing of a rule on content (was demo `AutomodMatch`). */
+export const ruleMatchSchema = z.object({
 	id: z.string(),
 	type: itemTypeSchema,
 	repoFullName: z.string(),
 	number: z.number(),
 	author: z.object({ login: z.string(), avatarUrl: z.string() }),
 	snippet: z.string(),
-	matchedAt: z.string(),
+	matchedAt: z.iso.datetime(),
 	verdict: matchVerdictSchema,
 	/** Routes the match back to its conversation. */
 	threadKind: threadKindSchema,
 	/** The comment to highlight in that thread (matches a thread comment id). */
 	commentId: z.string(),
 });
-export type AutomodMatch = z.infer<typeof automodMatchSchema>;
+export type RuleMatch = z.infer<typeof ruleMatchSchema>;
 
-export const automodRuleSchema = z.object({
+/** A configured rule as the Rules surface shows it (was demo `AutomodRule`). */
+export const ruleSchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	description: z.string(),
@@ -56,18 +63,18 @@ export const automodRuleSchema = z.object({
 	matches24h: z.number(),
 	matches30d: z.number(),
 	/** Percentage, 0–100. */
-	falsePositiveRate: z.number(),
-	lastFiredAt: z.string(),
+	falsePositiveRate: z.number().min(0).max(100),
+	lastFiredAt: z.iso.datetime(),
 	/** Match volume over the last 7 days, oldest → newest. Drives the sparkline. */
 	trend: z.array(z.number()),
-	recentMatches: z.array(automodMatchSchema),
+	recentMatches: z.array(ruleMatchSchema),
 });
-export type AutomodRule = z.infer<typeof automodRuleSchema>;
+export type Rule = z.infer<typeof ruleSchema>;
 
-export const automodStatsSchema = z.object({
+export const ruleStatsSchema = z.object({
 	activeRules: modStatSchema,
 	matches24h: modStatSchema,
 	falsePositiveRate: modStatSchema,
 	autoActioned24h: modStatSchema,
 });
-export type AutomodStats = z.infer<typeof automodStatsSchema>;
+export type RuleStats = z.infer<typeof ruleStatsSchema>;

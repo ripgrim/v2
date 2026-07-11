@@ -414,7 +414,7 @@ const REPOS: RepoSummary[] = [
 	{
 		name: "tripwire",
 		description:
-			"GitHub moderation bot — automod rules, triage queue, and appeals.",
+			"contribution gatekeeper for git forges — rules, workflows, auditable runs.",
 		visibility: "public",
 		openIssues: 4,
 		openPulls: 2,

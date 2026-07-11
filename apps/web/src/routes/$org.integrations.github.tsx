@@ -87,7 +87,7 @@ function GithubIntegrationPage() {
 						<p className="text-muted-foreground text-sm">
 							Connect GitHub to{" "}
 							<span className="font-medium text-foreground">{org}</span> and
-							choose the repository modkit moderates.
+							choose the repository tripwire gates.
 						</p>
 					</header>
 
@@ -166,7 +166,7 @@ function GithubIntegrationPage() {
 								className="mt-0.5 shrink-0"
 							/>
 							<span>
-								The active repository is the one modkit watches — its issues,
+								The active repository is the one tripwire watches — its issues,
 								pull requests, and comments flow into your queue and run through
 								automod.
 							</span>

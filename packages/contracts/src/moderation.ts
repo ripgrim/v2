@@ -1,12 +1,18 @@
 import { z } from "zod";
+import { repoRefSchema } from "./repo.ts";
 
 /**
- * Moderation domain. Extracted verbatim from the redesign demo's
- * `src/lib/moderation.types.ts` + `mock-data.ts`. These primitives (actor,
- * item type, repository, stat) are reused across the automod and log domains,
- * so they live here as the base of the contract graph.
+ * Moderation domain (spec §6: the moderation queue is a paused run; §4 db
+ * `moderation.ts`). Extracted from the demo's `moderation.types.ts` —
+ * `ModerationItem` was the demo's `FlaggedItem`. The base primitives here
+ * (actor, item type, stat) are reused by the rules and runs domains.
  */
 
+/**
+ * Forge-derived values — GitHub controls this set, not tripwire. Stays closed
+ * while mocks drive the UI; needs a passthrough/catch variant when real ingest
+ * lands (build step 3/4). Do not widen before then.
+ */
 export const itemTypeSchema = z.enum(["issue", "pull", "comment"]);
 export type ItemType = z.infer<typeof itemTypeSchema>;
 
@@ -31,32 +37,51 @@ export const actorSchema = z.object({
 });
 export type Actor = z.infer<typeof actorSchema>;
 
-export const repositorySchema = z.object({
-	owner: z.string(),
-	name: z.string(),
-	fullName: z.string(),
-});
-export type Repository = z.infer<typeof repositorySchema>;
-
-export const flaggedItemSchema = z.object({
-	id: z.string(),
-	type: itemTypeSchema,
-	repository: repositorySchema,
-	number: z.number(),
-	title: z.string(),
-	bodyPreview: z.string(),
-	author: actorSchema,
-	reason: reasonSchema,
-	severity: severitySchema,
-	/** `null` when the report came from automod rather than a person. */
-	reporter: actorSchema.nullable(),
-	automodRule: z.string().optional(),
-	reportedAt: z.string(),
-	status: modStatusSchema,
-	comments: z.number(),
-	reactions: z.number(),
-});
-export type FlaggedItem = z.infer<typeof flaggedItemSchema>;
+/**
+ * An item in the moderation queue (was demo `FlaggedItem`).
+ *
+ * Provenance invariant (enforced below): automod-sourced items have
+ * `reporter: null` and carry `automodRule`; human reports have a `reporter`
+ * and no `automodRule`. The two fields must agree.
+ */
+export const moderationItemSchema = z
+	.object({
+		id: z.string(),
+		type: itemTypeSchema,
+		repository: repoRefSchema,
+		number: z.number(),
+		title: z.string(),
+		bodyPreview: z.string(),
+		author: actorSchema,
+		reason: reasonSchema,
+		severity: severitySchema,
+		/** `null` when the report came from automod rather than a person. */
+		reporter: actorSchema.nullable(),
+		automodRule: z.string().optional(),
+		reportedAt: z.iso.datetime(),
+		status: modStatusSchema,
+		comments: z.number(),
+		reactions: z.number(),
+	})
+	.superRefine((item, ctx) => {
+		if (item.reporter === null && item.automodRule === undefined) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["automodRule"],
+				message:
+					"automod-sourced items (reporter: null) must name the automodRule that fired",
+			});
+		}
+		if (item.reporter !== null && item.automodRule !== undefined) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["automodRule"],
+				message:
+					"human-reported items (reporter set) must not carry an automodRule",
+			});
+		}
+	});
+export type ModerationItem = z.infer<typeof moderationItemSchema>;
 
 export const modStatSchema = z.object({
 	value: z.number(),

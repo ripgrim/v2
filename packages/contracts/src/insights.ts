@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /**
- * Repo-analytics domain, extracted from the demo's
- * `src/lib/repo-analytics.types.ts`. `ditherColorSchema` and the thread
- * enums also back the repo-content domain, so they are defined here.
+ * Insights domain (spec §4 web surface "Insights" / db `services/insights.ts`).
+ * Extracted from the demo's `repo-analytics.types.ts` — `RepoInsights` was the
+ * demo's `RepoAnalytics`, `ThreadInsights` its `ThreadAnalytics`.
+ * `ditherColorSchema` and the thread enums also back the repo-content domain.
  */
 
 export const ditherColorSchema = z.enum([
@@ -17,9 +18,19 @@ export const ditherColorSchema = z.enum([
 ]);
 export type DitherColor = z.infer<typeof ditherColorSchema>;
 
+/**
+ * Forge-derived values — GitHub controls this set, not tripwire. Stays closed
+ * while mocks drive the UI; needs a passthrough/catch variant when real ingest
+ * lands (build step 3/4). Do not widen before then.
+ */
 export const threadKindSchema = z.enum(["issue", "pull"]);
 export type ThreadKind = z.infer<typeof threadKindSchema>;
 
+/**
+ * Forge-derived values — GitHub controls this set, not tripwire. Stays closed
+ * while mocks drive the UI; needs a passthrough/catch variant when real ingest
+ * lands (build step 3/4). Do not widen before then.
+ */
 export const threadStatusSchema = z.enum(["open", "closed", "merged"]);
 export type ThreadStatus = z.infer<typeof threadStatusSchema>;
 
@@ -74,6 +85,10 @@ export const flaggedCommentSchema = z.object({
 export type FlaggedComment = z.infer<typeof flaggedCommentSchema>;
 
 export const checkOrReviewSchema = z.object({
+	/**
+	 * Forge-derived values — review/check outcomes come from GitHub. Stay closed
+	 * for mocks; need a passthrough/catch variant when real ingest lands (step 3/4).
+	 */
 	kind: z.enum(["review", "check"]),
 	title: z.string(),
 	detail: z.string(),
@@ -83,7 +98,7 @@ export const checkOrReviewSchema = z.object({
 });
 export type CheckOrReview = z.infer<typeof checkOrReviewSchema>;
 
-export const threadAnalyticsSchema = z.object({
+export const threadInsightsSchema = z.object({
 	kind: threadKindSchema,
 	number: z.number(),
 	title: z.string(),
@@ -97,13 +112,13 @@ export const threadAnalyticsSchema = z.object({
 	flagged: z.array(flaggedCommentSchema).optional(),
 	checks: z.array(checkOrReviewSchema).optional(),
 });
-export type ThreadAnalytics = z.infer<typeof threadAnalyticsSchema>;
+export type ThreadInsights = z.infer<typeof threadInsightsSchema>;
 
-export const repoAnalyticsSchema = z.object({
+export const repoInsightsSchema = z.object({
 	metrics: z.array(repoMetricSchema),
 	blockedByRule: z.array(ruleBlockCountSchema),
 	activeThreads: z.array(activeThreadSchema),
 	/** Keyed by `${kind}s/${number}`, e.g. "issues/88" or "pulls/312". */
-	threads: z.record(z.string(), threadAnalyticsSchema),
+	threads: z.record(z.string(), threadInsightsSchema),
 });
-export type RepoAnalytics = z.infer<typeof repoAnalyticsSchema>;
+export type RepoInsights = z.infer<typeof repoInsightsSchema>;

@@ -1,30 +1,35 @@
 import { z } from "zod";
+import { threadKindSchema } from "./insights.ts";
 import {
 	actorSchema,
 	itemTypeSchema,
 	reasonSchema,
 	severitySchema,
 } from "./moderation.ts";
-import { threadKindSchema } from "./repo-analytics.ts";
 
-/** Moderation-log domain, extracted from the demo's `src/lib/log.types.ts`. */
+/**
+ * Runs domain (spec §4 `runs.ts`: auditable runs + steps). Extracted from the
+ * demo's `log.types.ts` — the moderation log IS the runs surface. `Run` was the
+ * demo's `LogEntry`, `RunStep` its `LogStep`, `RunItem` its `LogItem`. The §4
+ * `Verdict` union lands with the executor build step.
+ */
 
-export const logActionSchema = z.enum([
+export const runActionSchema = z.enum([
 	"removed",
 	"hidden",
 	"banned",
 	"dismissed",
 	"required-review",
 ]);
-export type LogAction = z.infer<typeof logActionSchema>;
+export type RunAction = z.infer<typeof runActionSchema>;
 
-export const logStatusSchema = z.enum([
+export const runStatusSchema = z.enum([
 	"actioned",
 	"dismissed",
 	"appealed",
 	"reversed",
 ]);
-export type LogStatus = z.infer<typeof logStatusSchema>;
+export type RunStatus = z.infer<typeof runStatusSchema>;
 
 export const caughtKindSchema = z.enum(["automod", "report", "manual"]);
 export type CaughtKind = z.infer<typeof caughtKindSchema>;
@@ -38,16 +43,16 @@ export const caughtBySchema = z.object({
 });
 export type CaughtBy = z.infer<typeof caughtBySchema>;
 
-/** A single step in an entry's lifecycle (flagged → actioned → appealed …). */
-export const logStepSchema = z.object({
-	at: z.string(),
+/** A single step in a run's lifecycle (flagged → actioned → appealed …). */
+export const runStepSchema = z.object({
+	at: z.iso.datetime(),
 	label: z.string(),
 	by: z.string(),
 });
-export type LogStep = z.infer<typeof logStepSchema>;
+export type RunStep = z.infer<typeof runStepSchema>;
 
-/** One piece of offending content. Bundled entries hold several. */
-export const logItemSchema = z.object({
+/** One piece of offending content in a run. Bundled runs hold several. */
+export const runItemSchema = z.object({
 	id: z.string(),
 	type: itemTypeSchema,
 	repoFullName: z.string(),
@@ -58,27 +63,28 @@ export const logItemSchema = z.object({
 	threadKind: threadKindSchema,
 	commentId: z.string(),
 });
-export type LogItem = z.infer<typeof logItemSchema>;
+export type RunItem = z.infer<typeof runItemSchema>;
 
-export const logEntrySchema = z.object({
+/** An auditable run (was demo `LogEntry`). */
+export const runSchema = z.object({
 	id: z.string(),
 	/** Safe label shown instead of the raw content, e.g. "Racial slur". */
 	label: z.string(),
 	reason: reasonSchema,
 	severity: severitySchema,
-	action: logActionSchema,
-	status: logStatusSchema,
+	action: runActionSchema,
+	status: runStatusSchema,
 	author: actorSchema,
 	/** The moderator who actioned it; null for a pure automod action. */
 	moderator: actorSchema.nullable(),
 	caughtBy: caughtBySchema,
-	at: z.string(),
+	at: z.iso.datetime(),
 	/** We kept our own copy so it survives upstream deletion. */
 	snapshot: z.boolean(),
-	items: z.array(logItemSchema),
-	history: z.array(logStepSchema),
+	items: z.array(runItemSchema),
+	history: z.array(runStepSchema),
 });
-export type LogEntry = z.infer<typeof logEntrySchema>;
+export type Run = z.infer<typeof runSchema>;
 
-export const logActionKindSchema = z.enum(["what", "reason", "caught"]);
-export type LogActionKind = z.infer<typeof logActionKindSchema>;
+export const runActionKindSchema = z.enum(["what", "reason", "caught"]);
+export type RunActionKind = z.infer<typeof runActionKindSchema>;

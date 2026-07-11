@@ -5,15 +5,15 @@
  * The demo's shapes are the contract; the backend's job is to satisfy them.
  * No functions, no I/O, no deps except zod.
  *
- * Domains mirror the demo's mock data. The spec §4 backend contracts
- * (events, runs, rules, review, workflow) land as later build steps add the
- * shapes they describe — see DECISIONS.md.
+ * Files follow the spec §4 ontology (runs, rules, contributor, repo, insights,
+ * moderation). The remaining §4 contracts (events, review, workflow, check)
+ * land with the build steps that produce their shapes — see DECISIONS.md.
  */
 
-export * from "./automod.ts";
 export * from "./contributor.ts";
-export * from "./integrations.ts";
-export * from "./log.ts";
+export * from "./insights.ts";
 export * from "./moderation.ts";
-export * from "./repo-analytics.ts";
+export * from "./repo.ts";
 export * from "./repo-content.ts";
+export * from "./rules.ts";
+export * from "./runs.ts";

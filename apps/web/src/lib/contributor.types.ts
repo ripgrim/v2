@@ -1,12 +1,12 @@
 /**
- * Contributor types live in `@tripwire/contracts` — the shape behind the
- * `/profile/$userHandle` page. Re-exported for `#/lib` imports.
+ * Deprecated demo-name aliases — scaffolding that dies with `src/mocks`;
+ * new code imports `@tripwire/contracts` names directly.
  */
 export type {
 	ContributionYear,
 	ContributorActivity,
 	ContributorActivityKind,
 	ContributorDetails,
-	ContributorProfile,
 	ContributorRepoStats,
+	ContributorSummary as ContributorProfile,
 } from "@tripwire/contracts";

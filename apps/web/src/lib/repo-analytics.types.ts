@@ -1,6 +1,6 @@
 /**
- * Repo-analytics types live in `@tripwire/contracts`; re-exported for `#/lib`
- * imports. `DitherColor` (used by `RepoMetric.color`) is part of the contract.
+ * Deprecated demo-name aliases — scaffolding that dies with `src/mocks`;
+ * new code imports `@tripwire/contracts` names directly.
  */
 export type {
 	ActiveThread,
@@ -8,10 +8,10 @@ export type {
 	DitherColor,
 	FlaggedComment,
 	ParticipantCount,
-	RepoAnalytics,
+	RepoInsights as RepoAnalytics,
 	RepoMetric,
 	RuleBlockCount,
-	ThreadAnalytics,
+	ThreadInsights as ThreadAnalytics,
 	ThreadKind,
 	ThreadStatus,
 } from "@tripwire/contracts";

@@ -8,13 +8,13 @@ type SiteConfig = {
 };
 
 export const siteConfig: SiteConfig = {
-	name: "modkit",
-	tagline: "Triage your community without the noise.",
+	name: "tripwire",
+	tagline: "a firewall for your repo.",
 	themeColor: "#00C943",
-	githubRepositoryUrl: "https://github.com/stylessh/modkit",
-	defaultTitle: "modkit | GitHub moderation, without the noise",
+	githubRepositoryUrl: "https://github.com/normal-software-inc/tripwire",
+	defaultTitle: "tripwire | the open source firewall for git",
 	defaultDescription:
-		"modkit is a fast, design-first moderation dashboard for triaging flagged issues, pull requests, and comments across your GitHub org.",
+		"tripwire is a contribution gatekeeper for git forges. it evaluates contributors and change requests against composable rules, blocks slop before it lands, and keeps every verdict auditable.",
 };
 
 // The signed-in moderator. In a real deployment this comes from the session.

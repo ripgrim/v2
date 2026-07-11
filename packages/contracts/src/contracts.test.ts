@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-	automodRuleSchema,
-	contributorProfileSchema,
-	flaggedItemSchema,
+	contributorSummarySchema,
 	githubIntegrationSchema,
-	logEntrySchema,
-	repoAnalyticsSchema,
+	moderationItemSchema,
 	repoContentSchema,
+	repoInsightsSchema,
+	ruleSchema,
+	runSchema,
 } from "./index.ts";
 
 /**
@@ -16,9 +16,9 @@ import {
  */
 
 describe("contracts parse demo shapes", () => {
-	test("flaggedItem — automod attribution, null reporter", () => {
+	test("moderationItem — automod attribution, null reporter", () => {
 		expect(() =>
-			flaggedItemSchema.parse({
+			moderationItemSchema.parse({
 				id: "fi_03",
 				type: "comment",
 				repository: {
@@ -42,9 +42,9 @@ describe("contracts parse demo shapes", () => {
 		).not.toThrow();
 	});
 
-	test("automodRule — nested recent match", () => {
+	test("rule — nested recent match", () => {
 		expect(() =>
-			automodRuleSchema.parse({
+			ruleSchema.parse({
 				id: "rule_blocklist_spam_domains",
 				name: "Known spam domains",
 				description: "Blocks links to blocklisted domains.",
@@ -76,9 +76,9 @@ describe("contracts parse demo shapes", () => {
 		).not.toThrow();
 	});
 
-	test("logEntry — null moderator, lifecycle history", () => {
+	test("run — null moderator, lifecycle history", () => {
 		expect(() =>
-			logEntrySchema.parse({
+			runSchema.parse({
 				id: "log_01",
 				label: "New-account spam burst",
 				reason: "spam",
@@ -108,9 +108,9 @@ describe("contracts parse demo shapes", () => {
 		).not.toThrow();
 	});
 
-	test("contributorProfile — nullable location", () => {
+	test("contributorSummary — nullable location", () => {
 		expect(() =>
-			contributorProfileSchema.parse({
+			contributorSummarySchema.parse({
 				handle: "octocat",
 				initial: "O",
 				joinedDaysAgo: 900,
@@ -143,7 +143,7 @@ describe("contracts parse demo shapes", () => {
 		).not.toThrow();
 	});
 
-	test("githubIntegration, repoAnalytics, repoContent parse minimal shapes", () => {
+	test("githubIntegration, repoInsights, repoContent parse minimal shapes", () => {
 		expect(() =>
 			githubIntegrationSchema.parse({
 				accounts: [],
@@ -152,7 +152,7 @@ describe("contracts parse demo shapes", () => {
 			}),
 		).not.toThrow();
 		expect(() =>
-			repoAnalyticsSchema.parse({
+			repoInsightsSchema.parse({
 				metrics: [],
 				blockedByRule: [],
 				activeThreads: [],
@@ -172,7 +172,7 @@ describe("contracts parse demo shapes", () => {
 
 	test("the schema is the muzzle — bad enum rejected", () => {
 		expect(() =>
-			flaggedItemSchema.parse({
+			moderationItemSchema.parse({
 				id: "x",
 				type: "not-a-type",
 				repository: { owner: "a", name: "b", fullName: "a/b" },
@@ -189,5 +189,78 @@ describe("contracts parse demo shapes", () => {
 				reactions: 0,
 			}),
 		).toThrow();
+	});
+
+	test("moderationItem provenance invariant — reporter and automodRule must agree", () => {
+		const base = {
+			id: "x",
+			type: "comment",
+			repository: { owner: "a", name: "b", fullName: "a/b" },
+			number: 1,
+			title: "t",
+			bodyPreview: "b",
+			author: { login: "a", avatarUrl: "u" },
+			reason: "spam",
+			severity: "low",
+			reportedAt: "2026-07-11T00:00:00.000Z",
+			status: "pending",
+			comments: 0,
+			reactions: 0,
+		};
+		const human = { login: "r", avatarUrl: "u" };
+		expect(() =>
+			moderationItemSchema.parse({ ...base, reporter: human }),
+		).not.toThrow();
+		expect(() =>
+			moderationItemSchema.parse({
+				...base,
+				reporter: null,
+				automodRule: "blocklist/spam-domains",
+			}),
+		).not.toThrow();
+		expect(() =>
+			moderationItemSchema.parse({ ...base, reporter: null }),
+		).toThrow();
+		expect(() =>
+			moderationItemSchema.parse({
+				...base,
+				reporter: human,
+				automodRule: "blocklist/spam-domains",
+			}),
+		).toThrow();
+	});
+
+	test("documented ranges are enforced", () => {
+		expect(ruleSchema.shape.falsePositiveRate.safeParse(101).success).toBe(
+			false,
+		);
+		expect(ruleSchema.shape.falsePositiveRate.safeParse(-1).success).toBe(
+			false,
+		);
+		expect(ruleSchema.shape.falsePositiveRate.safeParse(1.4).success).toBe(
+			true,
+		);
+		expect(
+			contributorSummarySchema.shape.contributions.safeParse({
+				total: 1,
+				weeks: [[0, 1, 2, 3, 4, 0, 0]],
+			}).success,
+		).toBe(true);
+		expect(
+			contributorSummarySchema.shape.contributions.safeParse({
+				total: 1,
+				weeks: [[0, 5, 0, 0, 0, 0, 0]],
+			}).success,
+		).toBe(false);
+	});
+
+	test("timestamps must be ISO datetimes", () => {
+		expect(
+			runSchema.shape.at.safeParse("2026-07-11T00:00:00.000Z").success,
+		).toBe(true);
+		expect(runSchema.shape.at.safeParse("2026-07-11").success).toBe(false);
+		expect(runSchema.shape.at.safeParse("five minutes ago").success).toBe(
+			false,
+		);
 	});
 });

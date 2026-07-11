@@ -1,8 +1,13 @@
 import { z } from "zod";
-import { threadKindSchema, threadStatusSchema } from "./repo-analytics.ts";
+import { threadKindSchema, threadStatusSchema } from "./insights.ts";
 
 /** Repo-content domain, extracted from the demo's `src/lib/repo-content.types.ts`. */
 
+/**
+ * Forge-derived values — GitHub controls this set, not tripwire. Stays closed
+ * while mocks drive the UI; needs a passthrough/catch variant when real ingest
+ * lands (build step 3/4). Do not widen before then.
+ */
 export const visibilitySchema = z.enum(["public", "private"]);
 export type Visibility = z.infer<typeof visibilitySchema>;
 
@@ -21,7 +26,7 @@ export const repoSummarySchema = z.object({
 	openPulls: z.number(),
 	/** Flagged/blocked comments in the recent window — the modkit signal. */
 	flagged: z.number(),
-	updatedAt: z.string(),
+	updatedAt: z.iso.datetime(),
 });
 export type RepoSummary = z.infer<typeof repoSummarySchema>;
 
@@ -32,7 +37,7 @@ export const threadSummarySchema = z.object({
 	title: z.string(),
 	status: threadStatusSchema,
 	author: z.string(),
-	openedAt: z.string(),
+	openedAt: z.iso.datetime(),
 	comments: z.number(),
 	/** Count of hidden/removed comments in the thread. */
 	flagged: z.number(),
@@ -50,7 +55,7 @@ export const commentSchema = z.object({
 	id: z.string(),
 	author: z.string(),
 	body: z.string(),
-	createdAt: z.string(),
+	createdAt: z.iso.datetime(),
 	/** Present when automod hid the comment or a moderator removed it. */
 	flag: commentFlagSchema.optional(),
 });
@@ -63,7 +68,7 @@ export const threadDetailSchema = z.object({
 	title: z.string(),
 	status: threadStatusSchema,
 	author: z.string(),
-	openedAt: z.string(),
+	openedAt: z.iso.datetime(),
 	labels: z.array(labelSchema),
 	body: z.string(),
 	comments: z.array(commentSchema),

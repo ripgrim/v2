@@ -119,7 +119,6 @@ src/
   runs.ts          # Run, RunStep, Verdict = 'pass' | 'block' | 'needs_review'
   rules.ts         # RuleResult envelope { ruleId, version, status, passed, evidence, evaluatedAt }
   review.ts        # AiReviewOutput (see §8 — the schema IS the muzzle)
-  check.ts         # CheckState (see §7 — the merge-gate contract)
   contributor.ts   # ContributorSummary, signal shapes
   repo.ts          # Repo, RepoConfig
   workflow.ts      # WorkflowDefinition JSON DAG: trigger/rule/gate/action nodes + edges
@@ -137,11 +136,7 @@ interface, never importing `forge-github`).
 Adapter surface, three responsibilities:
 1. **Inbound** — verify webhook signature; normalize raw payload → `NormalizedEvent`
 2. **Reads** — fetch what rules need: diff, files, commits, contributor profile → builds `RuleContext`
-3. **Actions** — block / label / comment, and `setCheck(sha, conclusion, summary,
-   detailsUrl)` — the forge's native merge-gating primitive. Every forge has one
-   (GitHub: Checks API; GitLab: commit status / external status checks;
-   Gitea/Forgejo: commit statuses), so the abstraction is forge-neutral by
-   construction. All idempotent.
+3. **Actions** — block / label / comment / status, idempotently
 
 ### `packages/core` — the pure engine
 ```
@@ -182,8 +177,7 @@ src/
   webhook/normalize.ts # raw GitHub payload → NormalizedEvent
   client/auth.ts       # App JWT → installation tokens, cached
   client/reads.ts      # diff, files, contributor profile → RuleContext inputs
-  actions/execute.ts   # block/label + idempotency hooks
-  actions/check.ts     # Checks API: check run `tripwire` per head SHA (see §7)
+  actions/execute.ts   # block/label/status + idempotency hooks
   actions/comment.ts   # THE condensed comment (see §7)
 fixtures/              # captured REAL payloads + API responses. Never hand-written.
 ```
@@ -268,8 +262,6 @@ GitHub ──webhook──▶ apps/api POST /webhooks/github
   5. parse raw payload with contracts schemas (production IS a test execution —
      parse failure = quarantine event + auto-capture as fixture candidate + log)
   6. write NormalizedEvent, NOTIFY 'events'
-  6b. change-request events: emit `pending` check for the head SHA immediately —
-     the merge button is held during evaluation, not just after it
   7. match enabled workflows by trigger for the repo
   8. build RuleContext through the adapter (all reads happen HERE, pre-fetched)
   9. core executor walks the DAG; every node's input/output recorded as run_steps
@@ -278,8 +270,7 @@ GitHub ──webhook──▶ apps/api POST /webhooks/github
  11. multiple workflows fired on one event ⇒ JOIN into one run (one button on the PR)
  12. execute actions through the adapter — actions recorded as rows first, marked
      executed after (crash mid-run must not double-block on retry)
- 13. emit the check run + upsert the PR comment (§7) — same persistence step,
-     never allowed to disagree
+ 13. upsert the PR comment (§7)
 ──▶ apps/api SSE fan-out (LISTEN 'events') ──▶ TanStack Query cache merge ──▶ UI live
 ```
 
@@ -311,12 +302,8 @@ fixture library, the replay corpus, and the future ML dataset.
 
 ---
 
-## 7. The PR surface (locked UX decisions)
+## 7. The PR surface (locked UX decision)
 
-Two artifacts per PR, always in sync, both emitted at the end of a run:
-**one comment** (the human-readable face) and **one check run** (the merge gate).
-
-### The comment
 **As condensed as possible. One button. Never a CodeRabbit essay.**
 
 - Comment = verdict line + ONE sentence + a shields.io-style button deep-linking
@@ -326,39 +313,6 @@ Two artifacts per PR, always in sync, both emitted at the end of a run:
   a thread.
 - Multiple workflows on one PR ⇒ joined into one run ⇒ still exactly one button.
 - All depth (per-rule steps, evidence, AI findings, timings) lives on the run page.
-
-### The check run (the merge gate) — MVP scope
-Tripwire gates merges through the forge's **native check primitive**, emitted
-server-side by the App via `setCheck` — never through a workflow file in the
-customer's repo. Rationale (locked): a GitHub Actions engine can't work here —
-fork PRs get read-only tokens and no secrets, `pull_request` runs the PR's own
-copy of the workflow (the contributor can edit the gate), and
-`pull_request_target` workarounds are a known vulnerability class. The App-side
-check has none of these problems and needs zero YAML from the customer.
-
-- One check run named **`tripwire`** per head SHA. Conclusion maps from the
-  joined run's verdict: pass → `success` · block → `failure` ·
-  `needs_review` → `neutral` with an "awaiting moderation" summary, then
-  **updated in place** when the moderation decision resumes the run.
-- Check summary = the same verdict line + run deep-link as the comment
-  (`details_url` → the run page). The check is the gate; the comment is the face.
-  They must never disagree — both are emitted from the same run persistence step.
-- New push ⇒ new SHA ⇒ new check (GitHub semantics); the comment upserts as
-  before. Re-run of the same SHA upserts the existing check (idempotency rows
-  cover checks exactly like comments).
-- Onboarding tells maintainers to mark `tripwire` as a **required status check**
-  in branch protection — that's what turns the verdict into a dead merge button.
-  Tripwire never mutates branch protection itself (cut list).
-- Contract: `CheckState = { sha, conclusion: 'success' | 'failure' | 'neutral' |
-  'pending', summary, detailsUrl }` in `contracts`; `setCheck` is a first-class
-  `ForgeAction`. GitLab/Gitea map to commit statuses later — the abstraction is
-  already forge-neutral.
-- A `pending` check is emitted as soon as the worker picks up the event, so the
-  merge button is held during evaluation, not just after it.
-
-**Marketplace GitHub Action = cut list.** If ever built, it is a dumb client of
-the API ("what's the verdict for this SHA") — a distribution surface like the
-SDK, never a second engine.
 
 ---
 
@@ -641,9 +595,7 @@ Scoped files may carry directory-specific hard rules inline (Sim's
 
 ### The cut list (lives in root AGENTS.md — append, never delete)
 GitLab / any second forge adapter · SDK publishing · public OpenAPI surface ·
-marketplace GitHub Action (dumb API client only, if ever) · mutating customer
-branch protection · `apps/mcp` implementation · ML layer · org-level features ·
-billing ·
+`apps/mcp` implementation · ML layer · org-level features · billing ·
 email/password auth · deep observability beyond pino · deployment automation.
 A helpful agent scaffolding `forge-gitlab` because the sibling slot visibly
 exists is the same scope creep that killed v1, typing faster.
@@ -662,7 +614,7 @@ exists is the same scope creep that killed v1, typing faster.
 2. **DB + local infra** — schemas, docker-compose Postgres, `bun db:migrate`.
    *Done when:* migrations run clean locally (PlanetScale branch can wait).
 3. **GitHub App + ingest** — you register the App (webhook URL via cloudflared
-   tunnel; permissions: PRs r/w, **checks r/w**, contents r, metadata; events: PRs, issue
+   tunnel; permissions: PRs r/w, contents r, metadata; events: PRs, issue
    comments). Hono ingest route per §5.
    *Done when:* PR on a scratch repo ⇒ one `events` row; redelivery ⇒ still one.
 4. **Worker + live event list** — normalize, NOTIFY; swap demo event list to a
@@ -673,12 +625,9 @@ exists is the same scope creep that killed v1, typing faster.
    as fresh implementations (old repo open as reference only); unit tests per rule.
 6. **Executor + hardcoded workflow** — JSON default workflow, DAG walk, runs +
    steps persisted with workflow snapshot.
-7. **Actions + the PR surface** — block, condensed one-button comment with upsert
-   marker, the `tripwire` check run (pending → verdict), action idempotency rows.
-   *Done when:* sockpuppet PR blocked with a failing `tripwire` check and the
-   one-button comment; mark the check required in branch protection on the
-   scratch repo and confirm the merge button is dead; new commit **edits** the
-   comment and produces a fresh check on the new SHA.
+7. **Actions + the comment** — block, condensed one-button comment, upsert
+   marker, action idempotency rows.
+   *Done when:* sockpuppet PR blocked; new commit **edits** the comment.
    **Steps 1–7 = the MVP heartbeat.**
 8. **Run page + rules UI + auth** — real run_steps evidence rendering; rule
    config CRUD; Better Auth GitHub OAuth gating the dashboard.

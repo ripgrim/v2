@@ -10,5 +10,7 @@ HARD RULES:
 - Keep `useEffect` down: server sync → a query; derived state → `useMemo`;
   stable callback deps → refs.
 - Audited via /ui-review against `@tripwire/ui` + the tripwire-design skill.
+- The `#/lib/*.types` files are deprecated demo-name aliases — scaffolding that
+  dies with `src/mocks`; new code imports `@tripwire/contracts` names directly.
 
 See `.claude/rules/frontend.md`, `.claude/rules/naming.md`.

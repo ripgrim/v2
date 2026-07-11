@@ -1,6 +1,9 @@
-/** Integration types live in `@tripwire/contracts`; re-exported for `#/lib` imports. */
+/**
+ * Deprecated demo-name aliases — scaffolding that dies with `src/mocks`;
+ * new code imports `@tripwire/contracts` names directly.
+ */
 export type {
-	ConnectedRepo,
 	GithubAccount,
 	GithubIntegration,
+	Repo as ConnectedRepo,
 } from "@tripwire/contracts";

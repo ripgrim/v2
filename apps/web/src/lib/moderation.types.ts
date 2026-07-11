@@ -1,17 +1,16 @@
 /**
- * Moderation types now live in `@tripwire/contracts` (the shared language).
- * Re-exported so existing `#/lib/moderation.types` imports keep resolving while
- * typechecking is enforced against the contract.
+ * Deprecated demo-name aliases — scaffolding that dies with `src/mocks`;
+ * new code imports `@tripwire/contracts` names directly.
  */
 export type {
 	Actor,
-	FlaggedItem,
 	ItemType,
 	ModerationAction,
+	ModerationItem as FlaggedItem,
 	ModStat,
 	ModStats,
 	ModStatus,
 	Reason,
-	Repository,
+	RepoRef as Repository,
 	Severity,
 } from "@tripwire/contracts";

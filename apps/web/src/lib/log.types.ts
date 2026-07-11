@@ -1,11 +1,14 @@
-/** Log types live in `@tripwire/contracts`; re-exported for `#/lib` imports. */
+/**
+ * Deprecated demo-name aliases — scaffolding that dies with `src/mocks`;
+ * new code imports `@tripwire/contracts` names directly.
+ */
 export type {
 	CaughtBy,
 	CaughtKind,
-	LogAction,
-	LogActionKind,
-	LogEntry,
-	LogItem,
-	LogStatus,
-	LogStep,
+	Run as LogEntry,
+	RunAction as LogAction,
+	RunActionKind as LogActionKind,
+	RunItem as LogItem,
+	RunStatus as LogStatus,
+	RunStep as LogStep,
 } from "@tripwire/contracts";
