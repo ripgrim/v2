@@ -13,7 +13,7 @@ import {
 	type StepRecord,
 } from "@tripwire/core";
 import type { Db } from "@tripwire/db";
-import { repoServices, runServices } from "@tripwire/db";
+import { moderationServices, repoServices, runServices } from "@tripwire/db";
 import { getErrorMessage } from "@tripwire/utils";
 import type { Logger } from "pino";
 import { buildRuleContext, type WorkerReads } from "../context.ts";
@@ -148,6 +148,15 @@ export async function runWorkflows(
 	});
 	await runServices.recordSteps(db, runId, steps);
 
+	for (const execution of executions) {
+		if (execution.result.pausedAtNodeId) {
+			await moderationServices.createModerationItem(db, {
+				runId,
+				nodeId: `${execution.definition.id}:${execution.result.pausedAtNodeId}`,
+			});
+		}
+	}
+
 	const actionRows = await runServices.recordActions(
 		db,
 		runId,
@@ -172,7 +181,7 @@ export async function runWorkflows(
 	return { runId, verdict, paused, actionRows, stats };
 }
 
-function makeEvaluator(ctx: RuleContext, logger: Logger) {
+export function makeEvaluator(ctx: RuleContext, logger: Logger) {
 	return async (ref: string, config: unknown): Promise<RuleResult> => {
 		const rule = getRule(ref);
 		if (!rule) {

@@ -83,3 +83,13 @@ your GitHub identity; user.id is a UUIDv7, no GitHub id anywhere else.
 4. Open a run page from a real blocked run (item 5's badge link).
 SHOULD HAPPEN: verdict chip, per-rule step cards with evidence JSON, actions
 list all render from run_steps.
+
+## 7. ai-review live (closes step 9 live check)
+1. `.env`: set ANTHROPIC_API_KEY (and optionally AI_REVIEW_MODEL).
+2. Restart the worker; push a commit to the sockpuppet PR (item 5).
+SHOULD HAPPEN: the run page shows an `ai-review@1` step with a one-sentence
+summary + findings; `select evidence from run_steps where rule_id='ai-review@1'`
+carries the full trace (steps, usage). The check/comment verdict reflects the
+gate including ai-review.
+3. REVIEW TARGET: read `packages/core/src/rules/ai-review/instructions.md` —
+   authored fresh (eve demo was not on disk). Material changes ⇒ ai-review@2.

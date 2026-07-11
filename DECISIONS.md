@@ -419,3 +419,38 @@ is untouched.
   ANTHROPIC_API_KEY). Diff char budget 60k up front.
 - **Trace persistence:** evidence = { output, trace: {model, steps, usage,
   finishReason} } — "show me why" on appeal + the future dataset.
+
+### Step 10 — Moderation queue, rollups, React Flow editor
+
+- **Resume runs through a pg-boss `resume-run` job:** the web head cannot run
+  the executor (nothing imports core except worker), so a decision = ONE tx
+  (mark item decided + enqueue) and the worker walks the decision edge. Node
+  outcomes for the resume are DERIVED from run_steps (fail→fail, else pass) —
+  no extra storage, snapshot-faithful.
+- **Home stat cards now real** (insights.getHomeStats in the ModStats contract
+  shape): pending/resolved moderation counts, blocked-runs-24h, hourly series.
+  `bannedUsers` reports honest zeros — no ban concept exists; repurposing the
+  card would lie. The home QUEUE list stays mock-backed: its rich shape
+  (reasons/severities/reporters) outlives real data so far; it migrates when
+  a later session gives real data that depth. Mock-shrink continues.
+- **Rollup job** recomputes yesterday+today (late arrivals), scheduled
+  `10 2 * * *` via pg-boss cron.
+- **`DEFAULT_WORKFLOW` moved to contracts** — the editor needs the starting
+  canvas and web can't import worker; precedent RULE_CATALOG. Worker
+  re-validates it at boot.
+- **Dep added: `@xyflow/react`** (§2-locked "React Flow (xyflow)").
+- **Editor round-trip proof:** `graphToDefinition` (web, pure) is THE
+  emission; identity round-trip + schema-parse proven in web tests; a
+  COMMITTED emission artifact (apps/worker/fixtures/editor-output.workflow
+  .json, generated through the real serializer) is validated by core
+  validate.ts and executed to a verdict in a worker test — web→core import is
+  forbidden by the arrows, the artifact is the legal bridge.
+- **workflow config typed as JSON in the contract** (`jsonValueSchema`) —
+  configs are JSON on the wire by definition; also satisfies server-fn
+  serialization typing.
+- **getRepoById added to repoServices** after a query briefly leaked into a
+  web server function (also caused a duplicate drizzle instance) — "a query in
+  a route handler is in the wrong layer" enforced.
+- **Flake fixes:** docker-run retry (3 attempts) in createTestDatabase; the
+  account-age integration fixture now sets creation 2d+1h back — the old 2d
+  margin floored to 1 whenever the profile fetch timestamp trailed ctx.now.

@@ -35,6 +35,7 @@
 		"@tanstack/start-storage-context": "~1.166.35",
 		"@tripwire/contracts": "workspace:*",
 		"@tripwire/db": "workspace:*",
+		"@xyflow/react": "^12.11.2",
 		"better-auth": "^1.6.23",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",

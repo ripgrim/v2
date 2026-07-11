@@ -23,30 +23,45 @@ async function run(cmd: string[]): Promise<string> {
 	return out.trim();
 }
 
-export async function createTestDatabase(): Promise<TestDatabase> {
-	const name = `tripwire-test-${generateId().slice(0, 13)}`;
-	await run([
-		"docker",
-		"run",
-		"-d",
-		"--rm",
-		"--name",
-		name,
-		"-e",
-		"POSTGRES_USER=test",
-		"-e",
-		"POSTGRES_PASSWORD=test",
-		"-e",
-		"POSTGRES_DB=test",
-		"-p",
-		"0:5432",
-		"postgres:17-alpine",
-	]);
-	const portLine = await run(["docker", "port", name, "5432/tcp"]);
-	const port = portLine.split("\n")[0]?.split(":").at(-1);
-	if (!port) {
-		throw new Error(`could not determine mapped port for ${name}`);
+async function startContainer(): Promise<{ name: string; port: string }> {
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const name = `tripwire-test-${generateId().slice(0, 13)}`;
+		try {
+			await run([
+				"docker",
+				"run",
+				"-d",
+				"--rm",
+				"--name",
+				name,
+				"-e",
+				"POSTGRES_USER=test",
+				"-e",
+				"POSTGRES_PASSWORD=test",
+				"-e",
+				"POSTGRES_DB=test",
+				"-p",
+				"0:5432",
+				"postgres:17-alpine",
+			]);
+			const portLine = await run(["docker", "port", name, "5432/tcp"]);
+			const port = portLine.split("\n")[0]?.split(":").at(-1);
+			if (!port) {
+				throw new Error(`could not determine mapped port for ${name}`);
+			}
+			return { name, port };
+		} catch (error) {
+			lastError = error;
+			await run(["docker", "rm", "-f", name]).catch(() => undefined);
+			await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+		}
 	}
+	throw lastError;
+}
+
+export async function createTestDatabase(): Promise<TestDatabase> {
+	const { name, port } = await startContainer();
 	const url = `postgres://test:test@localhost:${port}/test`;
 
 	const { Pool } = await import("pg");

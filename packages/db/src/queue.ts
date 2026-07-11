@@ -1,10 +1,18 @@
 import { PgBoss } from "pg-boss";
 
-/** The single queue name for ingest → worker handoff (§5). */
+/** Ingest → worker handoff (§5). */
 export const PROCESS_EVENT_QUEUE = "process-event";
 
 export interface ProcessEventJob {
 	eventId: string;
+}
+
+/** Moderation decision → worker resume (§6). */
+export const RESUME_RUN_QUEUE = "resume-run";
+
+export interface ResumeRunJob {
+	itemId: string;
+	decision: "approve" | "deny";
 }
 
 /**
@@ -21,5 +29,6 @@ export async function createBoss(
 	const boss = new PgBoss({ connectionString: databaseUrl });
 	await boss.start();
 	await boss.createQueue(PROCESS_EVENT_QUEUE);
+	await boss.createQueue(RESUME_RUN_QUEUE);
 	return boss;
 }

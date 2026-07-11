@@ -3,6 +3,8 @@ import {
 	createDb,
 	PROCESS_EVENT_QUEUE,
 	type ProcessEventJob,
+	RESUME_RUN_QUEUE,
+	type ResumeRunJob,
 	repoServices,
 } from "@tripwire/db";
 import type { ForgeAdapter } from "@tripwire/forge";
@@ -15,6 +17,8 @@ import pino from "pino";
 import { createGenerate } from "./ai/generate.ts";
 import type { WorkerReads } from "./context.ts";
 import { processEvent } from "./jobs/process-event.ts";
+import { resumeRun } from "./jobs/resume-run.ts";
+import { rollup } from "./jobs/rollup.ts";
 
 /**
  * @tripwire/worker — pg-boss consumers, where I/O meets the pure core. Request
@@ -80,5 +84,28 @@ if (import.meta.main) {
 		}
 	});
 
-	logger.info("worker consuming process-event");
+	await boss.work<ResumeRunJob>(RESUME_RUN_QUEUE, async (jobs) => {
+		for (const job of jobs) {
+			await resumeRun(
+				{
+					db,
+					pool,
+					reads,
+					adapter,
+					makeGenerate,
+					appUrl: process.env.APP_URL ?? "http://localhost:3000",
+					logger: logger.child({ itemId: job.data.itemId }),
+				},
+				job.data,
+			);
+		}
+	});
+
+	await boss.createQueue("rollup");
+	await boss.schedule("rollup", "10 2 * * *", {}, {});
+	await boss.work("rollup", async () => {
+		await rollup({ db, logger });
+	});
+
+	logger.info("worker consuming process-event + resume-run + rollup");
 }

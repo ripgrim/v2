@@ -206,7 +206,9 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 			Promise.resolve({
 				login: "sockpuppet",
 				externalId: "999",
-				createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+				createdAt: new Date(
+					Date.now() - 2 * 86_400_000 - 3_600_000,
+				).toISOString(),
 				followers: 0,
 				following: 0,
 				publicRepos: 0,

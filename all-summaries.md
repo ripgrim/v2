@@ -326,3 +326,40 @@ typecheck:  10/10 workspaces exit 0
 boundaries: ✓ passed
 tests:      90 pass, 0 fail (3 snapshots, 221 expect)
 ```
+
+---
+
+## Step 9 — ai-review — 8464ab8
+
+**Scope:** review contract (the muzzle), ai-review@1 with injected generate()
+and versioned prompt files, worker bounded tool loop (AI SDK + Anthropic,
+submit_review answer tool, step cap, adapter-read tools only), AiFindings on
+the run page, default-workflow wiring.
+
+**Machine-verified:**
+```
+bun test packages/core → 53 pass (ai-review: pass/block/needs_review→boolean
+  mapping, evidence carries output+trace, prompt renders repo+diff from the
+  captured fixture, no-generate ⇒ skipped, essay summary rejected by the
+  muzzle, >5 findings rejected, comment events skipped)
+full suite: 97 pass, 0 fail
+```
+
+**Awaiting live verification:** QUEUE #7 — set ANTHROPIC_API_KEY, re-run a
+sockpuppet PR, confirm ai-review executes live (trace in evidence, findings on
+the run page).
+
+**Decisions:** DECISIONS.md "Step 9" — **eve demo missing, prompts AUTHORED
+(morning review target #1)**, submit_review tool as the muzzle, verdict→
+boolean mapping, compile-time text imports.
+
+**Needs Grim's eyes:** instructions.md + template.md (authored whole-cloth);
+the tool set; DIFF_CHAR_BUDGET=60k; default model string.
+
+**Checks:**
+```
+biome:      Checked 312 files. No fixes applied.
+typecheck:  10/10 workspaces exit 0
+boundaries: ✓ passed
+tests:      97 pass, 0 fail (3 snapshots, 236 expect)
+```

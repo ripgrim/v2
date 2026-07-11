@@ -40,6 +40,11 @@ export async function ensureRepo(db: Db, input: EnsureRepoInput) {
 	return id;
 }
 
+export async function getRepoById(db: Db, repoId: string) {
+	const rows = await db.select().from(repos).where(eq(repos.id, repoId));
+	return rows[0] ?? null;
+}
+
 export async function getRepoByFullName(db: Db, fullName: string) {
 	const rows = await db
 		.select()
