@@ -1,7 +1,10 @@
 import type { ModStats } from "@tripwire/contracts";
 import { generateId } from "@tripwire/utils";
-import { sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../client.ts";
+import { events } from "../schema/events.ts";
+import { moderationItems } from "../schema/moderation.ts";
+import { runSteps, runs } from "../schema/runs.ts";
 
 /**
  * Rollups + Home stats (§4). `computeDailyRollups` is the worker's daily job;
@@ -135,4 +138,98 @@ export async function getHomeStats(db: Db): Promise<ModStats> {
 			series: Array.from({ length: 24 }, () => 0),
 		},
 	};
+}
+
+export interface RunActivityRow {
+	runId: string;
+	verdict: string | null;
+	status: string;
+	repoFullName: string;
+	subjectNumber: number | null;
+	actorLogin: string | null;
+	ruleCount: number;
+	failedCount: number;
+	createdAt: Date;
+}
+
+/** Recent runs (optionally filtered by verdict) — the activity behind a metric. */
+export async function listRecentRuns(
+	db: Db,
+	opts: { verdicts?: string[]; limit?: number } = {},
+): Promise<RunActivityRow[]> {
+	const limit = opts.limit ?? 20;
+	const rows = await db
+		.select({
+			runId: runs.id,
+			verdict: runs.verdict,
+			status: runs.status,
+			repoFullName: runs.repoFullName,
+			subjectNumber: runs.subjectNumber,
+			createdAt: runs.createdAt,
+			actorLogin: events.actorLogin,
+		})
+		.from(runs)
+		.leftJoin(events, eq(events.id, runs.eventId))
+		.where(opts.verdicts ? inArray(runs.verdict, opts.verdicts) : undefined)
+		.orderBy(desc(runs.createdAt))
+		.limit(limit);
+
+	const ids = rows.map((r) => r.runId);
+	const counts = ids.length
+		? await db
+				.select({
+					runId: runSteps.runId,
+					ruleCount: sql<number>`count(*) filter (where ${runSteps.nodeKind} = 'rule')::int`,
+					failedCount: sql<number>`count(*) filter (where ${runSteps.nodeKind} = 'rule' and ${runSteps.status} = 'fail')::int`,
+				})
+				.from(runSteps)
+				.where(inArray(runSteps.runId, ids))
+				.groupBy(runSteps.runId)
+		: [];
+	const countByRun = new Map(counts.map((c) => [c.runId, c]));
+
+	return rows.map((r) => ({
+		runId: r.runId,
+		verdict: r.verdict,
+		status: r.status,
+		repoFullName: r.repoFullName,
+		subjectNumber: r.subjectNumber,
+		actorLogin: r.actorLogin,
+		ruleCount: countByRun.get(r.runId)?.ruleCount ?? 0,
+		failedCount: countByRun.get(r.runId)?.failedCount ?? 0,
+		createdAt: r.createdAt,
+	}));
+}
+
+export interface DecisionActivityRow {
+	itemId: string;
+	runId: string;
+	status: string;
+	repoFullName: string;
+	subjectNumber: number | null;
+	actorLogin: string | null;
+	decidedAt: Date | null;
+}
+
+/** Recent moderation decisions — the activity behind "resolved". */
+export async function listRecentDecisions(
+	db: Db,
+	limit = 20,
+): Promise<DecisionActivityRow[]> {
+	return await db
+		.select({
+			itemId: moderationItems.id,
+			runId: moderationItems.runId,
+			status: moderationItems.status,
+			repoFullName: runs.repoFullName,
+			subjectNumber: runs.subjectNumber,
+			actorLogin: events.actorLogin,
+			decidedAt: moderationItems.decidedAt,
+		})
+		.from(moderationItems)
+		.innerJoin(runs, eq(runs.id, moderationItems.runId))
+		.leftJoin(events, eq(events.id, runs.eventId))
+		.where(inArray(moderationItems.status, ["approved", "denied"]))
+		.orderBy(desc(moderationItems.decidedAt))
+		.limit(limit);
 }

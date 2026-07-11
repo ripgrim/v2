@@ -16,6 +16,7 @@ import {
 	hoursAgo,
 	moderationMetrics,
 } from "#/lib/analytics";
+import { analyticsActivityQueryOptions } from "#/lib/analytics-activity.query";
 import { closestEventId, seedAnalyticsEvents } from "#/lib/analytics-events";
 import {
 	automodRulesQueryOptions,
@@ -73,12 +74,17 @@ function AnalyticsPage() {
 		[metrics, focused],
 	);
 
-	// Each metric tells its own story — seed activity by the focused chart.
-	const events = useMemo(
+	// Each metric tells its own story. Moderation activity is REAL (runs +
+	// decisions behind the focused metric); automod is still seeded.
+	const activity = useQuery(
+		analyticsActivityQueryOptions(focusedMetric?.key ?? "pending"),
+	);
+	const seededEvents = useMemo(
 		() =>
 			focusedMetric ? seedAnalyticsEvents(focusedMetric.key, Date.now()) : [],
 		[focusedMetric],
 	);
+	const events = source === "moderation" ? (activity.data ?? []) : seededEvents;
 
 	const len = focusedMetric?.series.length ?? 0;
 	// Committed point — what the readouts settle on (defaults to "now").

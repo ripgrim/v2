@@ -95,15 +95,21 @@ export function AnalyticsEvents({
 				</div>
 			)}
 
-			<div className="flex flex-col">
-				{ordered.map((event) => (
-					<EventRow
-						key={event.id}
-						event={event}
-						focused={event.id === focusedId}
-					/>
-				))}
-			</div>
+			{ordered.length === 0 ? (
+				<p className="px-3 py-10 text-center text-muted-foreground text-sm">
+					no activity yet — it fills in as tripwire runs on this metric.
+				</p>
+			) : (
+				<div className="flex flex-col">
+					{ordered.map((event) => (
+						<EventRow
+							key={event.id}
+							event={event}
+							focused={event.id === focusedId}
+						/>
+					))}
+				</div>
+			)}
 		</section>
 	);
 }
