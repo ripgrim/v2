@@ -328,15 +328,26 @@ Two artifacts per PR, always in sync, both emitted at the end of a run:
 **one comment** (the human-readable face) and **one check run** (the merge gate).
 
 ### The comment
-**As condensed as possible. One button. Never a CodeRabbit essay.**
+**As condensed as possible. One comment. Never a CodeRabbit essay.**
 
-- Comment = verdict line + ONE sentence + a shields.io-style button deep-linking
-  `tripwire.sh/runs/{id}`.
+- Comment = a contributor-facing verdict line (`**tripwire: blocked/passed/
+  sent to review** — one sentence`, constitution voice) THEN a
+  `<details><summary>for maintainers</summary>` collapsible holding the run
+  deep-link as the **"View on Tripwire" button**. The reason is for everyone;
+  the run button is a maintainer action, tucked away so it never clutters the
+  contributor's view — the two read as one cohesive message.
+- The button is a hosted PNG of the dithered Geist-Pixel design (GitHub
+  comments render no shaders/custom fonts, so it is `<a><img width=185>`,
+  verdict-neutral, served at `${appUrl}/badges/view-run.png`).
 - Hidden marker `<!-- tripwire:run -->` in the comment body; subsequent events on
   the same PR **edit** the comment (upsert), never append. Tripwire never litters
   a thread.
+- The request-changes **review** (unprotected-repo friction, §4) restates NO
+  verdict — a one-liner deferring to the tripwire comment keeps the comment
+  the single source of truth.
 - Multiple workflows on one PR ⇒ joined into one run ⇒ still exactly one button.
-- All depth (per-rule steps, evidence, AI findings, timings) lives on the run page.
+- All depth (per-rule steps, evidence, AI findings, timings) lives on the run
+  page — which a blocked contributor MUST be able to read (see §10 access model).
 
 ### The check run (the merge gate) — MVP scope
 Tripwire gates merges through the forge's **native check primitive**, emitted
@@ -508,6 +519,26 @@ Primitives → `packages/ui`. Custom app UI → here. Extract when 50+ lines, us
 - **Contributors never authenticate.** Scored subjects exist as forge-scoped
   identities in event/scoring data — never in the auth system. Only maintainers
   log in.
+
+### Access model — viewing is public, deciding is gated (locked)
+A blocked contributor MUST be able to read the judgment against them, or the
+condensed-comment UX becomes "computer says no, now sign up to find out why" —
+and they *can't* sign in (contributors never authenticate, above). So the run
+page is unlisted-public, gist-style:
+- **`/runs/{id}` is public, read-only.** UUIDv7 ids are unguessable → only
+  people who saw the badge (PR participants) reach it. The PUBLIC view renders
+  verdict, per-rule steps, evidence, and ai-review **findings** — but NOT the
+  ai-review raw trace (tool calls / tokens / prompt flow: internals, and mildly
+  aids evasion). A "powered by tripwire" footer shows on the public view (every
+  public run is a demo to exactly the audience that installs Tripwire).
+- **Everything mutating or list-shaped stays session-gated:** approve/deny on a
+  run, and all of `/events`, `/moderation`, `/rules`, insights, run *lists*. A
+  crawlable index of every verdict across every repo is a surveillance/harassment
+  surface and a different product — it must not exist.
+- **Private-repo runs stay session-gated for MVP** (a link would leak repo name
+  + contributor + diff-derived evidence). Revisit with repo-scoped access later.
+- Dev-mode auth posture is unchanged: fail-closed in production
+  (`resolveAuthPosture`), open in dev.
 
 ---
 

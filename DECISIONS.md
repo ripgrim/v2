@@ -676,3 +676,51 @@ is untouched.
   localhost the image shows its alt text, exactly like the localhost run link.
 - Snapshot goldens regenerated; the condensed-comment test now asserts the
   linked-image button instead of the shields url.
+
+### PR comment as-built — dropdown + PNG button + copy (consolidated)
+
+- **One cohesive comment, not two competing messages.** Structure: verdict
+  line + one sentence (contributor-facing) THEN a
+  `<details><summary>for maintainers</summary>` collapsible holding the run
+  context + the "View on Tripwire" button. The request-changes review body was
+  trimmed to a one-liner that defers to the comment — kills the earlier
+  double-message feel (comment + review both restating the verdict).
+- **Button = hosted PNG** (`apps/web/public/badges/view-run.png`, exported 3x
+  from Grim's Paper design — dithered Geist-Pixel "◆ View on Tripwire →").
+  GitHub comments render no shaders/custom fonts, so it's `<a><img width=185>`;
+  verdict-neutral (the bold line carries the verdict). Reachability = APP_URL
+  must be public (same as the run deep link); on localhost it shows alt text.
+- **Copy rewritten in tripwire voice:** "this change tripped N of M rules. it
+  can't merge until they clear." / "this change needs a maintainer's eyes
+  before it can merge." / "couldn't finish checking this change, so a
+  maintainer will make the call." (degraded floor) / "cleared all N rules —
+  good to merge." Constitution verbs (blocked/passed/sent to review) intact.
+- Verified live on Boring-Software-Inc/scratch#1.
+
+### Public run pages — AUTHORED DECISION, deferred to post-rule-testing
+
+Grim's call, recorded now, patched after the rule-testing pass (changes
+nothing about current tests — sessions are signed in). Full rationale in spec
+§10 "Access model". Summary: `/runs/{id}` becomes public read-only (unguessable
+UUIDv7, gist-style) so blocked contributors can read the judgment — they can't
+sign in (contributors never authenticate, §10). Public view = verdict + steps +
+evidence + ai-review FINDINGS; NOT the raw ai-review trace (internals + evasion
+aid). Mutations (approve/deny) and all list/index routes (/events, /moderation,
+/rules, insights, run lists) stay session-gated. Private-repo runs stay gated
+for MVP (link would leak repo/contributor/diff). "powered by tripwire" footer
+on the public view (free top-of-funnel).
+
+**Session prompt (fire after the rule-testing/calibration pass):**
+> Read spec §10 "Access model". Make `/runs/$runId` publicly readable with NO
+> session required, via a public-view render: verdict, per-rule steps, rule
+> evidence, and ai-review FINDINGS — but not the ai-review raw trace (keep the
+> trace behind a session). All mutating controls (approve/deny) and every
+> list/index route (/events, /moderation, /rules, insights, run lists) stay
+> session-gated. Private-repo runs stay session-gated for MVP — a public run
+> is public-repo only; gate a private-repo run's page to sessions with repo
+> access (ledger the MVP simplification if you punt). Add a small "powered by
+> tripwire" footer to the public view only. Tests: no-session public read of a
+> public-repo run returns verdict+findings and omits the trace; no-session
+> approve/deny and list routes return 401/redirect; private-repo run 404s or
+> gates without a session. Spec §10 already records the model; DECISIONS +
+> all-summaries per protocol.

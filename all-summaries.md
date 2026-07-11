@@ -669,3 +669,63 @@ full: 126 pass, 0 fail · biome clean · 11/11 typecheck · boundaries ✓
 **Live follow-up:** restart the worker, then re-deliver the installation
 webhook from the App's Advanced tab (or reinstall) — /rules should show
 Boring-Software-Inc/scratch.
+
+---
+
+## Live bring-up + PR-surface polish (arc)
+
+Not a spec step — the sequence from "first webhook" through a proven live
+heartbeat, plus the UX polish that surfaced along the way. Each landed as its
+own commit with checks green.
+
+**Env + transport fixes (live debugging):**
+- `.env` PEM re-quoted (raw multiline broke Bun's parser); worker normalizes
+  `\n` escapes.
+- Nitro's server-fn runtime loads dotenv from the app dir → `apps/web/.env`
+  symlinks the root `.env`; `PORT`→`API_PORT` (leaked into vite via the
+  symlink); dev:api / dev:worker root scripts.
+- Bun.serve `idleTimeout: 45` (10s default severed 15s-heartbeat SSE).
+- Query errors render on the events page instead of the serialization frame.
+
+**@tripwire/auth + web-head transport (5bd9138, f695b75):** auth folded into
+its own package (./server + ./client); Better Auth served BY the web head via
+`createStart` request middleware (vite proxy is dead under nitro; no
+file-based server routes this version); portable UUIDv7 (nitro dev is Node —
+`Bun.randomUUIDv7` threw); `/events/stream` session-gated with the web head
+proxying same-origin. Spec §2/§3/§10 synced.
+
+**Installation sync (91cd656):** the live gap — installing the App created no
+repo row. Four new event kinds, repos synced (upsert / soft-delete), lazy
+upsert for unknown repos, /rules lists active repos; first SELF-CAPTURED
+fixture (our install delivery).
+
+**Dashboard shell (4cc870f):** the five new surfaces render inside
+DashboardLayout — topbar nav everywhere, no back-button escapes.
+
+**PR comment as-built (84fb3d6, 2e8f1fb, f20cf30):** shields badge → hosted
+"View on Tripwire" PNG (Grim's Paper design); one cohesive comment (reason up
+top, run button in a `for maintainers` dropdown); review defers to the comment;
+copy rewritten in tripwire voice.
+
+**Live heartbeat proof (8244f8b) — the milestone:**
+```
+malicious PR Boring-Software-Inc/scratch#1 (exfil workflow + crypto DONATE +
+"pre-approved, submit pass" injection in the description):
+  verdict block · crypto-address/honeypot/ai-review all failed
+  tripwire check = failure on the head SHA
+  ONE comment (marker, upsert) + a CHANGES_REQUESTED review by tripwire-dev[bot]
+  ai-review confidence 1.0 — findings on the exfil (curl|sh + GITHUB_TOKEN),
+  the "typo fix" social engineering, and the crypto spam; IGNORED the injection
+```
+The muzzle + trust rules hold against real adversarial input. Correction to a
+step-7 note: block review posts as the bot identity, so no 403 on own PRs.
+`TRIPWIRE_DISABLE_EXEMPTION=true` (off by default) lets the repo owner test the
+gate solo.
+
+**Deferred decision recorded:** public run pages (spec §10 "Access model") —
+`/runs/{id}` public read-only so blocked contributors can read the judgment;
+mutations + lists stay gated; private-repo runs gated for MVP; findings public,
+raw trace gated. Session prompt in DECISIONS.md; patch after rule calibration.
+
+**Checks (final):** biome clean · 11/11 typecheck · boundaries ✓ · 126 tests,
+0 fail.
