@@ -1,0 +1,24 @@
+{
+	"id": "01980000-0000-7000-8000-000000000002",
+	"forge": "github",
+	"deliveryId": "fixture-comment",
+	"repo": {
+		"owner": "Codertocat",
+		"name": "Hello-World",
+		"fullName": "Codertocat/Hello-World"
+	},
+	"actor": {
+		"login": "Codertocat",
+		"externalId": "21031067",
+		"avatarUrl": "https://avatars1.githubusercontent.com/u/21031067?v=4"
+	},
+	"occurredAt": "2019-05-15T15:20:21.000Z",
+	"receivedAt": "2026-07-11T00:00:00.000Z",
+	"kind": "comment.created",
+	"comment": {
+		"externalId": "492700400",
+		"body": "You are totally right! I'll get this fixed right away.",
+		"url": "https://github.com/Codertocat/Hello-World/issues/1#issuecomment-492700400",
+		"subjectNumber": 1
+	}
+}

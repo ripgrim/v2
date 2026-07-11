@@ -78,3 +78,23 @@ export const ruleStatsSchema = z.object({
 	autoActioned24h: modStatSchema,
 });
 export type RuleStats = z.infer<typeof ruleStatsSchema>;
+
+/**
+ * AUTHORED from spec §4/§6 — the RuleResult envelope. Results serialize as
+ * validated JSON on the server; types in code, JSON on the wire. A rule that
+ * can't evaluate is `skipped` with a reason — never a throw (§6 purity law).
+ */
+export const ruleResultSchema = z.object({
+	/** Rule id WITHOUT version, e.g. "account-age". */
+	ruleId: z.string(),
+	version: z.number().int().min(1),
+	status: z.enum(["evaluated", "skipped"]),
+	/** The boolean requirement outcome; false whenever skipped. */
+	passed: z.boolean(),
+	/** Rule-specific typed payload — what makes appeals real (§6). */
+	evidence: z.unknown(),
+	/** Present iff skipped. */
+	reason: z.string().optional(),
+	evaluatedAt: z.iso.datetime(),
+});
+export type RuleResult = z.infer<typeof ruleResultSchema>;

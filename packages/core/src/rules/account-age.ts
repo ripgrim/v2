@@ -1,0 +1,35 @@
+import { z } from "zod";
+import { defineRule } from "./define.ts";
+
+const DAY_MS = 86_400_000;
+
+/**
+ * account-age@1 — the contributor's forge account must be at least
+ * `minDays` old. Evidence: the actual age vs the requirement.
+ */
+export const accountAge = defineRule({
+	id: "account-age",
+	version: 1,
+	configSchema: z.object({
+		minDays: z.number().int().min(0),
+	}),
+	resultSchema: z.object({
+		accountAgeDays: z.number(),
+		minDays: z.number(),
+	}),
+	evaluate(ctx, config) {
+		if (ctx.contributor === null) {
+			return { status: "skipped", reason: "contributor profile unavailable" };
+		}
+		const created = Date.parse(ctx.contributor.createdAt);
+		if (Number.isNaN(created)) {
+			return { status: "skipped", reason: "contributor createdAt unparseable" };
+		}
+		const accountAgeDays = Math.floor((Date.parse(ctx.now) - created) / DAY_MS);
+		return {
+			status: "evaluated",
+			passed: accountAgeDays >= config.minDays,
+			evidence: { accountAgeDays, minDays: config.minDays },
+		};
+	},
+});

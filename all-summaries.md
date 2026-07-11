@@ -123,3 +123,46 @@ typecheck:  10/10 workspaces exit 0
 boundaries: ✓ passed
 tests:      27 pass, 0 fail (84 expect) across 4 files
 ```
+
+---
+
+## Step 4 — Worker + live event list — dda5e16
+
+**Scope:** worker process-event (normalize → NOTIFY / quarantine), api SSE
+stream (LISTEN/NOTIFY), web /events surface (server fn + Query + SSE cache
+merge, §9 route pattern, authored lib/seo.ts), Events nav entry.
+
+**Machine-verified:**
+Worker pipeline (§11 integration, real postgres):
+```
+bun test apps/worker →
+✓ normalizes, writes cols + jsonb, and NOTIFYs 'events'
+✓ re-processing a normalized event is a no-op
+✓ malformed ingested payload ⇒ quarantined, raw untouched
+✓ non-ingested kind (ping) stays un-normalized, not quarantined
+4 pass, 0 fail [1.75s]
+```
+Local end-to-end smoke (api + worker + SSE on compose postgres):
+```
+$ curl -X POST /webhooks/github (signed fixture)  → {"ok":true,"duplicate":false}
+$ psql: smoke-2 | change-request.opened | Codertocat/Hello-World | 2 | f
+$ SSE listener captured: "kind":"change-request.opened" (1 event frame)
+```
+
+**Awaiting live verification:** QUEUE #4 — real PR appears in /events without
+refresh (the step-4 done-when, needs the live App from #1–3).
+
+**Decisions:** SSE over polling; NOTIFY colocated in db service; seo.ts
+authored (demo had none); sanctioned useEffect for EventSource; server-only
+db import pattern.
+
+**Needs Grim's eyes:** /events page design fidelity (new surface built to the
+tripwire-design skill); seo.ts (authored).
+
+**Checks:**
+```
+biome:      Checked 246 files. No fixes applied.
+typecheck:  10/10 workspaces exit 0
+boundaries: ✓ passed
+tests:      31 pass, 0 fail (98 expect) across 5 files
+```

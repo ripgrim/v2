@@ -268,3 +268,37 @@ is untouched.
   permits; the list itself stays a cache read.
 - **Web reads db via dynamic import inside server-function handlers**
   (`#/lib/server/db`) so pg never enters the client bundle.
+
+### Step 5 — Rules registry
+
+- **AUTHORED — morning review target: `RuleResult` envelope**
+  (contracts/rules.ts) per §4/§6: `{ruleId, version, status:
+  evaluated|skipped, passed, evidence, reason?, evaluatedAt}`. `passed:false`
+  whenever skipped; `reason` present iff skipped. Config-parse failure and
+  evidence-schema failure both produce skipped results, never throws.
+- **`zod` added to @tripwire/core** — §6 mandates Zod config + result schemas
+  per rule; the §3 arrow note says "imports contracts + utils only", which
+  reads as @tripwire/* package arrows (contracts itself imports zod). Boundary
+  script unaffected.
+- **`fast-check` (dev) added to core** — named explicitly by §11's property
+  test row.
+- **RuleContext shapes live in core/context.ts**, structurally compatible with
+  forge's read types; the worker maps adapter output → context. Duplication is
+  the price of "nothing imports core except worker" + "core never imports
+  forge". Clock (`now`) is a context INPUT — rules are deterministic.
+- **Old prod repo not on disk** — all 8 rules are fresh implementations from
+  the spec's names/semantics (§13.5 sanctions "fresh implementations"; the old
+  repo was reference-only and is unavailable). Judgment calls per rule:
+  · pr-rate-limit: window count gates; interval CoV (spray signature) is
+    evidence-only. · english-only: non-Latin letter ratio ≥ threshold on
+    title/comment; <4 letters ⇒ skipped. · crypto-address: conservative
+    eth/btc/sol format regexes over title+comment+diff. · honeypot: glob-lite
+    (`*` segment, `**` spans) with no dependency. · profile-readme: min
+    profile-text length.
+- **Rule unit fixtures:** the event half of every fixture context is a
+  CAPTURED payload run once through the real normalizer and stored under
+  `packages/core/fixtures/` (core cannot import the adapter). Contributor/diff
+  halves are per-test inputs — flagged for replacement by captured API
+  responses once the App is live (queue #3 note).
+- **evaluateRule is async** so ai-review's injected `generate()` (step 9)
+  composes without churn.

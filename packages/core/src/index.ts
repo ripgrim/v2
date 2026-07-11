@@ -1,12 +1,25 @@
 /**
- * @tripwire/core — the pure engine.
- *
- * HARD LAW: this package is pure. No I/O, no db, no forge, no AI SDK, no
- * octokit, no env vars. Imports contracts + utils ONLY. Effects arrive injected
- * via `RuleContext` / `generate()`. Expected outcomes are values, not
- * exceptions; a rule that can't evaluate returns `{ status: 'skipped', reason }`.
- *
- * Planned surface (spec §6): `rules/`, `workflow/`, `scoring/`, `context.ts`.
- * Scaffolded empty in build step 1; rules land in build step 5 via /add-rule.
+ * @tripwire/core — the pure engine. No I/O, no db, no forge, no AI SDK, no
+ * octokit, no env vars. Effects arrive injected via RuleContext / generate().
  */
-export {};
+export type {
+	ContextCommit,
+	ContextContributor,
+	ContextDiffFile,
+	RuleContext,
+} from "./context.ts";
+export {
+	defineRule,
+	evaluateRule,
+	type RuleDefinition,
+	type RuleOutcome,
+	ruleRef,
+} from "./rules/define.ts";
+export { getRule, listRules } from "./rules/registry.ts";
+export { score } from "./scoring/score.ts";
+export {
+	clampSignalValue,
+	SIGNAL_CATEGORIES,
+	type Signal,
+	type SignalCategory,
+} from "./scoring/signals.ts";

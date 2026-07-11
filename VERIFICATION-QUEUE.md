@@ -41,3 +41,13 @@ SHOULD HAPPEN: GitHub "ping" delivery shows 200 in Advanced → Recent Deliverie
 5. Afterwards, capture the real delivery as a fixture:
    `/capture-fixture <delivery_id>` — replaces the octokit-sourced fixtures
    with our own App's captures.
+
+## 4. Live event list — PR appears without refresh (closes step 4 done-when)
+Prereqs: items 1–3 done; postgres up; `.env` filled.
+1. Terminal A: `cd apps/api && bun run src/index.ts`
+2. Terminal B: `cd apps/worker && bun run src/index.ts`
+3. Terminal C: `bun run dev` → open http://localhost:3000/events
+4. Terminal D: cloudflared tunnel running (item 2).
+5. Open a new PR (or push to an open one) on the scratch repo.
+SHOULD HAPPEN: the event row appears at the top of /events within ~2s,
+no refresh — first end-to-end proof.
