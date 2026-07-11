@@ -16,7 +16,7 @@ const GC_TIME = 5 * 60_000;
 export const moderationQueueQueryOptions = () =>
 	queryOptions({
 		queryKey: moderationQueryKeys.queue(),
-		queryFn: () => getModerationQueue(),
+		queryFn: ({ signal }) => getModerationQueue({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});
@@ -24,7 +24,7 @@ export const moderationQueueQueryOptions = () =>
 export const moderationStatsQueryOptions = () =>
 	queryOptions({
 		queryKey: moderationQueryKeys.stats(),
-		queryFn: () => getModerationStats(),
+		queryFn: ({ signal }) => getModerationStats({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});

@@ -363,3 +363,200 @@ typecheck:  10/10 workspaces exit 0
 boundaries: ✓ passed
 tests:      97 pass, 0 fail (3 snapshots, 236 expect)
 ```
+
+---
+
+## Step 10 — Moderation queue → rollups → React Flow editor — f4c9780
+
+**Scope:** moderation-as-paused-run end to end (item on pause, tx-safe decide
++ resume job, decision-edge walk, surface re-emit), daily rollups + real Home
+stats, React Flow workflow editor emitting the engine's JSON with a proven
+round-trip.
+
+**Machine-verified:**
+```
+bun test apps/worker (moderation integration) →
+✓ needs_review pauses the run and creates a pending item
+    run.status=paused, verdict=needs_review, item nodeId=moderated@1:mod
+✓ deny resumes down the deny edge ⇒ block; item decided; surface re-emitted
+    run completed/block, :resume steps recorded, 2 comment rows (verdict-
+    scoped), double-decide returns false
+bun test apps/web (editor) →
+✓ definition → graph → definition is identity
+✓ emission parses against the contract schema
+✓ broken graph rejected at emission
+bun test apps/worker (round-trip) →
+✓ committed editor emission → validate.ts → executor ⇒ verdict block, 9+ steps
+full suite: 103 pass, 0 fail — 5x consecutive clean after fixing a docker-run
+race (retry) and a REAL test bug (account-age fixture margin floored to 1
+when the profile fetch trailed ctx.now)
+dev smoke: /workflows → 200, /moderation → 200
+```
+
+**Awaiting live verification:** QUEUE #8 — moderated workflow live (send-to-
+moderation → /moderation → approve/deny → check+comment update in place).
+
+**Decisions:** DECISIONS.md "Step 10" — resume-via-job, derived outcomes,
+honest-zero bannedUsers, DEFAULT_WORKFLOW → contracts, committed-emission
+round-trip bridge, JSON-typed config.
+
+**Needs Grim's eyes:** editor UX (functional but spartan — node config
+editing happens in /rules, not on canvas); home stats semantics; moderation
+page copy.
+
+**Checks:**
+```
+biome:      Checked 329 files. No fixes applied.
+typecheck:  10/10 workspaces exit 0
+boundaries: ✓ passed
+tests:      103 pass, 0 fail (3 snapshots, 257 expect) — 5x clean
+```
+
+---
+
+## Spec parity audit — closing artifact
+
+Section-by-section attestation of where each spec requirement lives. Written
+after a /cleanup pass (signal forwarding added to the demo's ten query files;
+login button moved onto the ui Button primitive; sanctioned-effect audit clean)
+and core-coverage tightening (envelope-law tests in
+packages/core/src/rules/define.test.ts). Final: 107 tests, 0 fail, all four
+checks green.
+
+### §1 What Tripwire is
+- Gatekeeper pipeline: ingest `apps/api/src/routes/webhooks.ts` → rules/
+  workflows `packages/core/src/{rules,workflow}` → auditable runs
+  `packages/db/src/services/runs.ts` → forge actions
+  `packages/forge-github/src/actions/*`.
+- Git-as-VM seam: neutral types `packages/contracts/src/events.ts`
+  ("change-request", never PR), `packages/forge/src/index.ts` (ForgeAdapter),
+  signal taxonomy `packages/core/src/scoring/signals.ts` (core never knows
+  "sponsors" exists). Second adapter: correctly absent (cut list).
+
+### §2 Tech stack (locked) — all present, nothing else
+Bun workspaces (package.json), TS strict ESM (tsconfig.base.json,
+noUncheckedIndexedAccess), Biome+ultracite (biome.json), TanStack
+Start/Router/Query (apps/web), server functions → db/services (all
+apps/web/src/lib/*.functions.ts; zero internal REST), Hono (apps/api),
+Postgres+Drizzle (packages/db), pg-boss (packages/db/src/queue.ts,
+transactional enqueue proven in apps/api/src/webhooks.integration.test.ts),
+SSE via LISTEN/NOTIFY (apps/api/src/routes/stream.ts), Better Auth GitHub-only
+(packages/db/src/auth.ts), AI SDK + Anthropic (apps/worker/src/ai/generate.ts),
+React Flow last (apps/web/src/components/workflows/editor/), UUIDv7
+(packages/utils/src/id.ts — Bun.randomUUIDv7), pino everywhere (zero
+console.log outside scripts/check output), Zod in contracts.
+
+### §3 Monorepo layout + arrows
+Exact §3 tree; apps/mcp = agents.md only. Arrows enforced by
+scripts/check-boundaries.ts (allow-list mirrors the spec block verbatim),
+green in CI (.github/workflows/ci.yml) since commit one.
+
+### §4 Package contents
+- contracts: events/runs/rules/review/check/contributor/repo/workflow + the
+  demo-extracted domains. AUTHORED files flagged in DECISIONS.md.
+- forge: interface + types ONLY (packages/forge/src/index.ts — nothing else).
+- core: define/registry/8 rules + ai-review (rule.ts + instructions.md +
+  template.md versioned together), workflow/{executor,validate}.ts,
+  scoring/{score,signals}.ts, context.ts. Purity: no I/O imports anywhere
+  (boundary script + review); skipped-not-thrown proven in define.test.ts.
+- forge-github: adapter.ts, webhook/{verify,normalize}.ts, client/{auth,
+  http,reads}.ts, actions/{execute,check,comment}.ts, fixtures/ (captured,
+  PROVENANCE.md).
+- db: schema/{events,runs,repos,moderation,rollups,auth}.ts, services/
+  {events,runs,repos,insights,moderation}.ts, client.ts, migrate.ts,
+  drizzle/0000. snake_case, timestamptz, jsonb validated on write
+  (services parse with contracts schemas).
+- ui: primitives untouched from the demo (packages/ui reserved; demo
+  primitives live in apps/web/src/components/ui — lifting them is future
+  mock-shrink work, noted for taste review).
+- utils: id/errors/time/string/retry per spec list, tested.
+- api: webhooks.ts (verify→tx→200, NOTHING else), stream.ts (SSE),
+  auth mount; middleware/auth.ts folded into index.ts deps injection.
+- worker: jobs/{process-event,run-workflows,pr-surface,resume-run,rollup}.ts,
+  ai/generate.ts, default-workflow re-validation. replay job: see §11 gap note.
+- web: four §4 surfaces (Home stats real, Workflows editor, Rules config,
+  Insights=demo analytics on mocks) + /events, /runs/$runId, /moderation.
+
+### §5 Data & ingestion — every numbered step
+1 verify (verify.ts, 401) · 2 ONE tx insert+enqueue (events service, proven) ·
+3 UNIQUE delivery_id no-op (proven) · 4 200-fast nothing-else (webhooks.ts) ·
+5 contracts parse + quarantine + fixture-candidate log (process-event.ts,
+proven) · 6 NormalizedEvent + NOTIFY (markEventNormalized, proven) · 6b
+pending check on pickup (pr-surface.ts emitPendingCheck, tested) · 7 match by
+trigger (run-workflows.ts) · 8 RuleContext pre-fetched via adapter reads with
+per-read degradation (context.ts, proven) · 9 DAG walk with step records
+(executor.ts) · 10 SNAPSHOT on run (createRun validates, proven) · 11 multi-
+workflow JOIN worst-verdict (run-workflows.ts) · 12 actions rows-first,
+marked executed (runs service + pr-surface, retry no-op proven) · 13 check +
+comment same persistence step (emitPrSurface) · SSE fan-out → Query cache
+(stream.ts → events.query.ts). Append-only: no delete/update of raw anywhere.
+
+### §6 Rules & workflows
+Boolean requirement + exemption (run-workflows maintainer/org-member check) ·
+defineRule primitive with Zod config (contracts) + result schemas · evidence
+typed per rule (CoV in pr-rate-limit evidence per the spec's own example) ·
+versioning law (registry keyed id@version; ai-review prompts versioned with
+the rule) · workflow JSON DAG in contracts/workflow.ts · executor eats JSON
+since step 6, editor emits it last (round-trip proven) · moderation = paused
+run (moderation.integration.test.ts).
+
+### §7 PR surface
+One comment: verdict line + ONE sentence + shields button + `<!-- tripwire:run -->`
+marker, upsert never append (comment.ts, snapshot + fake-fetch tests) · one
+`tripwire` check per head SHA, pending → verdict, updated in place, never a
+workflow file (check.ts) · same-step emission (pr-surface.ts) · branch
+protection is the human's toggle (QUEUE #5); tripwire never mutates it.
+
+### §8 Review agent
+AI SDK in worker only · injected generate() (RuleContext) · bounded loop
+(step cap + submit_review stop, adapter-read tools only, diff up front) ·
+muzzle schema contracts/review.ts (essay + >5 findings rejected in tests) ·
+RuleResult envelope composes in workflows · prompts versioned with the rule ·
+full trace in evidence. GAP: eve demo absent — prompts authored (morning
+review target).
+
+### §9 Frontend conventions
+Thin route.tsx (all 7 new routes: component + pendingComponent + buildSeo,
+zero exported components) · components/<feature>/<part> organization ·
+key factories + staleTime + signal forwarding (cleanup pass extended this to
+the demo's queries) · onSettled reconciliation (rule-config-form,
+moderation queue) · SSE merges into cache (events.query.ts) · one sanctioned
+useEffect · kebab-case files · seo.ts authored (demo had none).
+
+### §10 Auth
+Better Auth GitHub-only (createAuth) · user.id UUIDv7; GitHub identity ONLY in
+account + forge_identities (databaseHook) · moderation_items.decided_by FK →
+user.id · contributors never authenticate (scored subjects live in event data).
+
+### §11 Testing
+Unit (per-rule over fixture contexts; fast-check properties: range, red-flags-
+never-raise, determinism) · contract (fixture corpus normalizes;
+contracts.test.ts) · snapshot (3 golden comments) · integration (REAL postgres
+via docker-run helper — testcontainers hangs under Bun; duplicate-delivery
+proven) · live E2E → VERIFICATION-QUEUE. CI from first commit.
+GAPS (honest): verdict-replay job (jobs/replay.ts + /replay wiring) is NOT
+implemented — /replay exists as a command doc; the job needs stored runs to
+replay against and is a natural next session. Shadow mode is post-MVP-launch
+by spec.
+
+### §12 Governance
+AGENTS.md (anti-BS + cut list verbatim) · 13 scoped agents.md · 8 rules with
+description+paths frontmatter · 14 commands · constitution · tripwire-design
+skill. Structure-is-documentation upheld: every deferral in DECISIONS.md or
+the queue.
+
+### §13 Build order
+Steps 1–10 committed in order, one commit each, checks green before each.
+Done-whens: machine-provable parts proven in this file's step entries; human
+parts queued (#1–#9) in dependency order.
+
+### Known gaps for the morning (all recorded)
+1. ai-review prompts authored without the eve demo (DECISIONS, QUEUE #7).
+2. Verdict-replay worker job not implemented (§11 row + §4 worker listing) —
+   needs real stored runs; command doc exists.
+3. packages/ui still empty; demo primitives live in apps/web/components/ui
+   (lifting = mock-shrink work, design-final risk if rushed).
+4. Home queue list + log/automod/analytics surfaces still mock-backed by
+   design (mocks shrink as later sessions land real data of that depth).
+5. Octokit-example fixtures pending replacement by self-captured deliveries
+   (QUEUE #3/#5).

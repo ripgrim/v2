@@ -93,3 +93,18 @@ carries the full trace (steps, usage). The check/comment verdict reflects the
 gate including ai-review.
 3. REVIEW TARGET: read `packages/core/src/rules/ai-review/instructions.md` —
    authored fresh (eve demo was not on disk). Material changes ⇒ ai-review@2.
+
+## 8. Moderation flow live (closes step 10 live check)
+1. In /workflows, add a `send-to-moderation` action fed by a rule's `fail`
+   edge (or save the MODERATED test shape); save for the scratch repo.
+2. Open a sockpuppet PR that fails that rule.
+SHOULD HAPPEN: check goes `neutral` ("awaiting moderation"), comment says
+"sent to review", the run appears on /moderation.
+3. Click deny.
+SHOULD HAPPEN: within ~2s the run page shows :resume steps and verdict
+blocked; the SAME comment edits to "blocked"; the check on the same SHA flips
+to failure (updated in place). Approve on a second PR ⇒ pass/success.
+
+## 9. Rollups sanity
+After a day of events: `select * from rollups_daily;` matches reality; Home
+stat cards show real counts (bannedUsers is intentionally 0 — no ban concept).

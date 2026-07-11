@@ -13,7 +13,7 @@ const GC_TIME = 5 * 60_000;
 export const automodRulesQueryOptions = () =>
 	queryOptions({
 		queryKey: automodQueryKeys.rules(),
-		queryFn: () => getAutomodRules(),
+		queryFn: ({ signal }) => getAutomodRules({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});
@@ -21,7 +21,7 @@ export const automodRulesQueryOptions = () =>
 export const automodStatsQueryOptions = () =>
 	queryOptions({
 		queryKey: automodQueryKeys.stats(),
-		queryFn: () => getAutomodStats(),
+		queryFn: ({ signal }) => getAutomodStats({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});

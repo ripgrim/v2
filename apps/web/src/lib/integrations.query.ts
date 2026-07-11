@@ -12,7 +12,7 @@ const GC_TIME = 5 * 60_000;
 export const githubIntegrationQueryOptions = () =>
 	queryOptions({
 		queryKey: integrationsQueryKeys.github(),
-		queryFn: () => getGithubIntegration(),
+		queryFn: ({ signal }) => getGithubIntegration({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});

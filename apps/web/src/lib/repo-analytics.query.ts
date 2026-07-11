@@ -17,7 +17,7 @@ const GC_TIME = 5 * 60_000;
 export const repoAnalyticsQueryOptions = (org: string, repo: string) =>
 	queryOptions({
 		queryKey: repoAnalyticsQueryKeys.repo(org, repo),
-		queryFn: () => getRepoAnalytics(),
+		queryFn: ({ signal }) => getRepoAnalytics({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});

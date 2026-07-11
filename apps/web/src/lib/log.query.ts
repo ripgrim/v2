@@ -9,7 +9,7 @@ export const logQueryKeys = {
 export const moderationLogQueryOptions = () =>
 	queryOptions({
 		queryKey: logQueryKeys.list(),
-		queryFn: () => getModerationLog(),
+		queryFn: ({ signal }) => getModerationLog({ signal }),
 		staleTime: 30_000,
 		gcTime: 5 * 60_000,
 	});

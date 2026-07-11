@@ -17,7 +17,7 @@ const GC_TIME = 5 * 60_000;
 export const repoContentQueryOptions = (org: string, repo?: string) =>
 	queryOptions({
 		queryKey: repoContentQueryKeys.scope(org, repo),
-		queryFn: () => getRepoContent(),
+		queryFn: ({ signal }) => getRepoContent({ signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});
