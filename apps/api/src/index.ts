@@ -1,3 +1,8 @@
+import {
+	type Auth,
+	createAuth,
+	resolveAuthPosture,
+} from "@tripwire/auth/server";
 import { createBoss, createDb } from "@tripwire/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -33,7 +38,32 @@ if (import.meta.main) {
 	const { db, pool } = createDb();
 	const boss = await createBoss();
 
+	let auth: Auth | null = null;
+	try {
+		const secret = process.env.BETTER_AUTH_SECRET;
+		const posture = resolveAuthPosture({
+			secret,
+			nodeEnv: process.env.NODE_ENV,
+		});
+		auth =
+			posture === "enabled" && secret
+				? createAuth({
+						db,
+						secret,
+						baseUrl: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+						github: null,
+					})
+				: null;
+	} catch (error) {
+		logger.error({ error }, "auth posture check failed — refusing to boot");
+		process.exit(1);
+	}
+	if (!auth) {
+		logger.warn("dev open posture — /events/stream is ungated");
+	}
+
 	const app = createApi({
+		auth,
 		db,
 		pool,
 		boss,

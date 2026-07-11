@@ -19,10 +19,6 @@ export const eventsQueryOptions = () =>
 
 const MAX_LIVE_ITEMS = 200;
 
-function apiUrl(): string {
-	return import.meta.env.VITE_API_URL ?? "http://localhost:8787";
-}
-
 /**
  * §9: the SSE stream merges into the Query cache — the live event list is a
  * cache update, not a parallel state system. This effect exists to sync an
@@ -35,7 +31,7 @@ export function useEventStream(enabled = true): void {
 		if (!enabled) {
 			return;
 		}
-		const source = new EventSource(`${apiUrl()}/events/stream`);
+		const source = new EventSource("/api/events/stream");
 		source.addEventListener("event", (message) => {
 			const incoming = JSON.parse(message.data) as NormalizedEvent;
 			queryClient.setQueryData<EventsPageData>(

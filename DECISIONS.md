@@ -583,3 +583,31 @@ is untouched.
 - Live-debug fixes folded in along the way: `.env` PEM re-quoted (raw
   multiline broke Bun's parser), `GITHUB_CLIENT_ID/SECRET` → the
   `GITHUB_OAUTH_*` names the code reads, sign-in errors now toast.
+
+---
+
+## Spec-sync session (post-live-bring-up)
+
+- **spec.md updated to match owner-approved reality** (the spec stays the
+  source of truth): §3/§4 gained `packages/auth` + the auth arrow (auth ←
+  web, api); §10 records the web-head transport and WHY (vite server.proxy
+  dead under nitro; no file-based server routes in this react-start version);
+  §2/§8 record the OpenRouter default + AI_REVIEW_MODEL precedence; §2 runtime
+  row + frontend.md record the Node-runtime caveat for the web head. AGENTS.md
+  and architecture.md arrow blocks mirrored; parity audit de-staled.
+
+### SSE session gate (code unit)
+
+- `/events/stream` is now session-gated: dashboard data is for maintainers.
+  `/webhooks/github` stays public (HMAC is its auth); `/healthz` stays open.
+  The api builds its own auth instance for session READS only (github: null —
+  sign-in stays on the web head); dev open posture (no BETTER_AUTH_SECRET)
+  keeps the stream usable, production refuses to boot (posture guard
+  reinstated on api).
+- **Browser stays same-origin:** the web head's start.ts middleware proxies
+  `/api/events/stream` → api with the session cookie attached (server-to-
+  server fetch, stream passthrough) — the /api/auth precedent, chosen over
+  cross-origin credentialed EventSource.
+- getSession is faked at the Auth seam in tests (better-auth cookie internals
+  are not under test): no session ⇒ 401, session ⇒ heartbeat, dev-open ⇒
+  heartbeat, webhook/healthz untouched. Live smoke: cookieless curl ⇒ 401.

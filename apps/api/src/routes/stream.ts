@@ -10,43 +10,61 @@ const HEARTBEAT_MS = 15_000;
  * connection holds a dedicated client (a pooled connection can't LISTEN);
  * notifications carry the event id, the row is fetched and the normalized
  * event is pushed. The web head merges these into the Query cache.
+ *
+ * Session-gated: dashboard data is for maintainers. The webhook route stays
+ * public (HMAC is its auth); /healthz stays open. In dev open posture
+ * (auth null) the stream stays usable.
  */
-export const stream = new Hono<ApiEnv>().get("/stream", (c) =>
-	streamSSE(c, async (s) => {
-		const { db, pool, logger } = c.get("deps");
-		const client = await pool.connect();
-		let open = true;
-
-		const onNotification = async (msg: { payload?: string }) => {
-			if (!(open && msg.payload)) {
-				return;
+export const stream = new Hono<ApiEnv>().get(
+	"/stream",
+	async (c, next) => {
+		const { auth } = c.get("deps");
+		if (auth) {
+			const session = await auth.api.getSession({
+				headers: c.req.raw.headers,
+			});
+			if (!session) {
+				return c.json({ error: "session required" }, 401);
 			}
-			const event = await eventServices.getEventById(db, msg.payload);
-			if (event?.normalized) {
-				await s.writeSSE({
-					event: "event",
-					id: event.id,
-					data: JSON.stringify(event.normalized),
-				});
-			}
-		};
-
-		client.on("notification", (msg) => {
-			onNotification(msg).catch((error) =>
-				logger.warn({ error }, "sse notification push failed"),
-			);
-		});
-		await client.query("LISTEN events");
-
-		s.onAbort(() => {
-			open = false;
-			client.query("UNLISTEN events").catch(() => undefined);
-			client.release();
-		});
-
-		while (open) {
-			await s.writeSSE({ event: "heartbeat", data: String(Date.now()) });
-			await s.sleep(HEARTBEAT_MS);
 		}
-	}),
+		return await next();
+	},
+	(c) =>
+		streamSSE(c, async (s) => {
+			const { db, pool, logger } = c.get("deps");
+			const client = await pool.connect();
+			let open = true;
+
+			const onNotification = async (msg: { payload?: string }) => {
+				if (!(open && msg.payload)) {
+					return;
+				}
+				const event = await eventServices.getEventById(db, msg.payload);
+				if (event?.normalized) {
+					await s.writeSSE({
+						event: "event",
+						id: event.id,
+						data: JSON.stringify(event.normalized),
+					});
+				}
+			};
+
+			client.on("notification", (msg) => {
+				onNotification(msg).catch((error) =>
+					logger.warn({ error }, "sse notification push failed"),
+				);
+			});
+			await client.query("LISTEN events");
+
+			s.onAbort(() => {
+				open = false;
+				client.query("UNLISTEN events").catch(() => undefined);
+				client.release();
+			});
+
+			while (open) {
+				await s.writeSSE({ event: "heartbeat", data: String(Date.now()) });
+				await s.sleep(HEARTBEAT_MS);
+			}
+		}),
 );

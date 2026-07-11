@@ -620,3 +620,26 @@ explicitly AMEND step-6/step-7 decisions rather than silently replacing them.
 
 **Needs Grim's eyes:** final instructions.md read-through before queue #7
 (it freezes as @1 at first live invocation); the 50% floor threshold.
+
+---
+
+## Spec-sync session — f2f0d56 (docs) + SSE gate commit
+
+**Scope:** spec.md synced to reality (auth package/arrows, web-head auth
+transport + why, OpenRouter provider, Node-runtime caveat), AGENTS.md +
+rule docs mirrored, parity audit de-staled; /events/stream session-gated with
+the web head proxying same-origin.
+
+**Machine-verified:**
+```
+bun test apps/api →
+✓ no session ⇒ 401, nothing streamed
+✓ valid session ⇒ 200 and the stream heartbeats
+✓ dev open posture (auth null) ⇒ stream stays usable
+✓ webhook route untouched by the gate (HMAC auth); healthz open
+live smoke: curl /events/stream (no cookie) → {"error":"session required"}
+full: 120 pass, 0 fail · biome clean · 11/11 typecheck · boundaries ✓
+```
+
+**Needs Grim's eyes:** none new — transport + gate follow the recorded
+precedents.
