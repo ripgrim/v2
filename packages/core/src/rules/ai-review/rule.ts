@@ -3,7 +3,6 @@ import {
 	aiReviewConfigSchema,
 	aiReviewOutputSchema,
 } from "@tripwire/contracts";
-import { truncate } from "@tripwire/utils";
 import { z } from "zod";
 import type { RuleContext } from "../../context.ts";
 import { defineRule } from "../define.ts";
@@ -17,6 +16,17 @@ import template from "./template.md" with { type: "text" };
  */
 
 const DIFF_CHAR_BUDGET = 60_000;
+
+/**
+ * Clipping is marked EXPLICITLY — the trust rules key off the marker:
+ * unseen portions never pass by default.
+ */
+function clipDiff(diff: string): string {
+	if (diff.length <= DIFF_CHAR_BUDGET) {
+		return diff;
+	}
+	return `[diff truncated: showing ${DIFF_CHAR_BUDGET} of ${diff.length} chars]\n${diff.slice(0, DIFF_CHAR_BUDGET)}`;
+}
 
 function renderPrompt(ctx: RuleContext): string | null {
 	if (!("changeRequest" in ctx.event)) {
@@ -42,7 +52,7 @@ function renderPrompt(ctx: RuleContext): string | null {
 		)
 		.replace("{{draft}}", String(cr.draft))
 		.replace("{{filesChanged}}", String(ctx.diff?.length ?? "unknown"))
-		.replace("{{diff}}", truncate(diff, DIFF_CHAR_BUDGET));
+		.replace("{{diff}}", clipDiff(diff));
 }
 
 export const aiReview = defineRule({

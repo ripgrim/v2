@@ -501,3 +501,28 @@ is untouched.
   row executed — it never kills the run and never blocks retry of other rows.
 - Idempotency unchanged: block rows are per-run verdict-scoped like
   comment/check (re-runs conflict; resume rows carry the :resume suffix).
+
+
+### Unit 4 — ai-review prompt hardening + the eve port (still @1)
+
+- **Eve demo FOUND at `~/tripwire-eve-agent-demo`** (path correction from
+  Grim) — morning review target #1 is RESOLVED by porting, not rework:
+  instructions.md now carries the demo's review process per §8 — the
+  maintainer-QoL test as the governing question, the slop-signal taxonomy,
+  the read-the-repo's-own-rules tool step (CONTRIBUTING/AGENTS via
+  read_file), and "ambiguity is allowed" → needs_review. Discarded from the
+  demo (superseded by spec §7/§8): the label system, the closing policy, the
+  long comment format, dimension score table — the muzzle schema + one-button
+  comment replace all of it.
+- Hardening additions (Grim's trust rules kept verbatim): AI-assistance
+  product line ("ai assistance is not itself a finding"), confidence anchors
+  (0.9+ verified file/line · ~0.6 unconfirmed pattern · <0.5 prefer
+  needs_review over low-confidence block).
+- **Truncation is explicit:** clipDiff renders
+  `[diff truncated: showing 60000 of N chars]` so the trust rules can act on
+  it; tested both ways (marker present when clipped, absent otherwise).
+- Injection-attempt fixture added to the rule test corpus (prompt-level
+  assertions — instruction adherence itself is evaluated live at queue #7's
+  injection drill).
+- All edits land as ai-review@1: zero live runs exist; the versioning law
+  protects stored runs and there are none. First live invocation freezes v1.
