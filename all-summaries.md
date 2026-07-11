@@ -166,3 +166,39 @@ typecheck:  10/10 workspaces exit 0
 boundaries: ✓ passed
 tests:      31 pass, 0 fail (98 expect) across 5 files
 ```
+
+---
+
+## Step 5 — Rules registry — 6760718
+
+**Scope:** defineRule + async evaluateRule (RuleResult envelope, skipped-not-
+thrown), registry keyed id@version, RuleContext (clock as input), 8 rules at
+@1 with per-rule unit tests over fixture contexts, scoring taxonomy + 0-100
+composition with fast-check property tests.
+
+**Machine-verified:**
+```
+bun test packages/core → 37 pass, 0 fail across 10 files [119ms]
+(per-rule pass/block/skip/determinism; registry contents/lookup/validation;
+ property tests: score ∈ [0,100], red flags never raise, determinism,
+ missing-category degradation, clamping)
+```
+
+**Awaiting live verification:** none machine-blocked. NOTE: old prod repo not
+on disk — rule semantics are fresh implementations, worth a skim.
+
+**Decisions:** DECISIONS.md "Step 5" — RuleResult envelope authoring, zod +
+fast-check in core, RuleContext duplication rationale, per-rule judgment calls,
+fixture-context provenance, async evaluateRule.
+
+**Needs Grim's eyes:** every rule's config/evidence schema (authored); the
+english-only heuristic threshold; crypto-address pattern set; scoring weights
+(equal split across present categories, worst-flag penalty).
+
+**Checks:**
+```
+biome:      Checked 272 files. No fixes applied.
+typecheck:  10/10 workspaces exit 0
+boundaries: ✓ passed
+tests:      68 pass, 0 fail (161 expect) across 15 files
+```

@@ -4,11 +4,15 @@ import { normalizeWebhook } from "@tripwire/forge-github";
 import { getErrorMessage } from "@tripwire/utils";
 import type { Pool } from "pg";
 import type { Logger } from "pino";
+import type { WorkerReads } from "../context.ts";
+import { runWorkflows } from "./run-workflows.ts";
 
 export interface ProcessEventDeps {
 	db: Db;
 	pool: Pool;
 	logger: Logger;
+	/** null ⇒ no forge credentials; rules skip on missing context (§6). */
+	reads: WorkerReads | null;
 }
 
 /**
@@ -70,4 +74,6 @@ export async function processEvent(
 		},
 		"event normalized",
 	);
+
+	await runWorkflows({ db, logger, reads: deps.reads }, normalized, event.id);
 }

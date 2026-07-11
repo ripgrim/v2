@@ -23,3 +23,13 @@ export {
 	type Signal,
 	type SignalCategory,
 } from "./scoring/signals.ts";
+export {
+	type ExecutionResult,
+	executeWorkflow,
+	type NodeOutcome,
+	type StepRecord,
+} from "./workflow/executor.ts";
+export {
+	type ValidationResult,
+	validateWorkflow,
+} from "./workflow/validate.ts";

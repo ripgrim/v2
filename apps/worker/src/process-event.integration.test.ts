@@ -66,7 +66,7 @@ describe("processEvent", () => {
 		if (!eventId) {
 			throw new Error("insert failed");
 		}
-		await processEvent({ db, pool, logger }, { eventId });
+		await processEvent({ db, pool, logger, reads: null }, { eventId });
 
 		const row = await pool.query(
 			"SELECT kind, repo_full_name, actor_login, subject_number, head_sha, normalized, quarantined FROM events WHERE id = $1",
@@ -95,7 +95,10 @@ describe("processEvent", () => {
 			["worker-d1"],
 		);
 		const before = row.rows[0].normalized_at;
-		await processEvent({ db, pool, logger }, { eventId: row.rows[0].id });
+		await processEvent(
+			{ db, pool, logger, reads: null },
+			{ eventId: row.rows[0].id },
+		);
 		const after = await pool.query(
 			"SELECT normalized_at FROM events WHERE id = $1",
 			[row.rows[0].id],
@@ -112,7 +115,7 @@ describe("processEvent", () => {
 		if (!eventId) {
 			throw new Error("insert failed");
 		}
-		await processEvent({ db, pool, logger }, { eventId });
+		await processEvent({ db, pool, logger, reads: null }, { eventId });
 		const row = await pool.query(
 			"SELECT quarantined, quarantine_reason, raw, normalized FROM events WHERE id = $1",
 			[eventId],
@@ -136,12 +139,156 @@ describe("processEvent", () => {
 		if (!eventId) {
 			throw new Error("insert failed");
 		}
-		await processEvent({ db, pool, logger }, { eventId });
+		await processEvent({ db, pool, logger, reads: null }, { eventId });
 		const row = await pool.query(
 			"SELECT normalized_at, quarantined FROM events WHERE id = $1",
 			[eventId],
 		);
 		expect(row.rows[0].normalized_at).toBeNull();
 		expect(row.rows[0].quarantined).toBe(false);
+	});
+});
+
+describe("runWorkflows via processEvent (§13.6 done-when)", () => {
+	const freshAccountReads = {
+		getDiff: () =>
+			Promise.resolve([
+				{
+					path: "src/app.ts",
+					status: "modified" as const,
+					additions: 3,
+					deletions: 1,
+				},
+			]),
+		getCommits: () => Promise.resolve([]),
+		getContributorProfile: () =>
+			Promise.resolve({
+				login: "sockpuppet",
+				externalId: "999",
+				createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+				followers: 0,
+				following: 0,
+				publicRepos: 0,
+				profileText: null,
+				mergedInRepo: 0,
+				recentChangeRequestTimes: [],
+				isOrgMember: false,
+				isMaintainer: false,
+			}),
+	};
+
+	test("fresh-account PR ⇒ run persisted with snapshot, steps, verdict block, action row", async () => {
+		const raw = await fixtureRaw();
+		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+			deliveryId: "worker-run-1",
+			rawKind: "pull_request",
+			raw,
+		});
+		if (!eventId) {
+			throw new Error("insert failed");
+		}
+		await processEvent(
+			{ db, pool, logger, reads: freshAccountReads },
+			{ eventId },
+		);
+
+		const runRows = await pool.query(
+			"SELECT id, status, verdict, workflow_snapshot, head_sha, subject_number FROM runs WHERE event_id = $1",
+			[eventId],
+		);
+		expect(runRows.rowCount).toBe(1);
+		const run = runRows.rows[0];
+		expect(run.status).toBe("completed");
+		expect(run.verdict).toBe("block");
+		expect(run.workflow_snapshot[0].id).toBe("default@1");
+		expect(run.head_sha).toMatch(/^[0-9a-f]{40}$/);
+
+		const steps = await pool.query(
+			"SELECT node_id, node_kind, rule_id, status, evidence, duration_ms FROM run_steps WHERE run_id = $1 ORDER BY started_at",
+			[run.id],
+		);
+		expect(steps.rowCount).toBeGreaterThanOrEqual(7);
+		const ageStep = steps.rows.find((s) => s.rule_id === "account-age@1");
+		expect(ageStep.status).toBe("fail");
+		expect(ageStep.evidence.evidence.accountAgeDays).toBe(2);
+
+		const actions = await pool.query(
+			"SELECT kind, status, idempotency_key FROM run_actions WHERE run_id = $1",
+			[run.id],
+		);
+		expect(actions.rowCount).toBe(1);
+		expect(actions.rows[0].kind).toBe("block");
+		expect(actions.rows[0].status).toBe("recorded");
+	});
+
+	test("maintainer PR ⇒ exempt, no run", async () => {
+		const raw = await fixtureRaw();
+		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+			deliveryId: "worker-run-2",
+			rawKind: "pull_request",
+			raw,
+		});
+		if (!eventId) {
+			throw new Error("insert failed");
+		}
+		await processEvent(
+			{
+				db,
+				pool,
+				logger,
+				reads: {
+					...freshAccountReads,
+					getContributorProfile: () =>
+						freshAccountReads.getContributorProfile().then((p) => ({
+							...p,
+							isMaintainer: true,
+						})),
+				},
+			},
+			{ eventId },
+		);
+		const runRows = await pool.query(
+			"SELECT count(*)::int AS n FROM runs WHERE event_id = $1",
+			[eventId],
+		);
+		expect(runRows.rows[0].n).toBe(0);
+	});
+
+	test("degraded reads (all throw) ⇒ rules skip, run passes, nothing blocked", async () => {
+		const raw = await fixtureRaw();
+		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+			deliveryId: "worker-run-3",
+			rawKind: "pull_request",
+			raw,
+		});
+		if (!eventId) {
+			throw new Error("insert failed");
+		}
+		const failing = () => Promise.reject(new Error("github is down"));
+		await processEvent(
+			{
+				db,
+				pool,
+				logger,
+				reads: {
+					getDiff: failing,
+					getCommits: failing,
+					getContributorProfile: failing,
+				},
+			},
+			{ eventId },
+		);
+		const runRows = await pool.query(
+			"SELECT id, verdict FROM runs WHERE event_id = $1",
+			[eventId],
+		);
+		expect(runRows.rows[0].verdict).toBe("pass");
+		const steps = await pool.query(
+			"SELECT status FROM run_steps WHERE run_id = $1 AND node_kind = 'rule'",
+			[runRows.rows[0].id],
+		);
+		expect(
+			steps.rows.every((s) => s.status === "skipped" || s.status === "pass"),
+		).toBe(true);
 	});
 });

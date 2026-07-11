@@ -3,8 +3,11 @@ import {
 	createDb,
 	PROCESS_EVENT_QUEUE,
 	type ProcessEventJob,
+	repoServices,
 } from "@tripwire/db";
+import { GithubReads, InstallationTokenCache } from "@tripwire/forge-github";
 import pino from "pino";
+import type { WorkerReads } from "./context.ts";
 import { processEvent } from "./jobs/process-event.ts";
 
 /**
@@ -16,10 +19,35 @@ if (import.meta.main) {
 	const { db, pool } = createDb();
 	const boss = await createBoss();
 
+	const appId = process.env.GITHUB_APP_ID;
+	const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+	let reads: WorkerReads | null = null;
+	if (appId && privateKey) {
+		const tokens = new InstallationTokenCache({ appId, privateKey });
+		reads = new GithubReads({
+			tokenFor: async (repoFullName) => {
+				const repo = await repoServices.getRepoByFullName(db, repoFullName);
+				if (!repo?.installationId) {
+					throw new Error(`no installation for ${repoFullName}`);
+				}
+				return await tokens.getToken(repo.installationId);
+			},
+		});
+	} else {
+		logger.warn(
+			"GITHUB_APP_* env missing — forge reads disabled, rules will skip",
+		);
+	}
+
 	await boss.work<ProcessEventJob>(PROCESS_EVENT_QUEUE, async (jobs) => {
 		for (const job of jobs) {
 			await processEvent(
-				{ db, pool, logger: logger.child({ eventId: job.data.eventId }) },
+				{
+					db,
+					pool,
+					reads,
+					logger: logger.child({ eventId: job.data.eventId }),
+				},
 				job.data,
 			);
 		}

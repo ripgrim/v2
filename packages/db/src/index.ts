@@ -16,4 +16,6 @@ export {
 } from "./queue.ts";
 export * from "./schema/index.ts";
 export * as eventServices from "./services/events.ts";
+export * as repoServices from "./services/repos.ts";
+export * as runServices from "./services/runs.ts";
 export { createTestDatabase, type TestDatabase } from "./testing.ts";

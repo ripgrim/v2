@@ -8,5 +8,6 @@ export {
 	type GithubAppCredentials,
 	InstallationTokenCache,
 } from "./client/auth.ts";
+export { GithubReads, type GithubReadsOptions } from "./client/reads.ts";
 export { normalizeWebhook } from "./webhook/normalize.ts";
 export { signWebhookBody, verifyWebhookSignature } from "./webhook/verify.ts";

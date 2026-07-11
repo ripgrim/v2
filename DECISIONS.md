@@ -302,3 +302,34 @@ is untouched.
   responses once the App is live (queue #3 note).
 - **evaluateRule is async** so ai-review's injected `generate()` (step 9)
   composes without churn.
+
+### Step 6 — Executor + hardcoded workflow
+
+- **AUTHORED — morning review target: `contracts/workflow.ts`** from §6. DAG
+  semantics decided here: edges conduct on the source outcome (`when:
+  pass|fail`, default pass); `approve`/`deny` edges only leave
+  send-to-moderation nodes and only conduct on resume; a node runs when ≥1
+  incoming edge conducts. **Skipped rules conduct as pass** — a rule that
+  can't evaluate must not block (§6 purity); the skip is still recorded.
+- **Verdict derivation:** paused ⇒ needs_review; any conducted `block` action
+  ⇒ block; else pass. Multi-workflow JOIN takes the worst verdict
+  (block > needs_review > pass); step nodeIds are prefixed `wfId:` to keep
+  them unique inside the joined run.
+- **Resume model:** run_steps persist node outcomes; resume re-walks with the
+  stored outcome memo + the decision, executing only the decision edge's
+  downstream. Deterministic, no context re-fetch.
+- **Executor takes an injected `evaluateRuleRef`** rather than touching the
+  registry — worker composes registry + context + (later) generate().
+- **Maintainer/org-member exemption (§6)** applied at run level: exempt actor
+  ⇒ no run at all (no gate, no comment, no check). Alternative (run-but-pass)
+  rejected: gating maintainers' own repos is noise.
+- **Rule throw = bug (§6)**: worker catches, logs error, records skipped with
+  the message — one bug degrades one rule, never the run.
+- **Default workflow** (worker/default-workflow.ts): CR opened/updated →
+  account-age(7d) + crypto-address + honeypot(.github/workflows/**) +
+  max-files-changed(200) + english-only(0.5) → all-of gate → block on fail.
+  Validated at module load.
+- **GithubReads** implements the §4 read surface with plain fetch (no
+  octokit); contributor profile composes /users, merged-PR search, recent-PR
+  search (timestamps for CoV), collaborator permission, profile README.
+  Every read degrades independently to a null context piece.

@@ -53,8 +53,8 @@ export interface ContributorProfile {
 	profileText: string | null;
 	/** Merged change requests by this contributor in the subject repo. */
 	mergedInRepo: number;
-	/** Change requests opened by this contributor across the forge, recent window. */
-	recentChangeRequests: number;
+	/** ISO timestamps of the contributor's recent change requests, newest first. */
+	recentChangeRequestTimes: string[];
 	/** Whether the contributor is a member/owner of the repo's org. */
 	isOrgMember: boolean;
 	/** Whether the contributor has write access to the repo (maintainer). */

@@ -19,3 +19,4 @@ export * from "./repo.ts";
 export * from "./repo-content.ts";
 export * from "./rules.ts";
 export * from "./runs.ts";
+export * from "./workflow.ts";
