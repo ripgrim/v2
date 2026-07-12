@@ -136,10 +136,17 @@ function RunBody({ run }: { run: RunView }) {
 }
 
 export function RunPageSkeleton() {
+	// Render inside the app shell (like every other *Skeleton) so navigating to a
+	// run doesn't flash a bare full-bleed background before the chrome mounts. The
+	// inner layout mirrors RunBody: header + a "steps" list.
 	return (
-		<div className="min-h-dvh bg-background">
+		<DashboardLayout counts={{}}>
 			<div className="mx-auto w-full max-w-3xl px-6 py-8">
-				<div className="mb-6 h-8 w-56 animate-pulse rounded-md bg-surface-1" />
+				<header className="mb-6">
+					<div className="h-8 w-40 animate-pulse rounded-md bg-surface-1" />
+					<div className="mt-2 h-4 w-64 animate-pulse rounded-md bg-surface-1" />
+				</header>
+				<div className="mb-1 h-3 w-12 animate-pulse rounded bg-surface-1" />
 				<div className="flex flex-col gap-2">
 					{Array.from({ length: 6 }, (_, i) => `run-skel-${i}`).map((key) => (
 						<div
@@ -149,6 +156,6 @@ export function RunPageSkeleton() {
 					))}
 				</div>
 			</div>
-		</div>
+		</DashboardLayout>
 	);
 }
