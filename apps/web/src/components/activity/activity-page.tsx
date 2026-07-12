@@ -1,8 +1,8 @@
 import { ActivityIcon } from "@hugeicons/core-free-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ActivityGroupRow } from "#/components/activity/activity-group";
 import { ActivityRow } from "#/components/activity/activity-row";
+import { ActivityStack } from "#/components/activity/activity-stack";
 import { LiveIndicator } from "#/components/activity/live-indicator";
 import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
@@ -102,10 +102,10 @@ export function ActivityPage() {
 						/>
 					)
 				) : (
-					<div className="flex flex-col gap-1.5">
+					<div className="flex flex-col gap-3">
 						{items.map((item) =>
 							item.type === "group" ? (
-								<ActivityGroupRow group={item.group} key={itemKey(item)} />
+								<ActivityStack group={item.group} key={itemKey(item)} />
 							) : (
 								<ActivityRow item={item.entry} key={itemKey(item)} />
 							),

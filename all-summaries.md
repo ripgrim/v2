@@ -1029,3 +1029,15 @@ moderation — blocked changes that need a decision land here"), /activity (dist
 no-activity-yet vs no-filter-match, plus the error branch), and /rules + /workflows
 ("no repo linked yet" + a /rules pre-first-run hint). Stat cards keep honest zeros.
 Checks green: typecheck, biome, boundaries, 204 tests.
+
+**Unit 3 — /activity stacked cards.** Replaced the collapsible-group UI with
+always-visible card stacks (new activity-stack.tsx; deleted activity-group.tsx).
+Each change request is a rounded-xl overflow-hidden container whose inner cards
+are divided by a top border with no gaps — top card rounds up, bottom rounds down,
+middle square; gap between stacks. Top card is the header (repo/#num/title/actor/
+current verdict chip). Stacks with ≥10 entries render first + ~3 middle + last, the
+middle behind a progressive blur (stacked masked backdrop-blur layers) with a
+"show all N" that expands inline. Kept everything else: live SSE merge, verdict +
+filter chips, tripwire-comment dedup+label, dimmed exempt/no-run entries, every
+entry clickable. SQL grouping + active-repo scope unchanged. Checks green:
+typecheck, biome, boundaries, 204 tests.

@@ -1428,3 +1428,24 @@ calm type, rounded-lg).
   open-dev with an empty DB), plus a pre-first-run hint on /rules when nothing's
   been evaluated in 24h.
 - Stat cards stay honest zeros (a real number beats a fabricated one).
+
+### /activity — stacked cards, no dropdowns (§9, Unit 3)
+
+The collapsible-group UI is replaced with always-visible card STACKS — no
+expand/collapse toggle, so a change request's whole timeline is legible at a
+glance. Supersedes the earlier "one collapsible group per PR" decision.
+
+- One stack = a container that `rounded-xl` + `overflow-hidden` clips its inner
+  cards, which are divided by a top border with NO gaps: the top card rounds up,
+  the bottom rounds down, the middle is square. Gap is BETWEEN stacks. This gives
+  the exact per-card corner rule without per-card radius bookkeeping.
+- The top card is the stack header (repo · #num · title · actor · current verdict
+  chip · time), linking to the current run (else the PR).
+- **Truncation:** a stack with ≥10 entries renders the first card, ~3 middle
+  cards, and the last card; the middle span sits behind a PROGRESSIVE BLUR
+  (stacked backdrop-blur layers, each masked lower) with a "show all N" button
+  that expands the full timeline INLINE (no nav, no modal).
+- Unchanged: live SSE merge (event upserts + bumps the stack, run resolves in
+  place), verdict chips, filter chips, tripwire-comment dedup+label, dimmed
+  exempt/no-run entries, every entry clickable (run → /runs/$id else html_url).
+  The SQL grouping stays in db/services; this is presentation + active-repo scope.
