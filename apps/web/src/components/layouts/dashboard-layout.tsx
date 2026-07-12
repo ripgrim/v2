@@ -18,7 +18,7 @@ type Moderator = {
 
 interface DashboardLayoutProps {
 	moderator: Moderator;
-	counts: { queue?: number; automod?: number };
+	counts: { queue?: number };
 	children: ReactNode;
 }
 

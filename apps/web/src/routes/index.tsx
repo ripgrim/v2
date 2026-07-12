@@ -1,27 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { DitherStatCard } from "#/components/charts/dither-stat-card";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
-import { LogList } from "#/components/log/log-list";
 import { QueueList } from "#/components/moderation/queue-list";
 import { Skeleton } from "#/components/ui/skeleton";
-import { automodRulesQueryOptions } from "#/lib/automod.query";
-import { moderationLogQueryOptions } from "#/lib/log.query";
 import {
 	moderationQueueQueryOptions,
 	moderationStatsQueryOptions,
 } from "#/lib/moderation.query";
 import { MODERATOR } from "#/lib/site-config";
-import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/")({
 	ssr: false,
 	loader: ({ context }) => {
 		void context.queryClient.prefetchQuery(moderationQueueQueryOptions());
 		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
-		void context.queryClient.prefetchQuery(automodRulesQueryOptions());
-		void context.queryClient.prefetchQuery(moderationLogQueryOptions());
 	},
 	component: DashboardPage,
 });
@@ -29,9 +23,6 @@ export const Route = createFileRoute("/")({
 function DashboardPage() {
 	const queueQuery = useQuery(moderationQueueQueryOptions());
 	const statsQuery = useQuery(moderationStatsQueryOptions());
-	const rulesQuery = useQuery(automodRulesQueryOptions());
-	const logQuery = useQuery(moderationLogQueryOptions());
-	const [view, setView] = useState<"pending" | "log">("pending");
 
 	if (queueQuery.error) throw queueQuery.error;
 	if (statsQuery.error) throw statsQuery.error;
@@ -43,10 +34,7 @@ function DashboardPage() {
 	const animateStats = fetchedStats.current;
 
 	const items = queueQuery.data ?? [];
-	const counts = {
-		queue: queueQuery.data?.length,
-		automod: rulesQuery.data?.filter((rule) => rule.enabled).length,
-	};
+	const counts = { queue: queueQuery.data?.length };
 
 	return (
 		<DashboardLayout moderator={MODERATOR} counts={counts}>
@@ -116,75 +104,23 @@ function DashboardPage() {
 					)}
 
 					{queueQuery.data ? (
-						view === "pending" ? (
-							<QueueList
-								items={items}
-								title={
-									<ViewToggle
-										view={view}
-										setView={setView}
-										count={items.length}
-									/>
-								}
-							/>
-						) : (
-							<LogList
-								entries={logQuery.data ?? []}
-								title={
-									<ViewToggle
-										view={view}
-										setView={setView}
-										count={items.length}
-									/>
-								}
-							/>
-						)
+						<QueueList
+							items={items}
+							title={
+								<h2 className="font-medium text-sm">
+									pending{" "}
+									<span className="text-muted-foreground tabular-nums">
+										{items.length}
+									</span>
+								</h2>
+							}
+						/>
 					) : (
 						<QueueSkeleton />
 					)}
 				</div>
 			</div>
 		</DashboardLayout>
-	);
-}
-
-function ViewToggle({
-	view,
-	setView,
-	count,
-}: {
-	view: "pending" | "log";
-	setView: (v: "pending" | "log") => void;
-	count: number;
-}) {
-	return (
-		<div className="flex w-fit items-center gap-0.5 rounded-md bg-surface-0 p-0.5">
-			<button
-				type="button"
-				onClick={() => setView("pending")}
-				className={cn(
-					"flex items-center gap-1.5 rounded-[5px] px-2.5 py-1 font-medium text-xs transition-colors",
-					view === "pending"
-						? "bg-card text-foreground shadow-xs"
-						: "text-muted-foreground hover:text-foreground",
-				)}
-			>
-				Pending
-				<span className="text-muted-foreground tabular-nums">{count}</span>
-			</button>
-			<button
-				type="button"
-				onClick={() => setView("log")}
-				className={cn(
-					"rounded-[5px] px-2.5 py-1 font-medium text-xs transition-colors",
-					view === "log"
-						? "bg-card text-foreground shadow-xs"
-						: "text-muted-foreground hover:text-foreground",
-				)}
-			>
-				Log
-			</button>
-		</div>
 	);
 }
 

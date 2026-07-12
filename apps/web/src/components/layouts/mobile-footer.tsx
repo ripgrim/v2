@@ -1,8 +1,9 @@
 import {
+	ActivityIcon,
 	Analytics01Icon,
+	CheckListIcon,
+	FlowIcon,
 	Queue01Icon,
-	Shield01Icon,
-	Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
@@ -10,7 +11,6 @@ import { Link } from "@tanstack/react-router";
 interface MobileFooterProps {
 	counts: {
 		queue?: number;
-		automod?: number;
 	};
 }
 
@@ -19,22 +19,14 @@ export function MobileFooter({ counts }: MobileFooterProps) {
 		<nav className="flex min-w-0 items-center gap-3 px-3 pb-4 justify-between">
 			<div className="flex shrink-0 items-center justify-center gap-0.5 md:hidden w-full">
 				<NavLink to="/" label="Queue" icon={Queue01Icon} value={counts.queue} />
+				<NavLink to="/events" label="Events" icon={ActivityIcon} />
+				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
+				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
 				<NavLink
-					to="/automod"
-					label="Automod"
-					icon={Shield01Icon}
-					value={counts.automod}
-				/>
-				<NavLink
-					to="/acme/tripwire/analytics"
+					to="/analytics"
 					label="Analytics"
 					icon={Analytics01Icon}
 					exact={false}
-				/>
-				<NavLink
-					to="/acme/integrations/github"
-					label="Integrations"
-					icon={Wrench01Icon}
 				/>
 			</div>
 		</nav>

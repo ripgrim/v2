@@ -8,11 +8,7 @@ import {
 	MoonIcon,
 	Queue01Icon,
 	Search01Icon,
-	Settings01Icon,
-	Shield01Icon,
 	Sun01Icon,
-	UserIcon,
-	Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -41,7 +37,6 @@ interface DashboardTopbarProps {
 	};
 	counts: {
 		queue?: number;
-		automod?: number;
 	};
 }
 
@@ -61,21 +56,10 @@ export function DashboardTopbar({ moderator, counts }: DashboardTopbarProps) {
 				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
 				<NavLink to="/moderation" label="Moderation" icon={Legal01Icon} />
 				<NavLink
-					to="/automod"
-					label="Automod"
-					icon={Shield01Icon}
-					value={counts.automod}
-				/>
-				<NavLink
-					to="/acme/tripwire/analytics"
+					to="/analytics"
 					label="Analytics"
 					icon={Analytics01Icon}
 					exact={false}
-				/>
-				<NavLink
-					to="/acme/integrations/github"
-					label="Integrations"
-					icon={Wrench01Icon}
 				/>
 			</div>
 
@@ -134,20 +118,6 @@ function UserMenu({
 						@{moderator.login}
 					</span>
 				</DropdownMenuLabel>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem asChild>
-					<Link
-						to="/profile/$userHandle"
-						params={{ userHandle: moderator.login }}
-					>
-						<HugeiconsIcon icon={UserIcon} size={14} strokeWidth={2} />
-						Profile
-					</Link>
-				</DropdownMenuItem>
-				<DropdownMenuItem>
-					<HugeiconsIcon icon={Settings01Icon} size={14} strokeWidth={2} />
-					Settings
-				</DropdownMenuItem>
 				<DropdownMenuSeparator />
 				<DropdownMenuItem
 					className="text-destructive focus:text-destructive"

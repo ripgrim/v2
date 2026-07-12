@@ -92,7 +92,7 @@ function AnalyticsPage() {
 	const ago = hoursAgo(committedAt, len);
 	const focusedEventId = closestEventId(events, ago, Date.now());
 
-	const backTo = source === "automod" ? "/automod" : "/";
+	const backTo = "/";
 
 	// Opening the metrics sheet rides the scroll to the bottom (page slides up);
 	// closing glides it back to wherever they opened it from.
