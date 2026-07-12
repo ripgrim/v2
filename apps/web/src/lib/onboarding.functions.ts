@@ -78,9 +78,13 @@ export const chooseActiveRepo = createServerFn({ method: "POST" })
 	});
 
 /**
- * Setup URL callback: link the installation to the SIGNED-IN user. The state
- * must HMAC-bind that same user (CSRF). Returns whether it linked so the caller
- * can route to the narrowing step.
+ * Setup URL callback: link the installation to the SIGNED-IN user (the real
+ * WHO). A PRESENT state must HMAC-bind that same user (CSRF); a direct install
+ * from GitHub's own UI carries NO state, so we link it to the session anyway —
+ * the state is hardening, not a gate on the happy path. Residual risk (tricking
+ * a logged-in victim into claiming a fresh installation) is ledgered in
+ * DECISIONS; the `(forge, installationId)` UNIQUE still blocks stealing a
+ * claimed one.
  */
 export const completeInstallation = createServerFn({ method: "POST" })
 	.inputValidator((input: { installationId: string; state?: string }) => input)
@@ -90,11 +94,12 @@ export const completeInstallation = createServerFn({ method: "POST" })
 		if (!userId) {
 			return { linked: false };
 		}
-		const { verifyInstallState } = await import("#/lib/server/install-state");
-		const boundUser = verifyInstallState(data.state);
-		if (boundUser !== userId) {
-			// A missing/forged state or a mismatched user — refuse to link.
-			return { linked: false };
+		if (data.state) {
+			const { verifyInstallState } = await import("#/lib/server/install-state");
+			if (verifyInstallState(data.state) !== userId) {
+				// A state was supplied but doesn't bind this user — forged; refuse.
+				return { linked: false };
+			}
 		}
 		const { onboardingServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");

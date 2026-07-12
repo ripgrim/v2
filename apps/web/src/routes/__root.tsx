@@ -33,11 +33,29 @@ export const Route = createRootRouteWithContext<{
 		if (session.authEnabled && !session.user) {
 			throw redirect({ to: "/login" });
 		}
-		if (
-			session.user &&
-			!session.onboarded &&
-			!location.pathname.startsWith("/onboarding")
-		) {
+		if (!session.user) {
+			return;
+		}
+		// GitHub's Setup URL redirect carries `?installation_id=…`. However it's
+		// configured (some apps land on `/setup`), funnel it into the real
+		// callback WITH its params, so the onboarding redirect below can't strip
+		// them.
+		const search = location.search as {
+			installation_id?: string;
+			setup_action?: string;
+			state?: string;
+		};
+		if (search.installation_id && location.pathname !== "/onboarding/setup") {
+			throw redirect({
+				to: "/onboarding/setup",
+				search: {
+					installation_id: search.installation_id,
+					setup_action: search.setup_action,
+					state: search.state,
+				},
+			});
+		}
+		if (!session.onboarded && !location.pathname.startsWith("/onboarding")) {
 			throw redirect({ to: "/onboarding" });
 		}
 	},

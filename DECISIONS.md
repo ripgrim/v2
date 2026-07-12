@@ -1449,3 +1449,18 @@ glance. Supersedes the earlier "one collapsible group per PR" decision.
   place), verdict chips, filter chips, tripwire-comment dedup+label, dimmed
   exempt/no-run entries, every entry clickable (run → /runs/$id else html_url).
   The SQL grouping stays in db/services; this is presentation + active-repo scope.
+
+### Onboarding callback — link on session, state optional (fix)
+
+Live bring-up surfaced two blockers in the Setup URL callback:
+- **State was a hard gate.** A direct install from GitHub's own UI carries no
+  `state`, so `completeInstallation` refused to link (user_installations stayed
+  empty → /onboarding kept showing the install prompt despite repos syncing).
+  Fix: link on the SIGNED-IN session; a PRESENT state must still HMAC-match
+  (CSRF), but its absence no longer blocks. Residual risk (tricking a logged-in
+  victim into claiming a fresh installation) is the ledgered punt; the
+  `(forge, installationId)` UNIQUE still prevents stealing a claimed one.
+- **Params could be stripped.** However GitHub's Setup URL is configured (some
+  installs land on `/setup`), the `__root` gate now funnels any signed-in
+  request carrying `?installation_id=…` into `/onboarding/setup` WITH its search
+  params, before the onboarding redirect can drop them.
