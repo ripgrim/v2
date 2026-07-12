@@ -65,9 +65,7 @@ export function RunPage() {
 
 	return (
 		<DashboardLayout counts={{}}>
-			<div className="overflow-stable h-full">
-				<RunBody run={run} />
-			</div>
+			<RunBody run={run} />
 		</DashboardLayout>
 	);
 }

@@ -50,7 +50,8 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 			return;
 		}
 		const scroller =
-			pageRef.current?.querySelector<HTMLElement>(".overflow-stable");
+			pageRef.current?.querySelector<HTMLElement>(".overflow-stable") ??
+			pageRef.current;
 		const opening = open && !hadContent.current;
 		const closing = !open && hadContent.current;
 		hadContent.current = open;
@@ -87,7 +88,11 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 				className="grid flex-1 overflow-hidden p-2 pt-0"
 			>
 				<div className="relative flex h-full flex-col overflow-hidden rounded-xl bg-card">
-					<div ref={pageRef} className="min-h-0 flex-1">
+					{/* The shell owns page scroll: this container scrolls full-width so
+					    the whole page area (not just a centered column) is a scroll +
+					    hover target. Pages render natural-height content; they must NOT
+					    add their own `overflow-stable`/`h-full` scroll wrapper. */}
+					<div ref={pageRef} className="overflow-stable min-h-0 flex-1">
 						{children}
 					</div>
 

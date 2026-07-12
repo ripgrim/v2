@@ -37,7 +37,7 @@ function DashboardPage() {
 
 	return (
 		<DashboardLayout counts={counts}>
-			<div className="overflow-stable h-full px-5 py-6 md:px-8 md:py-10">
+			<div className="px-5 py-6 md:px-8 md:py-10">
 				<div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
 					<header className="flex flex-col gap-1.5">
 						<h1 className="text-2xl font-semibold tracking-tight">
