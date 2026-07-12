@@ -3,14 +3,13 @@ import { EventRow } from "#/components/events/event-row";
 import { LiveIndicator } from "#/components/events/live-indicator";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { eventsQueryOptions, useEventStream } from "#/lib/events.query";
-import { MODERATOR } from "#/lib/site-config";
 
 export function EventsPage() {
 	const { data, error, isSuccess } = useQuery(eventsQueryOptions());
 	useEventStream();
 
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="overflow-stable mx-auto h-full w-full max-w-3xl px-6 py-8">
 				<header className="mb-6 flex items-center justify-between">
 					<div>
@@ -45,7 +44,7 @@ export function EventsPage() {
 
 export function EventsPageSkeleton() {
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="overflow-stable mx-auto h-full w-full max-w-3xl px-6 py-8">
 				<div className="mb-6 h-8 w-40 animate-pulse rounded-md bg-surface-1" />
 				<div className="flex flex-col gap-2">

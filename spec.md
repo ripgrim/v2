@@ -280,13 +280,23 @@ src/
 ```
 
 ### `apps/web` — the dashboard
-Four surfaces: **Home** (rollup charts) · **Workflows** (React Flow editor — last) ·
-**Rules** (the rules page — absorbs the old automod mockup's charts/toggles UI over
-real data; per-rule cards, target chips, kill-switch toggles, sparklines; §9) ·
-**Insights**. Plus `/events`, `/runs/$runId`, `/moderation`. The old `/automod`
-page is **deleted** — its UI folds into `/rules`, its targets into the rule
-primitive (§6). Redesign demo lands here day 1 on mocks; `src/mocks/` shrinks to
-empty as build steps land. Structure in §9.
+The final, real surface set (owner decision — **tripwire doesn't re-render
+GitHub**, so the demo's GitHub-browser pages are cut):
+- `/` — **Home**: the REAL moderation queue (paused runs, approve/deny,
+  view-run) under the real `getHomeStats` header. The one queue surface;
+  `/moderation` redirects here.
+- `/events` — live forge event feed (SSE) · `/rules` — rule config over real
+  data (absorbs the old automod mockup's UI; §9) · `/workflows` — React Flow
+  editor · `/analytics` — metric drill-down, **moderation source only** ·
+  `/runs/$runId` — the run page (public + maintainer, §10) · `/login`.
+- `/dither-kit` — kept, unlinked, dev-only component reference.
+
+**Cut (deleted, not deferred):** the `/$org/**` GitHub-browser cluster (repo
+list, repo analytics, issues/pulls index + detail + thread analytics),
+`/profile/$userHandle`, `/$org/integrations/github`, `/automod` (folds into
+`/rules`), the mock home queue/log, and every `*-mock-data.ts` seed behind
+them. The shell shows the REAL session user (better-auth + `forge_identities`),
+never a fixture. There is no `src/mocks/`. Structure in §9.
 
 ---
 

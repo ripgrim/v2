@@ -5,7 +5,7 @@ import { StepCard } from "#/components/runs/step-card";
 import { formatRelativeTime } from "#/lib/format-relative-time";
 import type { RunView } from "#/lib/runs.functions";
 import { runQueryOptions } from "#/lib/runs.query";
-import { MODERATOR, siteConfig } from "#/lib/site-config";
+import { siteConfig } from "#/lib/site-config";
 import { cn } from "#/lib/utils";
 
 const route = getRouteApi("/runs/$runId");
@@ -64,7 +64,7 @@ export function RunPage() {
 	}
 
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="overflow-stable h-full">
 				<RunBody run={run} />
 			</div>

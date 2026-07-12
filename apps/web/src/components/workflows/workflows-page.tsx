@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { WorkflowCanvas } from "#/components/workflows/editor/canvas";
 import { repoOptionsQueryOptions } from "#/lib/rules.query";
-import { MODERATOR } from "#/lib/site-config";
 import {
 	getWorkflowForRepo,
 	saveWorkflowForRepo,
@@ -45,7 +44,7 @@ export function WorkflowsPage() {
 	});
 
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="mx-auto flex h-[calc(100dvh-10rem)] w-full max-w-5xl flex-col px-6 py-8">
 				<header className="mb-4 flex items-center justify-between gap-4">
 					<div>
@@ -104,7 +103,7 @@ export function WorkflowsPage() {
 
 export function WorkflowsPageSkeleton() {
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="mx-auto w-full max-w-5xl px-6 py-8">
 				<div className="mb-4 h-8 w-48 animate-pulse rounded-md bg-surface-1" />
 				<div className="h-[60dvh] animate-pulse rounded-lg bg-surface-1" />

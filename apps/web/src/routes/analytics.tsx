@@ -10,45 +10,34 @@ import { AnalyticsMetricsSheet } from "#/components/analytics/analytics-metrics-
 import { DitherStatCard } from "#/components/charts/dither-stat-card";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { Button } from "#/components/ui/button";
-import {
-	type AnalyticsSource,
-	automodMetrics,
-	hoursAgo,
-	moderationMetrics,
-} from "#/lib/analytics";
+import { hoursAgo, moderationMetrics } from "#/lib/analytics";
 import { analyticsActivityQueryOptions } from "#/lib/analytics-activity.query";
-import { closestEventId, seedAnalyticsEvents } from "#/lib/analytics-events";
-import { automodStatsQueryOptions } from "#/lib/automod.query";
+import { closestEventId } from "#/lib/analytics-events";
 import { moderationStatsQueryOptions } from "#/lib/moderation.query";
-import { MODERATOR } from "#/lib/site-config";
 import { cn } from "#/lib/utils";
 
-type AnalyticsSearch = { source: AnalyticsSource; metric: string };
+// The moderation store is the only analytics source (§4) — one metric family.
+type AnalyticsSearch = { metric: string };
 
 export const Route = createFileRoute("/analytics")({
 	ssr: false,
 	validateSearch: (search: Record<string, unknown>): AnalyticsSearch => ({
-		source: search.source === "automod" ? "automod" : "moderation",
 		metric: typeof search.metric === "string" ? search.metric : "pending",
 	}),
 	loader: ({ context }) => {
 		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
-		void context.queryClient.prefetchQuery(automodStatsQueryOptions());
 	},
 	component: AnalyticsPage,
 });
 
 function AnalyticsPage() {
-	const { source, metric } = Route.useSearch();
+	const { metric } = Route.useSearch();
 	const moderationStats = useQuery(moderationStatsQueryOptions());
-	const automodStats = useQuery(automodStatsQueryOptions());
 
-	const metrics = useMemo(() => {
-		if (source === "automod") {
-			return automodStats.data ? automodMetrics(automodStats.data) : [];
-		}
-		return moderationStats.data ? moderationMetrics(moderationStats.data) : [];
-	}, [source, moderationStats.data, automodStats.data]);
+	const metrics = useMemo(
+		() => (moderationStats.data ? moderationMetrics(moderationStats.data) : []),
+		[moderationStats.data],
+	);
 
 	const [focused, setFocused] = useState(metric);
 	const [committedIndex, setCommittedIndex] = useState<number | null>(null);
@@ -59,17 +48,11 @@ function AnalyticsPage() {
 		[metrics, focused],
 	);
 
-	// Each metric tells its own story. Moderation activity is REAL (runs +
-	// decisions behind the focused metric); automod is still seeded.
+	// REAL activity — the runs + decisions behind the focused metric.
 	const activity = useQuery(
 		analyticsActivityQueryOptions(focusedMetric?.key ?? "pending"),
 	);
-	const seededEvents = useMemo(
-		() =>
-			focusedMetric ? seedAnalyticsEvents(focusedMetric.key, Date.now()) : [],
-		[focusedMetric],
-	);
-	const events = source === "moderation" ? (activity.data ?? []) : seededEvents;
+	const events = activity.data ?? [];
 
 	const len = focusedMetric?.series.length ?? 0;
 	// Committed point — what the readouts settle on (defaults to "now").
@@ -105,7 +88,7 @@ function AnalyticsPage() {
 	}, [showMetrics]);
 
 	return (
-		<DashboardLayout moderator={MODERATOR} counts={{}}>
+		<DashboardLayout counts={{}}>
 			<div className="relative flex h-full flex-col">
 				<div
 					ref={scrollRef}
@@ -122,7 +105,7 @@ function AnalyticsPage() {
 									size={14}
 									strokeWidth={2}
 								/>
-								Back to {source === "automod" ? "Automod" : "Moderation"}
+								Back to Moderation
 							</Link>
 						</Button>
 
@@ -160,7 +143,7 @@ function AnalyticsPage() {
 									}}
 								>
 									<AnalyticsChart
-										layoutId={`chart-${source}-${metric}`}
+										layoutId={`chart-moderation-${metric}`}
 										series={focusedMetric.series}
 										color={focusedMetric.color}
 										committedIndex={committedIndex}

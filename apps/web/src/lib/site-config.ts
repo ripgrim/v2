@@ -16,10 +16,3 @@ export const siteConfig: SiteConfig = {
 	defaultDescription:
 		"tripwire is a contribution gatekeeper for git forges. it evaluates contributors and change requests against composable rules, blocks slop before it lands, and keeps every verdict auditable.",
 };
-
-// The signed-in moderator. In a real deployment this comes from the session.
-export const MODERATOR = {
-	name: "grim",
-	login: "ripgrim",
-	image: "https://github.com/ripgrim.png",
-};

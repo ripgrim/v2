@@ -906,3 +906,15 @@ zod-only law. Leak invariant pinned over the whole registry (no configSchema key
 in any public evidence). Historical runs degrade honestly (null ⇒ no evidence
 detail). Checks: biome clean · typecheck 0 · boundaries ✓ · 193 tests, 0 fail ·
 replay corpus 13/2 (projections aren't verdicts).
+
+**Units — app collapse to real surfaces (3 commits).** Owner decision: tripwire
+doesn't re-render GitHub, so the demo's mock GitHub-browser pages are cut. (1)
+Deleted the /$org/** cluster + profile + integrations + automod + dither-charts
+routes and all their mock data/components; kept /dither-kit (dev ref). (2) Home
+`/` becomes the REAL moderation queue under the real stat header; /moderation
+redirects to /; deleted the mock queue + the seedStats fallback (a DB error now
+fails honestly, no fake numbers). (3) Shell shows the real session user
+(getCurrentUser via better-auth + forge_identities) with an open-dev placeholder,
+not the MODERATOR fixture; nav = Queue/Events/Rules/Workflows/Analytics;
+/analytics collapsed to moderation-only. Spec §4 rewritten. Checks green each
+commit (biome, typecheck, boundaries, 193 tests).

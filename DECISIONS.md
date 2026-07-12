@@ -1159,3 +1159,38 @@ thresholds + tripwire internals). The facts stay public; the internals gate.
   threshold by default. Plus: every rule defines both members or is listed in
   `PUBLIC_VIEW_OPT_OUT` with a reason (empty today). Replay corpus stays 13/2 —
   projections are presentation, not verdicts.
+
+### App collapse to real surfaces — tripwire doesn't re-render GitHub (owner decision)
+
+The redesign demo shipped ~95 components of mock-backed GitHub-browser pages
+(repo lists, repo/thread analytics, issues/pulls index+detail, profiles,
+integrations, automod). Owner decision: **tripwire is a gatekeeper, not a
+GitHub mirror** — those surfaces re-render data GitHub already shows and will
+never have a real source here. Deleted wholesale (not commented out, not
+deferred), in three commits:
+
+- **Unit 1** — deleted the `/$org/**` cluster (repos, repo analytics + issue/PR
+  thread analytics, issues/pulls index + detail), `/profile/$userHandle`,
+  `/$org/integrations/github`, `/automod` (route+components), `/dither-charts`,
+  and the home `log` view (it linked to deleted routes). With them: their
+  `*-mock-data.ts` seeds, `*.functions.ts`/`*.query.ts`, and components
+  (`repo/`, `profile/`, `integrations/`, `automod/`, the repo-scoped `analytics/`
+  subset, `log/`). Kept `/dither-kit` (unlinked dev reference) and the
+  `analytics/` components the global `/analytics` uses.
+- **Unit 2** — `/` renders the REAL moderation queue (`listPendingItems`,
+  approve/deny, view-run) under the real `getHomeStats` header; `/moderation`
+  redirects to `/` (one queue surface). Deleted the mock `QueueList` cluster and
+  — importantly — the `seedStats` FALLBACK: a DB error now surfaces honestly
+  instead of fabricating stat numbers (a fallback that lies is worse than a
+  visible failure).
+- **Unit 3** — the shell shows the REAL session user (`getCurrentUser`:
+  better-auth session + `forge_identities.username`), with a clearly-labeled
+  `local session`/`@dev` placeholder in open-dev — never the old hardcoded
+  `MODERATOR` fixture. Nav is exactly Queue/Events/Rules/Workflows/Analytics
+  (topbar + mobile footer); dropped Automod/Integrations/Profile/Settings and
+  the hardcoded `/acme/*` org paths. `/analytics` collapses to the moderation
+  source only (automod source branch + its mock data deleted); its back-link
+  goes to `/`.
+
+Every commit kept biome/typecheck/boundaries/193-tests green. Spec §4 surface
+list rewritten to the final shape; §9 component org already matched it.

@@ -161,3 +161,11 @@ pill (deny-floor never appears in the pending queue — it exists only after a
 decision, so the run page is its surface). Eyeball live whenever a deny-floor
 or degraded run next occurs; the stored shapes are pinned by the moderation
 integration tests.
+
+## 12. App collapsed to real surfaces (done)
+The demo's mock GitHub-browser pages are gone (owner: tripwire doesn't
+re-render GitHub). Final surfaces: / (real queue) · /events · /rules ·
+/workflows · /analytics (moderation only) · /runs/$runId · /login · /dither-kit
+(dev). Shell shows the real session user. To eyeball: sign in ⇒ topbar shows
+your GitHub handle+avatar (not "grim"); open-dev ⇒ "@dev" placeholder; / shows
+paused runs with approve/deny; deleted routes 404.

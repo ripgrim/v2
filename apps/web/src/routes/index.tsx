@@ -9,7 +9,6 @@ import {
 } from "#/components/moderation/moderation-queue";
 import { Skeleton } from "#/components/ui/skeleton";
 import { moderationStatsQueryOptions } from "#/lib/moderation.query";
-import { MODERATOR } from "#/lib/site-config";
 
 export const Route = createFileRoute("/")({
 	ssr: false,
@@ -37,7 +36,7 @@ function DashboardPage() {
 	const counts = { queue: queueQuery.data?.length };
 
 	return (
-		<DashboardLayout moderator={MODERATOR} counts={counts}>
+		<DashboardLayout counts={counts}>
 			<div className="overflow-stable h-full px-5 py-6 md:px-8 md:py-10">
 				<div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
 					<header className="flex flex-col gap-1.5">

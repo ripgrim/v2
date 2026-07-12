@@ -25,21 +25,19 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
 import { useHasMounted } from "#/hooks/use-has-mounted";
+import type { CurrentUser } from "#/lib/auth.functions";
 import { authClient } from "#/lib/auth-client";
 import { siteConfig } from "#/lib/site-config";
 
 interface DashboardTopbarProps {
-	moderator: {
-		name: string;
-		login: string;
-		image: string;
-	};
+	/** The signed-in maintainer; null in open-dev or signed out (§10). */
+	user: CurrentUser | null;
 	counts: {
 		queue?: number;
 	};
 }
 
-export function DashboardTopbar({ moderator, counts }: DashboardTopbarProps) {
+export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 	return (
 		<nav className="flex min-w-0 items-center gap-3 px-3 py-2">
 			<div className="flex shrink-0 items-center gap-2 pl-1 pr-1">
@@ -77,17 +75,21 @@ export function DashboardTopbar({ moderator, counts }: DashboardTopbarProps) {
 
 			<div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">
 				<ThemeToggle />
-				<UserMenu moderator={moderator} />
+				<UserMenu user={user} />
 			</div>
 		</nav>
 	);
 }
 
-function UserMenu({
-	moderator,
-}: {
-	moderator: DashboardTopbarProps["moderator"];
-}) {
+/** Placeholder identity for open-dev / signed-out — never a fabricated name. */
+const PLACEHOLDER_USER: CurrentUser = {
+	name: "local session",
+	login: "dev",
+	image: "",
+};
+
+function UserMenu({ user }: { user: CurrentUser | null }) {
+	const moderator = user ?? PLACEHOLDER_USER;
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -97,7 +99,10 @@ function UserMenu({
 					aria-label="Account"
 				>
 					<Avatar className="size-7 border border-border">
-						<AvatarImage src={moderator.image} alt={moderator.name} />
+						<AvatarImage
+							src={moderator.image ?? undefined}
+							alt={moderator.name}
+						/>
 						<AvatarFallback className="text-xs">
 							{moderator.name
 								.split(" ")

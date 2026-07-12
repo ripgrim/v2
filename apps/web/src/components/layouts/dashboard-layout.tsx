@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { useMediaQuery } from "#/hooks/use-media-query";
+import { currentUserQueryOptions } from "#/lib/auth.query";
 import {
 	SIDE_PANEL_WIDTH,
 	SidePanelProvider,
@@ -10,14 +12,7 @@ import {
 import { DashboardTopbar } from "./dashboard-topbar";
 import { MobileFooter } from "./mobile-footer";
 
-type Moderator = {
-	name: string;
-	login: string;
-	image: string;
-};
-
 interface DashboardLayoutProps {
-	moderator: Moderator;
 	counts: { queue?: number };
 	children: ReactNode;
 }
@@ -37,7 +32,8 @@ export function DashboardLayout(props: DashboardLayoutProps) {
 	);
 }
 
-function DashboardShell({ moderator, counts, children }: DashboardLayoutProps) {
+function DashboardShell({ counts, children }: DashboardLayoutProps) {
+	const { data: user } = useQuery(currentUserQueryOptions());
 	const { content, collapsed } = useSidePanel();
 	const isDesktop = useMediaQuery("(min-width: 768px)");
 	const showPanel = isDesktop && Boolean(content) && !collapsed;
@@ -78,7 +74,7 @@ function DashboardShell({ moderator, counts, children }: DashboardLayoutProps) {
 
 	return (
 		<div className="isolate flex h-dvh flex-col bg-muted">
-			<DashboardTopbar moderator={moderator} counts={counts} />
+			<DashboardTopbar user={user ?? null} counts={counts} />
 
 			<motion.div
 				initial={false}

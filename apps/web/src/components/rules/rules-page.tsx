@@ -9,7 +9,6 @@ import {
 	ruleConfigsQueryOptions,
 	rulesStatsQueryOptions,
 } from "#/lib/rules.query";
-import { MODERATOR } from "#/lib/site-config";
 
 export function RulesPage() {
 	const { data: repos } = useQuery(repoOptionsQueryOptions());
@@ -38,7 +37,7 @@ export function RulesPage() {
 	}, [rules, sort]);
 
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="overflow-stable mx-auto h-full w-full max-w-4xl px-6 py-8">
 				<header className="mb-6 flex items-center justify-between gap-4">
 					<div>
@@ -92,7 +91,7 @@ export function RulesPage() {
 
 export function RulesPageSkeleton() {
 	return (
-		<DashboardLayout counts={{}} moderator={MODERATOR}>
+		<DashboardLayout counts={{}}>
 			<div className="overflow-stable mx-auto h-full w-full max-w-4xl px-6 py-8">
 				<div className="mb-6 h-8 w-40 animate-pulse rounded-md bg-surface-1" />
 				<div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
