@@ -6,6 +6,7 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { repos } from "./repos.ts";
 
 /**
  * Better Auth core tables (§10) + forge_identities. Column set follows Better
@@ -19,6 +20,12 @@ export const user = pgTable("user", {
 	email: text("email").notNull().unique(),
 	emailVerified: boolean("email_verified").notNull().default(false),
 	image: text("image"),
+	/**
+	 * The ONE repo this user's dashboard is scoped to (§10 onboarding). Null
+	 * until they finish onboarding. All granted repos stay synced as `repos`
+	 * rows; only this one is active (MVP — no switcher).
+	 */
+	activeRepoId: text("active_repo_id").references(() => repos.id),
 	createdAt: timestamp("created_at", { withTimezone: true })
 		.notNull()
 		.defaultNow(),
@@ -26,6 +33,34 @@ export const user = pgTable("user", {
 		.notNull()
 		.defaultNow(),
 });
+
+/**
+ * Which App installation belongs to which user (§10 onboarding). The Setup URL
+ * callback writes this from the SIGNED-IN session — an installation with no
+ * owner is a bug, so `(forge, installationId)` is unique. Repos are reached
+ * through this: `repos.installationId = user_installations.installationId`.
+ */
+export const userInstallations = pgTable(
+	"user_installations",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		forge: text("forge").notNull().default("github"),
+		/** The GitHub App installation id, as a string. */
+		installationId: text("installation_id").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		uniqueIndex("user_installations_forge_installation_unique").on(
+			t.forge,
+			t.installationId,
+		),
+	],
+);
 
 export const session = pgTable("session", {
 	id: text("id").primaryKey(),

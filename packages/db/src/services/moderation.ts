@@ -1,5 +1,5 @@
 import { generateId } from "@tripwire/utils";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Pool } from "pg";
 import type { PgBoss } from "pg-boss";
 import type { Db } from "../client.ts";
@@ -27,7 +27,8 @@ export async function createModerationItem(
 	return id;
 }
 
-export async function listPendingItems(db: Db) {
+/** The moderation queue, SCOPED to the user's active repo (§10). */
+export async function listPendingItems(db: Db, repoFullName: string) {
 	const rows = await db
 		.select({
 			id: moderationItems.id,
@@ -40,7 +41,12 @@ export async function listPendingItems(db: Db) {
 		})
 		.from(moderationItems)
 		.innerJoin(runs, eq(moderationItems.runId, runs.id))
-		.where(eq(moderationItems.status, "pending"))
+		.where(
+			and(
+				eq(moderationItems.status, "pending"),
+				eq(runs.repoFullName, repoFullName),
+			),
+		)
 		.orderBy(desc(moderationItems.id));
 	const withActors = [];
 	for (const row of rows) {

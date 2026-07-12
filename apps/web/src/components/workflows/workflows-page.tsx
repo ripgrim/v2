@@ -4,11 +4,10 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { useState } from "react";
 import { toast } from "sonner";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { WorkflowCanvas } from "#/components/workflows/editor/canvas";
-import { repoOptionsQueryOptions } from "#/lib/rules.query";
+import { activeRepoQueryOptions } from "#/lib/onboarding.query";
 import {
 	getWorkflowForRepo,
 	saveWorkflowForRepo,
@@ -30,9 +29,9 @@ const workflowQueryOptions = (repoId: string | null) =>
 
 export function WorkflowsPage() {
 	const queryClient = useQueryClient();
-	const { data: repos } = useQuery(repoOptionsQueryOptions());
-	const [selected, setSelected] = useState<string | null>(null);
-	const repoId = selected ?? repos?.[0]?.id ?? null;
+	// Scoped to the user's ONE active repo (§10) — no picker.
+	const { data: repo } = useQuery(activeRepoQueryOptions());
+	const repoId = repo?.id ?? null;
 	const { data: definition } = useQuery(workflowQueryOptions(repoId));
 
 	const save = useMutation({
@@ -53,23 +52,11 @@ export function WorkflowsPage() {
 							the DAG the executor walks — triggers, rules, gates, actions.
 						</p>
 					</div>
-					{repos && repos.length > 0 ? (
-						<select
-							className="rounded-md border bg-card px-2 py-1.5 text-sm"
-							onChange={(e) => setSelected(e.target.value)}
-							value={repoId ?? ""}
-						>
-							{repos.map((repo) => (
-								<option key={repo.id} value={repo.id}>
-									{repo.fullName}
-								</option>
-							))}
-						</select>
-					) : (
-						<span className="text-muted-foreground text-xs">
-							default workflow (read-only until a repo is installed)
+					{repo ? (
+						<span className="rounded-md border bg-card px-2.5 py-1.5 font-medium text-muted-foreground text-sm">
+							{repo.fullName}
 						</span>
-					)}
+					) : null}
 				</header>
 				{definition ? (
 					<WorkflowCanvas

@@ -17,11 +17,15 @@ export type ActivityFeedData = ActivityFeed;
 
 export const getActivityFeed = createServerFn({ method: "GET" }).handler(
 	async (): Promise<ActivityFeedData> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
+		const { getActiveRepo } = await import("#/lib/server/active-repo");
+		const repo = await getActiveRepo();
+		if (!repo) {
+			return { items: [] };
+		}
 		const { eventServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const feed = await eventServices.listActivityFeed(getDb().db, {
+			repoFullName: repo.fullName,
 			limit: 50,
 		});
 		// Parse at the boundary: a shape mismatch (a drifted normalized event, a

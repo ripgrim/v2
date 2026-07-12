@@ -1365,3 +1365,49 @@ push" even when the failing rule was account age (no commit fixes that).
 - The condensedness test (asserted a 3-line shape) is replaced with assertions
   that matter: verdict line present, button OUTSIDE any `<details>`, no rule
   count, no "tripwire:" prefix in visible copy, contributor @-mentioned.
+
+### Onboarding — user ↔ installation ↔ active repo (§10, Unit 1)
+
+Tripwire becomes an app with accounts: sign-in gets a session, onboarding gets a
+repo. Every dashboard surface is now scoped to the user's ONE active repo — the
+repo dropdown on /rules and /workflows is gone.
+
+- **Schema (migration `0002`):** `user_installations (user_id, forge,
+  installation_id)` with `(forge, installation_id)` UNIQUE — an installation
+  belongs to exactly one user; a second user's claim is a no-op (`claimed:false`).
+  `user.active_repo_id` FK → `repos.id`. All granted repos stay synced via the
+  existing installation-sync path; only the active one scopes the dashboard (no
+  switcher, MVP). Boring shape: repos are reached through the installation
+  (`repos.installation_id = user_installations.installation_id`), so a repo needs
+  no user FK.
+- **Setup URL callback:** `/onboarding/setup` (a TanStack route whose beforeLoad
+  runs server-side) links the installation to the SIGNED-IN user, then routes to
+  the narrowing step. Documented in `.env.example`: set the App's Setup URL to
+  `${APP_URL}/onboarding/setup` and `GITHUB_APP_SLUG` builds the install link.
+- **CSRF:** the install `state` HMAC-binds the initiating user id
+  (`server/install-state.ts`, keyed by BETTER_AUTH_SECRET). The callback links
+  only when the state's user equals the session user — a logged-in victim can't
+  be tricked into claiming a foreign installation, and the UNIQUE prevents
+  stealing an already-claimed one.
+- **The gate:** `getSessionInfo` gained `onboarded` (has an active repo);
+  `__root` beforeLoad redirects a signed-in, not-onboarded user to /onboarding
+  (skipping /onboarding* itself), mirroring the /login redirect.
+- **Scoping:** `listActivityFeed`, `getHomeStats`, `listPendingItems` take a
+  `repoFullName`; `getActiveRepo` (server helper) resolves it per session.
+  **Open-dev fallback:** no auth ⇒ no per-user active repo, so it falls back to
+  the first installed repo — local dev stays usable. A fresh repo with no runs
+  yields honest zeros (`ZERO_STATS`), not a spinner.
+- **Repo sync timing:** the callback relies on the existing installation webhook
+  to sync repos (web has no App creds). /onboarding shows a "finishing setup"
+  state until repos appear, then narrows. Not wired to poll the GitHub API
+  directly — a documented simplification.
+
+**Honest ledger — NOT closed by this unit:** onboarding scopes the dashboard
+LISTS, but a run fetched directly by id (`getRun`/`loadRunView`) is still not
+authorized against the viewer's repo — any signed-in session can load any run by
+id. Cross-user run authorization remains an open punt (spec §10).
+
+**Also left global:** the /analytics drill-down activity
+(`analyticsActivityQueryOptions` → listRecentDecisions/Runs) is not yet
+repo-scoped (only its moderation stat cards are, via getHomeStats/getModerationStats).
+A small follow-up; the owner's scope list was home / activity / moderation queue.

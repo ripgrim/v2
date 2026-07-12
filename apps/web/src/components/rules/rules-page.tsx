@@ -4,19 +4,25 @@ import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { RuleCard } from "#/components/rules/rule-card";
 import { RuleFilters, type RuleSort } from "#/components/rules/rule-filters";
 import { RuleHeaderStats } from "#/components/rules/rule-header-stats";
+import { activeRepoQueryOptions } from "#/lib/onboarding.query";
 import {
-	repoOptionsQueryOptions,
 	ruleConfigsQueryOptions,
 	rulesStatsQueryOptions,
 } from "#/lib/rules.query";
 
 export function RulesPage() {
-	const { data: repos } = useQuery(repoOptionsQueryOptions());
-	const [selected, setSelected] = useState<string | null>(null);
+	// Scoped to the user's ONE active repo (§10) — no picker.
+	const { data: repo } = useQuery(activeRepoQueryOptions());
 	const [sort, setSort] = useState<RuleSort>("active");
-	const repoId = selected ?? repos?.[0]?.id ?? "";
-	const { data: rules } = useQuery(ruleConfigsQueryOptions(repoId));
-	const statsQuery = useQuery(rulesStatsQueryOptions(repoId));
+	const repoId = repo?.id ?? "";
+	const { data: rules } = useQuery({
+		...ruleConfigsQueryOptions(repoId),
+		enabled: Boolean(repoId),
+	});
+	const statsQuery = useQuery({
+		...rulesStatsQueryOptions(repoId),
+		enabled: Boolean(repoId),
+	});
 
 	const fetchedStats = useRef(false);
 	if (statsQuery.isLoading) {
@@ -46,44 +52,29 @@ export function RulesPage() {
 							boolean requirements every non-exempt contributor must meet.
 						</p>
 					</div>
-					{repos && repos.length > 0 ? (
-						<select
-							className="rounded-md border bg-card px-2 py-1.5 text-sm"
-							onChange={(e) => setSelected(e.target.value)}
-							value={repoId}
-						>
-							{repos.map((repo) => (
-								<option key={repo.id} value={repo.id}>
-									{repo.fullName}
-								</option>
-							))}
-						</select>
+					{repo ? (
+						<span className="rounded-md border bg-card px-2.5 py-1.5 font-medium text-muted-foreground text-sm">
+							{repo.fullName}
+						</span>
 					) : null}
 				</header>
 
-				{repos && repos.length === 0 ? (
-					<div className="rounded-lg border border-dashed px-6 py-16 text-center text-muted-foreground text-sm">
-						no repos yet — install the github app on a repo and its rules appear
-						here.
+				<div className="flex flex-col gap-6">
+					{statsQuery.data ? (
+						<RuleHeaderStats
+							animate={fetchedStats.current}
+							stats={statsQuery.data}
+						/>
+					) : null}
+					<div className="flex items-center justify-end">
+						<RuleFilters onSortChange={setSort} sort={sort} />
 					</div>
-				) : (
-					<div className="flex flex-col gap-6">
-						{statsQuery.data ? (
-							<RuleHeaderStats
-								animate={fetchedStats.current}
-								stats={statsQuery.data}
-							/>
-						) : null}
-						<div className="flex items-center justify-end">
-							<RuleFilters onSortChange={setSort} sort={sort} />
-						</div>
-						<div className="flex flex-col gap-3">
-							{sorted.map((rule) => (
-								<RuleCard key={rule.ruleId} repoId={repoId} rule={rule} />
-							))}
-						</div>
+					<div className="flex flex-col gap-3">
+						{sorted.map((rule) => (
+							<RuleCard key={rule.ruleId} repoId={repoId} rule={rule} />
+						))}
 					</div>
-				)}
+				</div>
 			</div>
 		</DashboardLayout>
 	);

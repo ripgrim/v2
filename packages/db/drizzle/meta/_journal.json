@@ -15,6 +15,13 @@
       "when": 1783846590915,
       "tag": "0001_abnormal_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783860506019,
+      "tag": "0002_nosy_steel_serpent",
+      "breakpoints": true
     }
   ]
 }

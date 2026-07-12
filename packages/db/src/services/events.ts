@@ -338,13 +338,14 @@ function buildGroup(rows: RawRow[]): ActivityGroup {
 
 export async function listActivityFeed(
 	db: Db,
-	{ limit = 50 }: { limit?: number } = {},
+	{ repoFullName, limit = 50 }: { repoFullName: string; limit?: number },
 ): Promise<ActivityFeed> {
 	const grouped = await db.execute(sql`
 		WITH grp AS (
 			SELECT repo_full_name, subject_number, max(received_at) AS latest_at
 			FROM events
 			WHERE normalized_at IS NOT NULL AND subject_number IS NOT NULL
+			  AND repo_full_name = ${repoFullName}
 			GROUP BY repo_full_name, subject_number
 			ORDER BY latest_at DESC
 			LIMIT ${limit}
@@ -375,11 +376,14 @@ export async function listActivityFeed(
 	}
 	const groups = [...byKey.values()].map(buildGroup);
 
+	// Standalone rows for THIS repo (e.g. a push with no change request).
+	// Account-level installation events carry no repo and are out of scope.
 	const loose = await db.execute(sql`
 		SELECT e.normalized, r.id AS run_id, r.verdict, r.status, fr.summary AS reason,
 		       fr.rule_id AS failing_rule_id, e.received_at
 		${ACTIVITY_FROM}
 		WHERE e.normalized_at IS NOT NULL AND e.subject_number IS NULL
+		  AND e.repo_full_name = ${repoFullName}
 		ORDER BY e.id DESC
 		LIMIT ${limit}
 	`);

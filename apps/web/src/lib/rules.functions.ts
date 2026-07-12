@@ -4,11 +4,6 @@ import { RULE_CATALOG } from "@tripwire/contracts";
 import { ruleExecutes } from "#/lib/rule-execution";
 import type { JsonValue } from "#/lib/runs.functions";
 
-export interface RepoOption {
-	id: string;
-	fullName: string;
-}
-
 export interface RuleConfigView {
 	ruleId: string;
 	version: number;
@@ -35,17 +30,6 @@ export interface RulesHeaderStats {
 	/** null until reversals are tracked — render "not enough data" (§6 loop). */
 	falsePositiveRate: null;
 }
-
-export const listRepoOptions = createServerFn({ method: "GET" }).handler(
-	async (): Promise<RepoOption[]> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
-		const { repoServices } = await import("@tripwire/db");
-		const { getDb } = await import("#/lib/server/db");
-		const rows = await repoServices.listActiveRepos(getDb().db);
-		return rows.map((row) => ({ id: row.id, fullName: row.fullName }));
-	},
-);
 
 export const listRuleConfigViews = createServerFn({ method: "GET" })
 	.inputValidator((input: { repoId: string }) => input)

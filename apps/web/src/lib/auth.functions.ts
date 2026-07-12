@@ -4,6 +4,12 @@ export interface SessionInfo {
 	/** null when signed out; "disabled" when auth env is absent (local dev). */
 	user: { id: string; name: string; image: string | null } | null;
 	authEnabled: boolean;
+	/**
+	 * Has the user finished onboarding (an active repo, §10)? Always true in
+	 * open-dev / signed-out — the onboarding gate only applies to a real
+	 * signed-in user, the same shape as the auth gate.
+	 */
+	onboarded: boolean;
 }
 
 export const getSessionInfo = createServerFn({ method: "GET" }).handler(
@@ -11,20 +17,28 @@ export const getSessionInfo = createServerFn({ method: "GET" }).handler(
 		const { getAuth } = await import("#/lib/server/auth");
 		const auth = getAuth();
 		if (!auth) {
-			return { user: null, authEnabled: false };
+			return { user: null, authEnabled: false, onboarded: true };
 		}
 		const { getStartContext } = await import("@tanstack/start-storage-context");
 		const { request } = getStartContext();
 		const session = await auth.api.getSession({ headers: request.headers });
+		if (!session) {
+			return { user: null, authEnabled: true, onboarded: false };
+		}
+		const { onboardingServices } = await import("@tripwire/db");
+		const { getDb } = await import("#/lib/server/db");
+		const activeRepo = await onboardingServices.getActiveRepo(
+			getDb().db,
+			session.user.id,
+		);
 		return {
-			user: session
-				? {
-						id: session.user.id,
-						name: session.user.name,
-						image: session.user.image ?? null,
-					}
-				: null,
+			user: {
+				id: session.user.id,
+				name: session.user.name,
+				image: session.user.image ?? null,
+			},
 			authEnabled: true,
+			onboarded: activeRepo !== null,
 		};
 	},
 );

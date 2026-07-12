@@ -1003,3 +1003,21 @@ replaced the condensedness test with meaningful assertions (verdict line, visibl
 button, no rule count, no prefix, @-mention). Not a version bump (summaries stored
 at persist time; replay unchanged 2 flips). Checks green: biome, typecheck,
 boundaries, 201 tests.
+
+**Unit 1 — onboarding (user ↔ installation ↔ active repo, §10).** Tripwire becomes
+an app with accounts. Schema (migration 0002): user_installations(user_id, forge,
+installation_id) UNIQUE on (forge, installation_id) — one installation, one owner;
+user.active_repo_id FK → repos.id. New onboardingServices (linkUserInstallation,
+listUserRepos, getActiveRepo, setActiveRepo, getOnboardingState) with an
+integration test locking the ownership + must-be-yours invariants. Setup-URL
+callback route /onboarding/setup links the installation to the signed-in user
+(install state HMAC-binds the user for CSRF); /onboarding narrows (1 repo
+auto-selects, >1 picker). Gate: getSessionInfo gains `onboarded`, __root beforeLoad
+redirects not-onboarded users to /onboarding. Scoped listActivityFeed/getHomeStats/
+listPendingItems to a repoFullName via a getActiveRepo server helper (open-dev falls
+back to the first installed repo; empty repo → honest zeros). Replaced the repo
+dropdown on /rules + /workflows with the active repo; deleted the now-dead
+listRepoOptions/repoOptionsQueryOptions. Documented GITHUB_APP_SLUG + Setup URL in
+.env.example. Spec §4/§10 updated. Ledgered honestly: cross-user run-by-id
+visibility is still open. Checks green: typecheck all, boundaries, 204 tests
+(+onboarding integration), migration applied.

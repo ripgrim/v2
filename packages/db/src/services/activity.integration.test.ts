@@ -169,16 +169,18 @@ describe("listActivityFeed — grouped by change request", () => {
 		},
 	});
 
-	const installation = (id: string) => ({
+	// A repo-scoped standalone (no change request): a push to acme/y.
+	const push = (id: string) => ({
 		id,
 		forge: "github" as const,
 		deliveryId: `d-${id}`,
-		actor: { login: "octocat", externalId: "5" },
+		repo: { owner: "acme", name: "y", fullName: "acme/y" },
+		repoExternalId: "9",
+		actor: { login: "octocat", externalId: "5", avatarUrl: undefined },
 		occurredAt: "2026-07-12T01:00:00.000Z",
 		receivedAt: "2026-07-12T01:00:00.000Z",
-		kind: "installation.created",
-		installation: { externalId: "42", account: "acme" },
-		repositories: [],
+		kind: "push",
+		push: { ref: "refs/heads/main", headSha: "cafe", commitCount: 1 },
 	});
 
 	async function seedGrouped(
@@ -245,12 +247,15 @@ describe("listActivityFeed — grouped by change request", () => {
 				durationMs: 1,
 			},
 		]);
-		await seedGrouped("feed-install", installation("feed-install"), {
+		await seedGrouped("feed-push", push("feed-push"), {
 			subjectNumber: null,
-			repoFullName: null,
+			repoFullName: "acme/y",
 		});
 
-		const feed = await listActivityFeed(db, { limit: 50 });
+		const feed = await listActivityFeed(db, {
+			repoFullName: "acme/y",
+			limit: 50,
+		});
 
 		// Parses clean against the contract wire schema — the loud boundary.
 		expect(() => activityFeedSchema.parse(feed)).not.toThrow();
@@ -270,10 +275,9 @@ describe("listActivityFeed — grouped by change request", () => {
 		const reason = group.group.timeline.find((t) => t.run)?.run?.reason;
 		expect(reason).toBe("your account is 2 days old");
 
-		// The standalone (subject_number IS NULL) installation event is present.
+		// The repo-scoped standalone (subject_number IS NULL) push is present.
 		const standalone = feed.items.find(
-			(i) =>
-				i.type === "event" && i.entry.event.kind === "installation.created",
+			(i) => i.type === "event" && i.entry.event.kind === "push",
 		);
 		expect(standalone).toBeDefined();
 	});

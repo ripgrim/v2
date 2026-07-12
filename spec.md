@@ -282,15 +282,19 @@ src/
 ### `apps/web` — the dashboard
 The final, real surface set (owner decision — **tripwire doesn't re-render
 GitHub**, so the demo's GitHub-browser pages are cut):
+Every dashboard surface is SCOPED to the signed-in user's ONE active repo (§10
+onboarding) — no repo dropdown, no "select a repo" state.
 - `/` — **Home**: the REAL moderation queue (paused runs, approve/deny,
-  view-run) under the real `getHomeStats` header. The one queue surface;
-  `/moderation` redirects here.
-- `/activity` — live feed chained by CHANGE REQUEST (SSE): one collapsible group
-  per PR (current verdict + timeline of every event/run), standalone rows for
-  installation events · `/rules` — rule config over real
-  data (absorbs the old automod mockup's UI; §9) · `/workflows` — React Flow
-  editor · `/analytics` — metric drill-down, **moderation source only** ·
-  `/runs/$runId` — the run page (public + maintainer, §10) · `/login`.
+  view-run) under the real `getHomeStats` header, scoped to the active repo. The
+  one queue surface; `/moderation` redirects here.
+- `/activity` — live feed chained by CHANGE REQUEST (SSE), scoped to the active
+  repo: one stack of cards per PR (current verdict + timeline of every
+  event/run), standalone rows for repo pushes · `/rules` — rule config for the
+  active repo (absorbs the old automod mockup's UI; §9) · `/workflows` — React
+  Flow editor for the active repo · `/analytics` — metric drill-down,
+  **moderation source only** · `/runs/$runId` — the run page (public +
+  maintainer, §10) · `/onboarding` (+ `/onboarding/setup` App Setup-URL
+  callback) — link github, pick the active repo · `/login`.
 - `/dither-kit` — kept, unlinked, dev-only component reference.
 
 **Cut (deleted, not deferred):** the `/$org/**` GitHub-browser cluster (repo
@@ -707,6 +711,28 @@ real data — no new analytics system.
   identities in event/scoring data — never in the auth system. Only maintainers
   log in.
 
+### Onboarding — user ↔ installation ↔ active repo (locked)
+Sign-in gets a session; onboarding gets a repo. After GitHub OAuth, a signed-in
+user with no active repo is redirected to `/onboarding` (the same shape as the
+auth redirect to `/login`), gated in `__root` `beforeLoad`.
+- **Flow:** `/onboarding` → install the App (`github.com/apps/<slug>/
+  installations/new?state=<signed>`) → GitHub returns to the **Setup URL**
+  `${APP_URL}/onboarding/setup?installation_id=…&state=…` → we link the
+  installation to the SIGNED-IN user → narrowing: exactly one granted repo
+  auto-selects; more than one shows a picker; the chosen repo becomes
+  `user.active_repo_id`.
+- **Schema:** `user_installations (user_id, forge, installation_id)` with
+  `(forge, installation_id)` UNIQUE — an installation belongs to exactly ONE
+  user (an ownerless install is a bug); repos are reached through it
+  (`repos.installation_id = user_installations.installation_id`). `user.active_repo_id`
+  FK → `repos.id`. ALL granted repos stay synced (existing installation-sync
+  path); only the active one scopes the dashboard — no switcher (MVP).
+- **CSRF:** the install `state` HMAC-binds the initiating user (BETTER_AUTH_SECRET);
+  the callback links only when the state's user matches the session — a victim
+  can't be tricked into claiming a foreign installation.
+- **Open-dev** (no auth env): both gates stand open; the active repo falls back
+  to the first installed repo so local dev is usable without the round-trip.
+
 ### Access model — viewing is public, deciding is gated (locked)
 A blocked contributor MUST be able to read the judgment against them, or the
 condensed-comment UX becomes "computer says no, now sign up to find out why" —
@@ -731,9 +757,14 @@ page is unlisted-public, gist-style:
   by tripwire" footer shows on the public view (every public run is a demo to
   exactly the audience that installs Tripwire).
 - **Everything mutating or list-shaped stays session-gated:** approve/deny on a
-  run, and all of `/events`, `/moderation`, `/rules`, insights, run *lists*. A
+  run, and all of `/activity`, `/moderation`, `/rules`, insights, run *lists*. A
   crawlable index of every verdict across every repo is a surveillance/harassment
   surface and a different product — it must not exist.
+- **Open punt (not closed by onboarding):** onboarding scopes the DASHBOARD
+  LISTS to the user's active repo, but a run fetched directly by id
+  (`getRun`/`loadRunView`) is still not checked against the viewer's repo — any
+  signed-in session can load any run by id. Cross-user run authorization stays
+  open; see DECISIONS.
 - **Private-repo runs stay session-gated for MVP** (a link would leak repo name
   + contributor + diff-derived evidence). Revisit with repo-scoped access later.
 - Dev-mode auth posture is unchanged: fail-closed in production

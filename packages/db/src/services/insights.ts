@@ -68,8 +68,15 @@ async function hourlySeries(db: Db, query: ReturnType<typeof sql>) {
 	return series;
 }
 
-/** Real Home stats in the demo's ModStats contract shape. */
-export async function getHomeStats(db: Db): Promise<ModStats> {
+/**
+ * Real Home stats in the demo's ModStats contract shape, SCOPED to the user's
+ * active repo (§10). Moderation items reach the repo through their run
+ * (`moderation_items.run_id → runs.repo_full_name`).
+ */
+export async function getHomeStats(
+	db: Db,
+	repoFullName: string,
+): Promise<ModStats> {
 	const scalar = async (query: ReturnType<typeof sql>): Promise<number> => {
 		const result = await db.execute(query);
 		return Number(
@@ -77,41 +84,46 @@ export async function getHomeStats(db: Db): Promise<ModStats> {
 		);
 	};
 
+	// moderation_items carry no repo column — scope them through their run.
+	const inRepo = sql`run_id IN (SELECT id FROM runs WHERE repo_full_name = ${repoFullName})`;
+
 	const pending = await scalar(
-		sql`SELECT count(*)::int AS n FROM moderation_items WHERE status = 'pending'`,
+		sql`SELECT count(*)::int AS n FROM moderation_items WHERE status = 'pending' AND ${inRepo}`,
 	);
 	const pendingYesterday = await scalar(
 		sql`SELECT count(*)::int AS n FROM moderation_items
-		    WHERE status = 'pending' AND created_at < now() - interval '24 hours'`,
+		    WHERE status = 'pending' AND created_at < now() - interval '24 hours' AND ${inRepo}`,
 	);
 	const resolvedToday = await scalar(
 		sql`SELECT count(*)::int AS n FROM moderation_items
-		    WHERE decided_at::date = now()::date`,
+		    WHERE decided_at::date = now()::date AND ${inRepo}`,
 	);
 	const resolvedYesterday = await scalar(
 		sql`SELECT count(*)::int AS n FROM moderation_items
-		    WHERE decided_at::date = (now() - interval '1 day')::date`,
+		    WHERE decided_at::date = (now() - interval '1 day')::date AND ${inRepo}`,
 	);
 	const blocked24 = await scalar(
 		sql`SELECT count(*)::int AS n FROM runs
-		    WHERE verdict = 'block' AND created_at > now() - interval '24 hours'`,
+		    WHERE verdict = 'block' AND repo_full_name = ${repoFullName}
+		      AND created_at > now() - interval '24 hours'`,
 	);
 	const blockedPrev = await scalar(
 		sql`SELECT count(*)::int AS n FROM runs
-		    WHERE verdict = 'block'
+		    WHERE verdict = 'block' AND repo_full_name = ${repoFullName}
 		      AND created_at BETWEEN now() - interval '48 hours' AND now() - interval '24 hours'`,
 	);
 
 	const moderationSeries = await hourlySeries(
 		db,
 		sql`SELECT extract(hour FROM created_at)::int AS bucket, count(*)::int AS n
-		    FROM moderation_items WHERE created_at > now() - interval '24 hours'
+		    FROM moderation_items WHERE created_at > now() - interval '24 hours' AND ${inRepo}
 		    GROUP BY 1`,
 	);
 	const blockedSeries = await hourlySeries(
 		db,
 		sql`SELECT extract(hour FROM created_at)::int AS bucket, count(*)::int AS n
-		    FROM runs WHERE verdict = 'block' AND created_at > now() - interval '24 hours'
+		    FROM runs WHERE verdict = 'block' AND repo_full_name = ${repoFullName}
+		      AND created_at > now() - interval '24 hours'
 		    GROUP BY 1`,
 	);
 

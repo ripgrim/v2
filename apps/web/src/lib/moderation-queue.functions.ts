@@ -13,11 +13,17 @@ export interface ModerationQueueItem {
 
 export const listModerationQueue = createServerFn({ method: "GET" }).handler(
 	async (): Promise<ModerationQueueItem[]> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
+		const { getActiveRepo } = await import("#/lib/server/active-repo");
+		const repo = await getActiveRepo();
+		if (!repo) {
+			return [];
+		}
 		const { moderationServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
-		const items = await moderationServices.listPendingItems(getDb().db);
+		const items = await moderationServices.listPendingItems(
+			getDb().db,
+			repo.fullName,
+		);
 		return items.map((item) => ({
 			id: item.id,
 			runId: item.runId,

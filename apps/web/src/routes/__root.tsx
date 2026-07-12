@@ -19,10 +19,11 @@ export const Route = createRootRouteWithContext<{
 	queryClient: QueryClient;
 }>()({
 	/**
-	 * §10 — Better Auth gates the dashboard. When auth env is absent (local
-	 * dev before the OAuth app exists) the gate stands open; see
-	 * VERIFICATION-QUEUE. The run page is unlisted-public (isPublicPath) so
-	 * blocked contributors can read the judgment — they can't sign in.
+	 * §10 — Better Auth gates the dashboard, then onboarding gates it again: a
+	 * signed-in user with no active repo goes to /onboarding (same shape as the
+	 * auth redirect to /login). When auth env is absent (local dev) both gates
+	 * stand open. The run page is unlisted-public (isPublicPath) so blocked
+	 * contributors can read the judgment — they can't sign in.
 	 */
 	beforeLoad: async ({ location }) => {
 		if (isPublicPath(location.pathname)) {
@@ -31,6 +32,13 @@ export const Route = createRootRouteWithContext<{
 		const session = await getSessionInfo();
 		if (session.authEnabled && !session.user) {
 			throw redirect({ to: "/login" });
+		}
+		if (
+			session.user &&
+			!session.onboarded &&
+			!location.pathname.startsWith("/onboarding")
+		) {
+			throw redirect({ to: "/onboarding" });
 		}
 	},
 	head: () => ({
