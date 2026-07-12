@@ -75,7 +75,7 @@ describe("isPublicPath", () => {
 	test("list and index routes stay gated (redirect to /login)", () => {
 		for (const path of [
 			"/",
-			"/events",
+			"/activity",
 			"/moderation",
 			"/rules",
 			"/workflows",

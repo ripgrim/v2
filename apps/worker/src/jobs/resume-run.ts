@@ -161,6 +161,8 @@ export async function resumeRun(
 			pendingActionRows: actionRows,
 		},
 	);
+	// §9 live activity feed: the resumed run's verdict changed — announce it.
+	await deps.pool.query("SELECT pg_notify('runs', $1)", [runData.run.eventId]);
 	logger.info(
 		{ runId: item.runId, decision: job.decision, verdict },
 		"moderated run resumed",
@@ -209,6 +211,7 @@ async function resumeDegradedRun(
 			pendingActionRows: actionRows,
 		},
 	);
+	await deps.pool.query("SELECT pg_notify('runs', $1)", [runData.run.eventId]);
 	deps.logger.info({ runId, decision, verdict }, "degraded run resumed");
 }
 

@@ -48,7 +48,7 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 
 			<div className="hidden shrink-0 items-center gap-0.5 md:flex">
 				<NavLink to="/" label="Queue" icon={Queue01Icon} value={counts.queue} />
-				<NavLink to="/events" label="Events" icon={ActivityIcon} />
+				<NavLink to="/activity" label="Activity" icon={ActivityIcon} />
 				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
 				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
 				<NavLink

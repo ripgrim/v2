@@ -3,7 +3,7 @@ import {
 	normalizedEventSchema,
 } from "@tripwire/contracts";
 import { generateId } from "@tripwire/utils";
-import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, sql } from "drizzle-orm";
 import type { Pool } from "pg";
 import type { PgBoss } from "pg-boss";
 import type { Db } from "../client.ts";
@@ -140,4 +140,93 @@ export async function listEvents(
 		items: rows,
 		nextCursor: rows.length === limit ? (rows.at(-1)?.id ?? null) : null,
 	};
+}
+
+/** A normalized event joined to its run (0..1) — the /activity feed row. */
+export interface ActivityRunSummary {
+	runId: string;
+	verdict: string | null;
+	status: string;
+	/** The first failing rule's plain-English one-liner (§10), when blocked. */
+	reason: string | null;
+}
+export interface ActivityRow {
+	event: NormalizedEvent;
+	run: ActivityRunSummary | null;
+}
+
+interface ActivityQueryRow {
+	normalized: unknown;
+	run_id: string | null;
+	verdict: string | null;
+	status: string | null;
+	reason: string | null;
+}
+
+function toActivityRow(row: ActivityQueryRow): ActivityRow {
+	return {
+		event: row.normalized as NormalizedEvent,
+		run: row.run_id
+			? {
+					runId: row.run_id,
+					verdict: row.verdict,
+					status: row.status ?? "running",
+					reason: row.reason,
+				}
+			: null,
+	};
+}
+
+const ACTIVITY_FROM = sql`
+	FROM events e
+	LEFT JOIN runs r ON r.event_id = e.id
+	LEFT JOIN LATERAL (
+		SELECT s.summary FROM run_steps s
+		WHERE s.run_id = r.id AND s.node_kind = 'rule' AND s.status = 'fail'
+		ORDER BY s.started_at ASC LIMIT 1
+	) fr ON true
+`;
+
+/**
+ * The /activity feed (§9): cursor-paginated normalized events, each joined to
+ * its run (verdict + status) and the first failing rule's one-liner. UUIDv7
+ * event ids are the cursor. One run per event (§5.11 joins workflows into one).
+ */
+export async function listActivity(
+	db: Db,
+	{ cursor, limit = 50 }: { cursor?: string; limit?: number } = {},
+): Promise<{ items: ActivityRow[]; nextCursor: string | null }> {
+	const result = await db.execute(sql`
+		SELECT e.id AS event_id, e.normalized, r.id AS run_id, r.verdict,
+		       r.status, fr.summary AS reason
+		${ACTIVITY_FROM}
+		WHERE e.normalized_at IS NOT NULL
+		  ${cursor ? sql`AND e.id < ${cursor}` : sql``}
+		ORDER BY e.id DESC
+		LIMIT ${limit}
+	`);
+	const rows = result.rows as unknown as (ActivityQueryRow & {
+		event_id: string;
+	})[];
+	const items = rows.map(toActivityRow);
+	return {
+		items,
+		nextCursor: rows.length === limit ? (rows.at(-1)?.event_id ?? null) : null,
+	};
+}
+
+/** One activity row by event id — the live-resolve fetch after a run NOTIFY. */
+export async function getActivityForEvent(
+	db: Db,
+	eventId: string,
+): Promise<ActivityRow | null> {
+	const result = await db.execute(sql`
+		SELECT e.normalized, r.id AS run_id, r.verdict, r.status,
+		       fr.summary AS reason
+		${ACTIVITY_FROM}
+		WHERE e.id = ${eventId}
+		LIMIT 1
+	`);
+	const row = (result.rows as unknown as ActivityQueryRow[])[0];
+	return row?.normalized ? toActivityRow(row) : null;
 }

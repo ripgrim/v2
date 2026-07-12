@@ -145,6 +145,10 @@ export async function processEvent(
 			pendingActionRows: result.actionRows,
 		});
 	}
+	// §9 live activity feed: announce the RESOLVED state (run terminal/paused,
+	// or no run at all — exempt / no matching workflow) so the feed row can
+	// update in place. Carries the event id; the SSE fan-out re-fetches the row.
+	await pool.query("SELECT pg_notify('runs', $1)", [event.id]);
 }
 
 async function syncInstallation(

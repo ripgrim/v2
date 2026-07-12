@@ -918,3 +918,14 @@ fails honestly, no fake numbers). (3) Shell shows the real session user
 not the MODERATOR fixture; nav = Queue/Events/Rules/Workflows/Analytics;
 /analytics collapsed to moderation-only. Spec §4 rewritten. Checks green each
 commit (biome, typecheck, boundaries, 193 tests).
+
+**Unit — the activity feed (/events → /activity).** The dead-end events wall
+becomes the live decision feed: each row is an event joined to its run.
+`eventServices.listActivity` (db) joins events→runs + the first failing rule's
+one-liner; rows show a verdict chip + reason and link to the run, "evaluating…"
+while in flight, or a dimmed no-run reason (push/comment/installation/exempt).
+Live via a new `runs` NOTIFY (worker, on process-event completion + resume) →
+SSE `run` event → resolves the row in place (no polling, no second row).
+Client-side filter chips (all/blocked/sent to review/passed/no run) over the
+cached feed. Route + nav renamed to /activity. Checks green: biome, typecheck,
+boundaries, 196 tests (+ a listActivity integration test).

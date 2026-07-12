@@ -1194,3 +1194,32 @@ deferred), in three commits:
 
 Every commit kept biome/typecheck/boundaries/193-tests green. Spec §4 surface
 list rewritten to the final shape; §9 component org already matched it.
+
+### /events → /activity — the live decision feed (§9)
+
+The events page was a dead-end wall of rows. It's now the app's live activity
+feed: each row is a normalized event joined to the run it triggered.
+
+- **Data** — `eventServices.listActivity` (db/services, never the route) LEFT
+  JOINs `events → runs` (0..1 — §5.11 joins workflows into one run) and a
+  LEFT JOIN LATERAL for the first failing rule's `summary` (the §10 one-liner)
+  as the leading reason. `getActivityForEvent(eventId)` returns one joined row
+  for the live resolve.
+- **Row states** — run present ⇒ verdict chip (blocked / passed / sent to
+  review) + leading reason if failed, and the ROW IS A LINK to `/runs/$runId`;
+  gated event still in flight ⇒ "evaluating…"; no run ⇒ a dimmed row with the
+  reason derived from the event kind (push / comment / installation /
+  maintainer — exempt).
+- **Live, no polling** — the worker NOTIFYs a new `runs` channel at the END of
+  `process-event` (run terminal/paused, OR no run at all — exempt/no-workflow)
+  and on resume (moderation decision). The api SSE stream LISTENs `events`
+  (new row) AND `runs` (re-fetch the joined row, push as a `run` event). The
+  web merges both into the Query cache: `event` prepends an optimistic
+  "evaluating…" row; `run` RESOLVES the matching row in place by event id —
+  never a second row.
+- **Filters** — client-side over the cached feed (instant): all · blocked ·
+  sent to review · passed · no run. Live rows land in the cache regardless of
+  the active chip; the view filters the cache, so a row arriving under a
+  filtered-out chip still lands.
+- Route renamed `/events` → `/activity` (it's no longer an event log); nav +
+  SEO updated. Honest empty/error states. `listActivity` integration-tested.

@@ -35,8 +35,24 @@ export const stream = new Hono<ApiEnv>().get(
 			const client = await pool.connect();
 			let open = true;
 
-			const onNotification = async (msg: { payload?: string }) => {
+			const onNotification = async (msg: {
+				channel?: string;
+				payload?: string;
+			}) => {
 				if (!(open && msg.payload)) {
+					return;
+				}
+				// `runs` → a run reached a resolved state (or none ran); re-fetch the
+				// joined activity row so the feed resolves "evaluating…" in place (§9).
+				if (msg.channel === "runs") {
+					const row = await eventServices.getActivityForEvent(db, msg.payload);
+					if (row) {
+						await s.writeSSE({
+							event: "run",
+							id: `${msg.payload}:run`,
+							data: JSON.stringify(row),
+						});
+					}
 					return;
 				}
 				const event = await eventServices.getEventById(db, msg.payload);
@@ -55,10 +71,12 @@ export const stream = new Hono<ApiEnv>().get(
 				);
 			});
 			await client.query("LISTEN events");
+			await client.query("LISTEN runs");
 
 			s.onAbort(() => {
 				open = false;
 				client.query("UNLISTEN events").catch(() => undefined);
+				client.query("UNLISTEN runs").catch(() => undefined);
 				client.release();
 			});
 

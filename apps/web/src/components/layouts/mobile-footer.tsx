@@ -19,7 +19,7 @@ export function MobileFooter({ counts }: MobileFooterProps) {
 		<nav className="flex min-w-0 items-center gap-3 px-3 pb-4 justify-between">
 			<div className="flex shrink-0 items-center justify-center gap-0.5 md:hidden w-full">
 				<NavLink to="/" label="Queue" icon={Queue01Icon} value={counts.queue} />
-				<NavLink to="/events" label="Events" icon={ActivityIcon} />
+				<NavLink to="/activity" label="Activity" icon={ActivityIcon} />
 				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
 				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
 				<NavLink
