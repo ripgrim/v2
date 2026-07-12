@@ -833,3 +833,36 @@ evaluated (`accountAgeDays 2037`). Fix:
   rule, which under-reports the baseline rules a fresh repo actually runs. The
   honest display fix (baseline rules show on) belongs to the §9 rules-page
   absorption session, not this engine pass. Flagged, not fixed.
+
+### Surface sweeper + staleness + comment ownership + boot health (post-live, surprise #3)
+
+Live evidence (T3): a creds outage left `comment:1:needs_review` and
+`check:28540dc…:needs_review` stuck at `status=recorded` — the neutral check
+never reached GitHub, the stale previous comment stood, and there was no retry.
+A follow-on live finding: two moderation items on one PR decided out of order —
+approve on an older run executed LAST and its `comment:1:pass` upsert overwrote
+the blocked comment. Runs are per-event/SHA; the comment is per-PR; last write
+won. Fixes:
+- **Sweeper (`apps/worker/src/jobs/sweep-actions.ts`, scheduled every minute):**
+  re-attempts `run_actions` stuck at `recorded` once creds recover. Idempotency
+  keys make retries safe. Age-windowed instead of a per-row attempts column
+  (migration-free): retried only after ~2 min, abandoned (superseded + loud log)
+  past ~60 min — the "cap attempts + log" requirement, by time.
+- **Staleness guard:** a completed run with a NEWER surface row of the same kind
+  has already re-emitted the final verdict — the older recorded row is
+  `superseded`, never executed (so the deferred needs_review comment can't
+  overwrite the resolved block). Handles the deny-resume case.
+- **Comment ownership:** the comment is per-PR, runs per-SHA — only the LATEST
+  run for the change request (runs table, latest by created_at, id tiebreak) may
+  execute its comment. Non-latest runs still emit their per-SHA CHECK (correct
+  and harmless); their comment action is `superseded`. Enforced on EVERY surface
+  emission (`emitPrSurface` — initial + resume) AND in the sweeper. Composes with
+  the staleness guard: same `superseded` status, two triggers (verdict moved on,
+  or a newer run exists).
+- **Boot health check (`checkAppCredentials` — GitHub `GET /app` via App JWT):**
+  the worker validates App creds at startup with one cheap call and logs the
+  ai-review credential state — one loud line each. Does NOT refuse to start (the
+  fail-closed floor already degrades broken-cred runs to needs_review); the point
+  is that a worker on stale/broken env is visible at boot, not discovered one
+  degraded run at a time (the live session ran a whole pass on broken creds).
+- New `run_actions` status `superseded` (text column — no enum migration).

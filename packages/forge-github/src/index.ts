@@ -12,6 +12,7 @@ export {
 export { executeAction } from "./actions/execute.ts";
 export { createGithubAdapter } from "./adapter.ts";
 export {
+	checkAppCredentials,
 	createAppJwt,
 	type GithubAppCredentials,
 	InstallationTokenCache,

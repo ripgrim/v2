@@ -9,16 +9,19 @@ import {
 } from "@tripwire/db";
 import type { ForgeAdapter } from "@tripwire/forge";
 import {
+	checkAppCredentials,
 	createGithubAdapter,
 	GithubReads,
 	InstallationTokenCache,
 } from "@tripwire/forge-github";
+import { getErrorMessage } from "@tripwire/utils";
 import pino from "pino";
 import { createGenerate } from "./ai/generate.ts";
 import type { WorkerReads } from "./context.ts";
 import { processEvent } from "./jobs/process-event.ts";
 import { resumeRun } from "./jobs/resume-run.ts";
 import { rollup } from "./jobs/rollup.ts";
+import { sweepActions } from "./jobs/sweep-actions.ts";
 
 /**
  * @tripwire/worker — pg-boss consumers, where I/O meets the pure core. Request
@@ -47,6 +50,24 @@ if (import.meta.main) {
 		};
 		reads = new GithubReads({ tokenFor });
 		adapter = createGithubAdapter({ tokenFor });
+		/**
+		 * Boot health (live-test surprise #3): validate the App credentials with
+		 * one cheap authenticated call so a worker running on stale/broken env is
+		 * loud at startup, not discovered per degraded run. Does not refuse to
+		 * start — degraded runs still fail-closed to needs_review.
+		 */
+		try {
+			const health = await checkAppCredentials({ appId, privateKey });
+			logger.info(
+				{ app: health.slug },
+				"github app credentials OK — reads + actions live",
+			);
+		} catch (error) {
+			logger.error(
+				{ error: getErrorMessage(error) },
+				"GITHUB APP CREDENTIALS INVALID AT BOOT — every run will degrade to needs_review until fixed",
+			);
+		}
 	} else {
 		logger.warn(
 			"GITHUB_APP_* env missing — forge reads disabled, rules will skip",
@@ -67,6 +88,10 @@ if (import.meta.main) {
 						event,
 					})
 			: null;
+	logger.info(
+		{ aiReview: makeGenerate ? "wired" : "disabled" },
+		"ai-review credential check",
+	);
 	if (!makeGenerate) {
 		logger.warn(
 			"OPENROUTER_API_KEY or forge creds missing — ai-review will skip",
@@ -113,5 +138,14 @@ if (import.meta.main) {
 		await rollup({ db, logger });
 	});
 
-	logger.info("worker consuming process-event + resume-run + rollup");
+	/** §5.12 surface sweeper — re-attempt actions stuck at `recorded` (outage). */
+	await boss.createQueue("sweep-actions");
+	await boss.schedule("sweep-actions", "* * * * *", {}, {});
+	await boss.work("sweep-actions", async () => {
+		await sweepActions({ db, adapter, logger });
+	});
+
+	logger.info(
+		"worker consuming process-event + resume-run + rollup + sweep-actions",
+	);
 }

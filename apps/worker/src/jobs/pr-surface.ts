@@ -120,7 +120,28 @@ export async function emitPrSurface(
 		return;
 	}
 
+	/**
+	 * Comment ownership (§6 — live finding): the comment is per-PR but runs are
+	 * per-SHA. Only the LATEST run for the change request may execute its
+	 * comment — otherwise an out-of-order decision on an older run upserts a
+	 * stale comment over the current one. Non-latest runs still emit their
+	 * per-SHA check (correct and harmless); their comment is superseded.
+	 */
+	const latestRunId = await runServices.getLatestRunIdForChangeRequest(
+		db,
+		repoFullName,
+		number,
+	);
+
 	for (const row of [...input.pendingActionRows, ...surfaceRows]) {
+		if (row.kind === "comment" && latestRunId && latestRunId !== runId) {
+			await runServices.markActionSuperseded(db, row.id);
+			logger.info(
+				{ runId, latestRunId, number },
+				"comment superseded — not the latest run for this change request",
+			);
+			continue;
+		}
 		const forgeAction = toForgeAction(row, repoFullName, number);
 		try {
 			const result = await adapter.execute(forgeAction);
@@ -142,7 +163,7 @@ export async function emitPrSurface(
 	}
 }
 
-function toForgeAction(
+export function toForgeAction(
 	row: { kind: string; payload: Record<string, unknown> },
 	repoFullName: string,
 	number: number,

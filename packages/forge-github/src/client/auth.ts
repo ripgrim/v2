@@ -36,6 +36,31 @@ export function createAppJwt(
 	return `${header}.${payload}.${b64url(signature)}`;
 }
 
+/**
+ * Boot health check (live-test surprise #3): mint an App JWT and make ONE cheap
+ * authenticated call (`GET /app`) so a worker booted on stale/broken creds is
+ * visible at startup, not discovered one degraded run at a time. Throws on any
+ * non-2xx — the caller logs loudly; it does NOT refuse to start.
+ */
+export async function checkAppCredentials(
+	creds: GithubAppCredentials,
+	apiBase = "https://api.github.com",
+	fetchImpl: typeof fetch = fetch,
+): Promise<{ slug: string }> {
+	const res = await fetchImpl(`${apiBase}/app`, {
+		headers: {
+			authorization: `Bearer ${createAppJwt(creds)}`,
+			accept: "application/vnd.github+json",
+			"x-github-api-version": "2022-11-28",
+		},
+	});
+	if (!res.ok) {
+		throw new Error(`GET /app failed: ${res.status} ${await res.text()}`);
+	}
+	const data = (await res.json()) as { slug?: string; name?: string };
+	return { slug: data.slug ?? data.name ?? "unknown" };
+}
+
 interface CachedToken {
 	token: string;
 	expiresAt: number;

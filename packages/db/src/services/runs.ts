@@ -5,7 +5,7 @@ import {
 	workflowDefinitionSchema,
 } from "@tripwire/contracts";
 import { generateId } from "@tripwire/utils";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../client.ts";
 import { runActions, runSteps, runs } from "../schema/runs.ts";
@@ -137,6 +137,110 @@ export async function markActionExecuted(
 		.update(runActions)
 		.set({ status: "executed", executedAt: new Date(), externalId })
 		.where(eq(runActions.id, actionId));
+}
+
+/**
+ * A recorded action that must NOT execute — its run moved on (a newer verdict
+ * surface exists) or it lost comment ownership (a newer run gates the PR).
+ * Same terminal status, two triggers (§6 surface sweeper + comment ownership).
+ */
+export async function markActionSuperseded(
+	db: Db,
+	actionId: string,
+): Promise<void> {
+	await db
+		.update(runActions)
+		.set({ status: "superseded" })
+		.where(eq(runActions.id, actionId));
+}
+
+export interface StuckAction {
+	id: string;
+	runId: string;
+	kind: string;
+	payload: Record<string, unknown>;
+	idempotencyKey: string;
+	recordedAt: Date;
+	runStatus: string;
+	runVerdict: string | null;
+	repoFullName: string;
+	subjectNumber: number | null;
+	headSha: string | null;
+}
+
+/**
+ * Surface actions still `recorded` past a cutoff — recorded-first rows whose
+ * execution was blocked by a forge outage (§5.12). The sweeper re-attempts
+ * them (idempotency keys make retries safe) once credentials recover.
+ */
+export async function listStuckActions(
+	db: Db,
+	recordedBefore: Date,
+): Promise<StuckAction[]> {
+	const rows = await db
+		.select({
+			id: runActions.id,
+			runId: runActions.runId,
+			kind: runActions.kind,
+			payload: runActions.payload,
+			idempotencyKey: runActions.idempotencyKey,
+			recordedAt: runActions.recordedAt,
+			runStatus: runs.status,
+			runVerdict: runs.verdict,
+			repoFullName: runs.repoFullName,
+			subjectNumber: runs.subjectNumber,
+			headSha: runs.headSha,
+		})
+		.from(runActions)
+		.innerJoin(runs, eq(runActions.runId, runs.id))
+		.where(
+			and(
+				eq(runActions.status, "recorded"),
+				lt(runActions.recordedAt, recordedBefore),
+			),
+		);
+	return rows.map((row) => ({
+		...row,
+		payload: row.payload as Record<string, unknown>,
+	}));
+}
+
+export async function listRunActions(
+	db: Db,
+	runId: string,
+): Promise<{ kind: string; status: string; recordedAt: Date }[]> {
+	return await db
+		.select({
+			kind: runActions.kind,
+			status: runActions.status,
+			recordedAt: runActions.recordedAt,
+		})
+		.from(runActions)
+		.where(eq(runActions.runId, runId));
+}
+
+/**
+ * The latest run gating a change request (§6 comment ownership): runs are
+ * per-event/SHA but the PR comment is per-PR, so only the latest run may own
+ * the comment. Latest by creation time (UUIDv7 id breaks ties).
+ */
+export async function getLatestRunIdForChangeRequest(
+	db: Db,
+	repoFullName: string,
+	subjectNumber: number,
+): Promise<string | null> {
+	const rows = await db
+		.select({ id: runs.id })
+		.from(runs)
+		.where(
+			and(
+				eq(runs.repoFullName, repoFullName),
+				eq(runs.subjectNumber, subjectNumber),
+			),
+		)
+		.orderBy(desc(runs.createdAt), desc(runs.id))
+		.limit(1);
+	return rows[0]?.id ?? null;
 }
 
 export async function completeRun(
