@@ -847,3 +847,19 @@ Exactly the two explainable flips (T2a first-attempt single-failing-rule pass,
 T4 deny-produced pass), zero unexplained, zero skipped — the done-when held.
 Ledgered for later: VERIFICATION-QUEUE #11 (run page + /moderation surface
 `run:deny-floor` distinctly — UI pass, bundles with the public-run-page patch).
+
+**Public run pages + queue #11 (this commit).** §10 access model is live:
+`/runs/{id}` reads without a session (root redirect exempts it via
+`isPublicPath`), rendering verdict + per-rule steps + evidence + ai-review
+FINDINGS with the raw trace stripped from evidence AND output, snapshot
+nulled, dashboard chrome dropped, "powered by tripwire" footer added. No
+session + private/unknown repo ⇒ null (fail closed; worker's lazy repo upsert
+now defaults private for the same reason). Mutating + list server functions
+gained a real 401 gate (`requireSession`) — approve/deny, events, moderation
+queue/stats, rules, workflows, analytics activity; `decidedBy` is now the
+session user. Queue #11 closed: `run:deny-floor` renders as "denied by
+maintainer — no deny edge drawn", `run:degradation` as "evaluation degraded"
+with the skipped ratio; /moderation pills `run:degraded` items. Ledgered:
+any-session-sees-any-run (no repo-membership model yet) and visibility not
+threaded through change-request payloads.
+Checks: biome clean · typecheck ✓ (12/12) · boundaries ✓ · 177 tests, 0 fail.

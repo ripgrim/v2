@@ -9,6 +9,8 @@ export interface EventsPageData {
 export const getEvents = createServerFn({ method: "GET" })
 	.inputValidator((input: { cursor?: string } = {}) => input)
 	.handler(async ({ data }): Promise<EventsPageData> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const { eventServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const { db } = getDb();

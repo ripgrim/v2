@@ -57,13 +57,22 @@ export function LiveModerationQueue() {
 								key={item.id}
 							>
 								<div className="min-w-0 flex-1">
-									<div className="truncate text-sm">
-										<span className="font-medium">
-											{item.actorLogin ?? "unknown"}
-										</span>{" "}
-										<span className="text-muted-foreground">on</span>{" "}
-										{item.repoFullName}
-										{item.subjectNumber ? ` #${item.subjectNumber}` : ""}
+									<div className="flex items-center gap-2 truncate text-sm">
+										<span className="truncate">
+											<span className="font-medium">
+												{item.actorLogin ?? "unknown"}
+											</span>{" "}
+											<span className="text-muted-foreground">on</span>{" "}
+											{item.repoFullName}
+											{item.subjectNumber ? ` #${item.subjectNumber}` : ""}
+										</span>
+										{/* run:degraded = the fail-closed floor, not a workflow
+										    node — say so (VERIFICATION-QUEUE #11). */}
+										{item.nodeId === "run:degraded" ? (
+											<span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-600 text-xs dark:text-amber-400">
+												evaluation degraded
+											</span>
+										) : null}
 									</div>
 									<div className="text-muted-foreground text-xs">
 										{formatRelativeTime(item.createdAt)} ·{" "}

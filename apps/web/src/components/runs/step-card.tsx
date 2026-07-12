@@ -3,6 +3,7 @@ import { aiReviewOutputSchema } from "@tripwire/contracts";
 import { AiFindings } from "#/components/runs/ai-findings";
 import { EvidenceView } from "#/components/runs/evidence-view";
 import type { RunStepView } from "#/lib/runs.functions";
+import { describeSyntheticStep } from "#/lib/synthetic-steps";
 import { cn } from "#/lib/utils";
 
 const STATUS_DOT: Record<string, string> = {
@@ -38,6 +39,26 @@ function extractReview(evidence: unknown): AiReviewOutput | null {
 }
 
 export function StepCard({ step }: { step: RunStepView }) {
+	const synthetic = describeSyntheticStep(step);
+	if (synthetic) {
+		return (
+			<div className="rounded-lg border bg-card px-4 py-3">
+				<div className="flex items-center gap-2">
+					<span
+						className={cn(
+							"size-1.5 shrink-0 rounded-full",
+							synthetic.kind === "deny-floor" ? "bg-red-500" : "bg-amber-500",
+						)}
+					/>
+					<span className="font-medium text-sm">{synthetic.title}</span>
+					<span className="ml-auto font-mono text-muted-foreground text-xs">
+						{step.nodeId}
+					</span>
+				</div>
+				<p className="mt-1 text-muted-foreground text-xs">{synthetic.detail}</p>
+			</div>
+		);
+	}
 	const title =
 		step.ruleRef ?? `${step.nodeKind}: ${step.nodeId.split(":").at(-1)}`;
 	return (

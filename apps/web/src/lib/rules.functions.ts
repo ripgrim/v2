@@ -21,6 +21,8 @@ export interface RuleConfigView {
 
 export const listRepoOptions = createServerFn({ method: "GET" }).handler(
 	async (): Promise<RepoOption[]> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const { repoServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const rows = await repoServices.listActiveRepos(getDb().db);
@@ -31,6 +33,8 @@ export const listRepoOptions = createServerFn({ method: "GET" }).handler(
 export const listRuleConfigViews = createServerFn({ method: "GET" })
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(async ({ data }): Promise<RuleConfigView[]> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const { repoServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const db = getDb().db;
@@ -64,6 +68,8 @@ export const saveRuleConfig = createServerFn({ method: "POST" })
 		}) => input,
 	)
 	.handler(async ({ data }): Promise<{ ok: true } | { error: string }> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const entry = RULE_CATALOG.find((r) => r.ruleId === data.ruleId);
 		if (!entry) {
 			return { error: `unknown rule ${data.ruleId}` };

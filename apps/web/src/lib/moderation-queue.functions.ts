@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 export interface ModerationQueueItem {
 	id: string;
 	runId: string;
+	/** Workflow node that paused the run; "run:degraded" for the fail-closed floor. */
+	nodeId: string;
 	repoFullName: string;
 	subjectNumber: number | null;
 	actorLogin: string | null;
@@ -11,12 +13,15 @@ export interface ModerationQueueItem {
 
 export const listModerationQueue = createServerFn({ method: "GET" }).handler(
 	async (): Promise<ModerationQueueItem[]> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const { moderationServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const items = await moderationServices.listPendingItems(getDb().db);
 		return items.map((item) => ({
 			id: item.id,
 			runId: item.runId,
+			nodeId: item.nodeId,
 			repoFullName: item.repoFullName,
 			subjectNumber: item.subjectNumber,
 			actorLogin: item.actorLogin,
@@ -30,20 +35,10 @@ export const decideModeration = createServerFn({ method: "POST" })
 		(input: { itemId: string; decision: "approve" | "deny" }) => input,
 	)
 	.handler(async ({ data }): Promise<{ ok: boolean }> => {
+		const { requireSession } = await import("#/lib/server/session");
+		const decidedBy = await requireSession();
 		const { moderationServices } = await import("@tripwire/db");
-		const { getAuth } = await import("#/lib/server/auth");
 		const { getDb, getBoss } = await import("#/lib/server/db");
-		let decidedBy: string | null = null;
-		const auth = getAuth();
-		if (auth) {
-			const { getStartContext } = await import(
-				"@tanstack/start-storage-context"
-			);
-			const session = await auth.api.getSession({
-				headers: getStartContext().request.headers,
-			});
-			decidedBy = session?.user.id ?? null;
-		}
 		const ok = await moderationServices.decideModerationItem(
 			getDb().pool,
 			await getBoss(),

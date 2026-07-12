@@ -743,6 +743,9 @@ on the public view (free top-of-funnel).
 > approve/deny and list routes return 401/redirect; private-repo run 404s or
 > gates without a session. Spec §10 already records the model; DECISIONS +
 > all-summaries per protocol.
+> Also close VERIFICATION-QUEUE #11 in this pass: run page + /moderation
+> render the run:deny-floor and run:degradation synthetic steps distinctly
+> (a denied-by-floor block should say so).
 
 ### Bot copy centralized — packages/forge-github/src/copy.ts
 
@@ -982,3 +985,49 @@ flip and nothing else.
   the T4 deny-produced pass→block (unit 5). Full report in all-summaries.
 - `worstVerdict` exported from run-workflows (shared with replay);
   `runServices.listRunsForReplay` added (read-only corpus loader).
+
+### Public run pages — BUILT (§10 access model live) + queue #11 closed
+
+The deferred authored decision above, implemented as specced. Viewing is
+public, deciding is gated:
+
+- **`/runs/{id}` readable with no session.** `__root.tsx` exempts
+  `isPublicPath()` (login + the single run page — run LISTS stay gated) from
+  the session redirect. `getRun` is now the ONE server function that answers
+  without a session; access shaping lives in `apps/web/src/lib/server/
+  run-view.ts` (`loadRunView`) over the pure policy in `lib/run-access.ts`
+  (`resolveRunAccess` / `toPublicRunView`, unit-tested).
+- **Public view = verdict + per-rule steps + rule evidence + ai-review
+  FINDINGS.** The ai-review raw trace is stripped from BOTH `evidence` and
+  `output` (rule steps duplicate the envelope in output — stripping one would
+  leak through the other); the workflow snapshot is nulled (repo config
+  internals, not rendered anyway). Public render drops the dashboard chrome
+  and carries the "powered by tripwire" footer; sessions get the dashboard
+  view unchanged. A denied run returns null — indistinguishable from missing.
+- **Private-repo gating = `repos.private` from installation sync.** No session
+  + private OR unknown repo row ⇒ nothing (fail closed). MVP simplifications,
+  ledgered honestly: (1) ANY session sees ANY run — there is no per-user
+  repo-membership model yet ("sessions with repo access" ⇒ revisit when
+  multi-maintainer/org lands); (2) the worker's lazy repo upsert (installation
+  event never seen) now defaults `private: true` instead of `false` — change-
+  request payloads don't thread visibility through contracts yet, so unknown
+  visibility must gate rather than leak; the next installation event corrects
+  it. Threading `repository.private` through NormalizedEvent is the follow-up
+  if lazily-upserted public repos ever matter.
+- **Defense in depth on the server-fn surface:** `requireSession()`
+  (`lib/server/session.ts`, throws 401, open in dev posture) now guards
+  decideModeration + listModerationQueue, getEvents, rules list/save,
+  workflows get/save, analytics activity, home stats — the route redirect
+  alone left the server-fn HTTP endpoints open. `decidedBy` now comes from
+  the required session instead of a best-effort read.
+- **Queue #11 closed in the same pass:** `describeSyntheticStep`
+  (`lib/synthetic-steps.ts`) renders `run:deny-floor` as "denied by
+  maintainer — no deny edge drawn…" and `run:degradation` with the skipped
+  ratio + degraded reads; /moderation pins an "evaluation degraded" pill on
+  `run:degraded` pending items. Deny-floor has no pending-queue presence by
+  construction (it exists only after a decision) — the run page is its surface.
+- Tests: pure policy matrix + trace-strip unit tests; 401 gate unit tests;
+  and a REAL-Postgres integration suite (`run-view.integration.test.ts`):
+  no-session public-repo read returns verdict+findings sans trace, private
+  and orphan repos return nothing without a session, sessions/open-dev get
+  the trace back.

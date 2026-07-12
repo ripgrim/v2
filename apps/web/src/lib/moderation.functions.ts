@@ -14,6 +14,8 @@ export const getModerationQueue = createServerFn({ method: "GET" }).handler(
 
 export const getModerationStats = createServerFn({ method: "GET" }).handler(
 	async (): Promise<ModStats> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		try {
 			const { insightServices } = await import("@tripwire/db");
 			const { getDb } = await import("#/lib/server/db");

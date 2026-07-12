@@ -150,10 +150,14 @@ and failed. On a clean env the file passes 12/12. Fixed permanently:
   exemption in production; unit-tested in `exemption.test.ts`.
 No code path regressed exemption; nothing further to verify here.
 
-## 11. Run page + /moderation surface run:deny-floor distinctly — UI pass, post-replay
-A run blocked by the deny floor (unit 5: deny with no deny edge) currently
-reads like any other block on the run page and in /moderation history. Surface
-the synthetic `run:deny-floor` step distinctly ("denied by maintainer — no
-deny edge drawn") so the audit trail says WHO blocked it and why the graph
-didn't. Bundle with the public-run-page patch (DECISIONS: deferred to
-post-rule-testing) — same surfaces, one UI session.
+## 11. CLOSED — run page + /moderation surface the synthetic steps distinctly
+Done in the public-run-page pass. `StepCard` now renders `run:deny-floor` as
+"denied by maintainer" (red dot, "no deny edge drawn — the deny floor blocked
+this change by default") and `run:degradation` as "evaluation degraded" with
+the skipped ratio + degraded reads — never like a graph node
+(`describeSyntheticStep` in `apps/web/src/lib/synthetic-steps.ts`, unit-tested).
+/moderation marks pending `run:degraded` items with an "evaluation degraded"
+pill (deny-floor never appears in the pending queue — it exists only after a
+decision, so the run page is its surface). Eyeball live whenever a deny-floor
+or degraded run next occurs; the stored shapes are pinned by the moderation
+integration tests.

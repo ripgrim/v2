@@ -15,6 +15,8 @@ function subject(repoFullName: string, subjectNumber: number | null): string {
 export const getAnalyticsActivity = createServerFn({ method: "GET" })
 	.inputValidator((input: { metric: string }) => input)
 	.handler(async ({ data }): Promise<AnalyticsEvent[]> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const { insightServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const { db } = getDb();

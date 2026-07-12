@@ -10,6 +10,7 @@ import { LayoutGroup } from "motion/react";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "#/components/ui/sonner";
 import { getSessionInfo } from "#/lib/auth.functions";
+import { isPublicPath } from "#/lib/run-access";
 import { siteConfig } from "#/lib/site-config";
 
 import appCss from "../styles.css?url";
@@ -20,10 +21,11 @@ export const Route = createRootRouteWithContext<{
 	/**
 	 * §10 — Better Auth gates the dashboard. When auth env is absent (local
 	 * dev before the OAuth app exists) the gate stands open; see
-	 * VERIFICATION-QUEUE.
+	 * VERIFICATION-QUEUE. The run page is unlisted-public (isPublicPath) so
+	 * blocked contributors can read the judgment — they can't sign in.
 	 */
 	beforeLoad: async ({ location }) => {
-		if (location.pathname === "/login") {
+		if (isPublicPath(location.pathname)) {
 			return;
 		}
 		const session = await getSessionInfo();

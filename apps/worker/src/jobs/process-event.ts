@@ -105,7 +105,13 @@ export async function processEvent(
 					owner: normalized.repo.owner,
 					name: normalized.repo.name,
 					fullName: normalized.repo.fullName,
-					private: false,
+					/**
+					 * Visibility unknown here (change-request payloads aren't
+					 * threaded through) — fail closed as private so the §10 public
+					 * run page never opens for a repo installation sync hasn't
+					 * confirmed public. The next installation event corrects it.
+					 */
+					private: true,
 				},
 			],
 			[],

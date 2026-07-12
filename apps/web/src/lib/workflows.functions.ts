@@ -8,6 +8,8 @@ import {
 export const getWorkflowForRepo = createServerFn({ method: "GET" })
 	.inputValidator((input: { repoId: string | null }) => input)
 	.handler(async ({ data }): Promise<WorkflowDefinition> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		if (!data.repoId) {
 			return DEFAULT_WORKFLOW;
 		}
@@ -27,6 +29,8 @@ export const getWorkflowForRepo = createServerFn({ method: "GET" })
 export const saveWorkflowForRepo = createServerFn({ method: "POST" })
 	.inputValidator((input: { repoId: string; definition: unknown }) => input)
 	.handler(async ({ data }): Promise<{ ok: true } | { error: string }> => {
+		const { requireSession } = await import("#/lib/server/session");
+		await requireSession();
 		const parsed = workflowDefinitionSchema.safeParse(data.definition);
 		if (!parsed.success) {
 			const issue = parsed.error.issues[0];
