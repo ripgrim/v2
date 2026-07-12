@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	isPublicPath,
 	resolveRunAccess,
+	toFullRunView,
 	toPublicRunView,
 } from "#/lib/run-access";
 import type { RunStepView, RunView } from "#/lib/runs.functions";
@@ -120,6 +121,22 @@ const aiReviewStep: RunStepView = {
 	output: null,
 	durationMs: 1200,
 	startedAt: "2026-07-11T00:00:00.000Z",
+	publicEvidence: {
+		output: {
+			verdict: "block",
+			confidence: 1,
+			summary: "exfiltrates tokens in ci.",
+			findings: [
+				{
+					severity: "critical",
+					file: ".github/workflows/ci.yml",
+					line: 12,
+					note: "posts secrets to an external host",
+				},
+			],
+		},
+	},
+	summary: "exfiltrates tokens in ci.",
 };
 
 const ruleStep: RunStepView = {
@@ -139,6 +156,8 @@ const ruleStep: RunStepView = {
 	output: null,
 	durationMs: 3,
 	startedAt: "2026-07-11T00:00:00.000Z",
+	publicEvidence: { accountAgeDays: 1 },
+	summary: "this account is 1 days old",
 };
 
 const fullView: RunView = {
@@ -165,23 +184,45 @@ const fullView: RunView = {
 describe("toPublicRunView", () => {
 	const publicView = toPublicRunView(fullView);
 
-	test("keeps the verdict, rule evidence and ai-review findings", () => {
+	test("swaps in the stored public evidence + one-liner, drops the threshold", () => {
 		expect(publicView.access).toBe("public");
 		expect(publicView.verdict).toBe("block");
-		expect(publicView.steps[0]).toEqual(ruleStep);
-		const aiEvidence = publicView.steps[1]?.evidence as {
-			evidence: { output: { findings: unknown[] }; trace?: unknown };
-		};
-		expect(aiEvidence.evidence.output.findings).toHaveLength(1);
+		const inner = (publicView.steps[0]?.evidence as { evidence: unknown })
+			.evidence;
+		expect(inner).toEqual({ accountAgeDays: 1 });
+		expect(publicView.steps[0]?.summary).toBe("this account is 1 days old");
+		// the configured threshold (minDays) never reaches the public view.
+		expect(JSON.stringify(publicView.steps[0])).not.toContain("minDays");
+		// the carrier field is not echoed back out.
+		expect(publicView.steps[0]?.publicEvidence).toBeUndefined();
 	});
 
-	test("omits the ai-review raw trace and the workflow snapshot", () => {
+	test("keeps ai-review findings + summary, drops the raw trace and snapshot", () => {
+		const aiEvidence = publicView.steps[1]?.evidence as {
+			evidence: { output: { findings: unknown[] } };
+		};
+		expect(aiEvidence.evidence.output.findings).toHaveLength(1);
+		expect(publicView.steps[1]?.summary).toBe("exfiltrates tokens in ci.");
 		expect(JSON.stringify(publicView)).not.toContain("trace");
 		expect(publicView.snapshot).toBeNull();
 	});
 
 	test("does not mutate the full view", () => {
 		expect(JSON.stringify(fullView)).toContain("trace");
+		expect(JSON.stringify(fullView)).toContain("minDays");
 		expect(fullView.access).toBe("full");
+	});
+});
+
+describe("toFullRunView", () => {
+	test("session view is unchanged raw evidence — carrier fields stripped", () => {
+		const full = toFullRunView(fullView);
+		expect(full.access).toBe("full");
+		// full raw evidence (thresholds + trace) intact for the maintainer.
+		expect(JSON.stringify(full)).toContain("minDays");
+		expect(JSON.stringify(full)).toContain("trace");
+		// the public-partition carriers never ship in the session view.
+		expect(full.steps[0]?.publicEvidence).toBeUndefined();
+		expect(full.steps[0]?.summary).toBeUndefined();
 	});
 });

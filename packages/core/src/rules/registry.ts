@@ -42,3 +42,44 @@ export function getRule(ref: string): RuleDefinition | null {
 export function listRules(): { ref: string; rule: RuleDefinition }[] {
 	return [...registry.entries()].map(([ref, rule]) => ({ ref, rule }));
 }
+
+/**
+ * Rules that deliberately expose NO public evidence (§10). Empty today — every
+ * launch rule has a public partition. A future rule may opt out here WITH a
+ * reason; the public-view test fails on any rule that neither defines both
+ * members nor appears here (so a rule can't silently ship without a decision).
+ */
+export const PUBLIC_VIEW_OPT_OUT: Record<string, string> = {};
+
+export interface RulePublicProjection {
+	/** Contributor-facing evidence subset, or null when none is safe. */
+	publicEvidence: Record<string, unknown> | null;
+	/** Plain-English outcome, or null when it can't be derived. */
+	summary: string | null;
+}
+
+/**
+ * §10 — project a rule's evidence to its public partition + one-liner, called
+ * by the worker at persist time (the only legal importer of core). Safe by
+ * default: an unknown/opted-out rule or non-record evidence (e.g. a skipped
+ * rule's null evidence) yields no public evidence.
+ */
+export function projectRulePublic(
+	ref: string,
+	evidence: unknown,
+): RulePublicProjection {
+	const rule = getRule(ref);
+	if (
+		!rule ||
+		typeof evidence !== "object" ||
+		evidence === null ||
+		Array.isArray(evidence)
+	) {
+		return { publicEvidence: null, summary: null };
+	}
+	const ev = evidence as Record<string, unknown>;
+	return {
+		publicEvidence: rule.publicEvidence ? rule.publicEvidence(ev) : null,
+		summary: rule.summarize ? rule.summarize(ev) : null,
+	};
+}

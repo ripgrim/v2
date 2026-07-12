@@ -892,3 +892,17 @@ between sessions). Ledgered (not built): an operator flag service (Databuddy) ma
 later gate WHO can enable ai-review — dashboard-only, never in the worker's
 evaluation path. Checks: biome clean · typecheck 0 · boundaries ✓ · 187 tests, 0
 fail.
+
+**Unit 10 — public evidence split (this commit).** The public run page mixed
+contributor facts (public on the diff — the appeal mechanism) with repo
+internals (configured thresholds, ai-review trace). Now split, rule-owned:
+`defineRule` gains `publicEvidence`/`summarize` (in each rule file, versioned
+with it); the worker projects at persist time into new `run_steps.public_evidence`
++ `summary` columns (migration 0001); `toPublicRunView` gets dumb (serve the
+stored projection), session view unchanged (`toFullRunView` strips only the
+carrier fields). Chose core+worker over a contracts-side projection — a second
+home for rule knowledge is the toggles-drift class, and it breaks contracts'
+zod-only law. Leak invariant pinned over the whole registry (no configSchema key
+in any public evidence). Historical runs degrade honestly (null ⇒ no evidence
+detail). Checks: biome clean · typecheck 0 · boundaries ✓ · 193 tests, 0 fail ·
+replay corpus 13/2 (projections aren't verdicts).

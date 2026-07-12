@@ -695,10 +695,19 @@ and they *can't* sign in (contributors never authenticate, above). So the run
 page is unlisted-public, gist-style:
 - **`/runs/{id}` is public, read-only.** UUIDv7 ids are unguessable → only
   people who saw the badge (PR participants) reach it. The PUBLIC view renders
-  verdict, per-rule steps, evidence, and ai-review **findings** — but NOT the
-  ai-review raw trace (tool calls / tokens / prompt flow: internals, and mildly
-  aids evasion). A "powered by tripwire" footer shows on the public view (every
-  public run is a demo to exactly the audience that installs Tripwire).
+  verdict, per-rule steps, and **the evidence SPLIT into contributor facts vs
+  repo internals**: it shows the CONTRIBUTOR FACTS (observed values already
+  public on the diff — matched crypto addresses + locations, touched honeypot
+  paths, files-changed, account age, ai-review findings) plus a **plain-English
+  one-liner per rule** ("this account is 2038 days old"); it GATES the REPO
+  INTERNALS (configured thresholds — minDays, max, watched globs — the
+  ai-review raw trace, timings, and the workflow snapshot). The split is
+  rule-owned: each rule declares `publicEvidence`/`summarize` (versioned with
+  it), the worker projects at persist time (`run_steps.public_evidence` +
+  `summary`), and the public render just serves the stored projection — web
+  holds zero rule knowledge, one home for the partition (no drift). A "powered
+  by tripwire" footer shows on the public view (every public run is a demo to
+  exactly the audience that installs Tripwire).
 - **Everything mutating or list-shaped stays session-gated:** approve/deny on a
   run, and all of `/events`, `/moderation`, `/rules`, insights, run *lists*. A
   crawlable index of every verdict across every repo is a surveillance/harassment

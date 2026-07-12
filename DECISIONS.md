@@ -1117,3 +1117,45 @@ gate WHO can enable ai-review — a DASHBOARD-layer concern only. Flag reads mus
 NEVER enter the worker's evaluation path; verdicts stay a pure function of
 event + snapshot + rule_configs (the replay invariant). No billing, no budget
 caps, no global kill switch — those are deploy-era.
+
+### Public evidence split — contributor facts vs repo internals (§10)
+
+The public run page was rendering raw rule evidence to anonymous visitors —
+which mixes CONTRIBUTOR FACTS (observed values, already public on their own
+diff — the appeal mechanism) with REPO INTERNALS (the maintainer's configured
+thresholds + tripwire internals). The facts stay public; the internals gate.
+
+- **The projection is rule-owned, in core.** `defineRule` gains two optional
+  members next to `configSchema`/`resultSchema`: `publicEvidence(evidence)` (the
+  allow-listed contributor-facing subset — safe by default, anything not
+  returned is gated) and `summarize(evidence)` (the plain-English one-liner,
+  constitution voice). Both live IN the rule file, versioned with it (same law
+  as ai-review's instructions.md). Guidance: publish the OBSERVED value, gate the
+  CONFIGURED threshold — account-age → accountAgeDays public / minDays gated;
+  max-files → filesChanged / max; pr-rate-limit → count+intervalCov /
+  windowHours+maxPerWindow; english-only → ratio+sample (threshold isn't in
+  evidence); crypto → matches (all); honeypot → touched (globs live in config);
+  min-merged-prs → mergedInRepo / min; profile-readme → length / minLength;
+  ai-review → output (findings+summary+confidence) / trace gated.
+- **The worker projects at persist time.** `apps/worker` is the only legal
+  importer of core; `withPublicProjection` runs each rule's members and stores
+  the result in new `run_steps.public_evidence` (jsonb) + `summary` (text)
+  columns (migration `0001`). `toPublicRunView` gets DUMB — anonymous ⇒ swap the
+  stored public_evidence in + attach summary; session ⇒ full raw evidence,
+  thresholds, trace, timings, snapshot, unchanged (`toFullRunView` strips only
+  the public-partition carrier fields). Web keeps ZERO rule knowledge.
+- **WHY core+worker, not contracts.** A first pass put the partition + copy in
+  `@tripwire/contracts` (web-reachable, no boundary hop). Rejected: that creates
+  a SECOND home for rule knowledge (definition in core, copy+partition in
+  contracts) with nothing keeping them in sync — the same drift class as the
+  toggles-are-cosmetic bug, and it breaks contracts' zod-only invariant. Single
+  home for rule knowledge (core), no drift surface, contracts stays pure.
+- **Historical runs** have no projection (null) — the public view degrades to
+  verdict + per-rule pass/fail without evidence detail (safe: no thresholds
+  leak). No backfill shipped; if wanted it's a one-shot script over stored
+  evidence, never a scheduled job.
+- **Leak invariant (pinned).** A registry-wide test asserts NO configSchema key
+  appears in any rule's `publicEvidence` output — a future rule can't leak its
+  threshold by default. Plus: every rule defines both members or is listed in
+  `PUBLIC_VIEW_OPT_OUT` with a reason (empty today). Replay corpus stays 13/2 —
+  projections are presentation, not verdicts.

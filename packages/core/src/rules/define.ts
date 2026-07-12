@@ -25,6 +25,18 @@ export interface RuleDefinition<
 		ctx: RuleContext,
 		config: z.infer<TConfig>,
 	): RuleOutcome<z.infer<TEvidence>> | Promise<RuleOutcome<z.infer<TEvidence>>>;
+	/**
+	 * §10 public partition — the CONTRIBUTOR-FACING subset of evidence (observed
+	 * values, already public on the diff). Allow-list, safe by default: anything
+	 * NOT returned is gated to the maintainer view. Configured thresholds
+	 * (minDays, max, watched globs…) and internals (the ai-review trace) MUST be
+	 * omitted. Versioned WITH the rule; the worker projects at persist time.
+	 * Optional so a rule with no public-safe evidence can opt out — but then it
+	 * must be listed in PUBLIC_VIEW_OPT_OUT with a reason (enforced by test).
+	 */
+	publicEvidence?: (evidence: z.infer<TEvidence>) => Record<string, unknown>;
+	/** §10 plain-English outcome for the public view — constitution voice. */
+	summarize?: (evidence: z.infer<TEvidence>) => string | null;
 }
 
 const RULE_ID = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;

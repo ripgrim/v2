@@ -47,38 +47,57 @@ function isJsonRecord(value: JsonValue): value is { [key: string]: JsonValue } {
 }
 
 /**
- * The public view keeps the ai-review FINDINGS (verdict, summary, findings)
- * but drops the raw trace — tool calls, tokens and prompt flow are internals
- * and mildly aid evasion (§10). Rule steps duplicate the envelope in `output`,
- * so both fields are sanitized.
+ * Public render of a rule step (§10). The projection is already stored (the
+ * worker ran the rule's own `publicEvidence`/`summarize` at persist time), so
+ * this is a DUMB swap — web holds ZERO rule knowledge: replace the inner
+ * evidence with the stored public partition (thresholds + trace gone) and
+ * attach the stored one-liner. Pre-§10 runs have no partition (null) ⇒ the
+ * step keeps its pass/fail but shows no evidence detail. Non-rule steps carry
+ * no thresholds and pass through (projection fields dropped).
  */
-function stripAiReviewTrace(step: RunStepView): RunStepView {
-	if (!step.ruleRef?.startsWith("ai-review@")) {
-		return step;
+function toPublicStep(step: RunStepView): RunStepView {
+	const { publicEvidence, ...rest } = step;
+	if (!step.ruleRef) {
+		const { summary: _summary, ...bare } = rest;
+		return bare;
 	}
 	const envelope = step.evidence;
-	if (!isJsonRecord(envelope)) {
-		return step;
-	}
-	const inner = envelope.evidence;
-	if (inner === undefined || !isJsonRecord(inner)) {
-		return step;
-	}
-	const { trace: _trace, ...keptEvidence } = inner;
-	const sanitized: JsonValue = { ...envelope, evidence: keptEvidence };
-	return { ...step, evidence: sanitized, output: sanitized };
+	const publicInner = publicEvidence ?? null;
+	const sanitized: JsonValue = isJsonRecord(envelope)
+		? { ...envelope, evidence: publicInner }
+		: publicInner;
+	return {
+		...rest,
+		evidence: sanitized,
+		output: sanitized,
+		summary: step.summary ?? null,
+	};
 }
 
 /**
- * Public render of a run: verdict, per-rule steps, rule evidence and
- * ai-review findings — no ai-review trace, no workflow snapshot (repo
- * configuration internals).
+ * Public render of a run: verdict, per-rule steps, the contributor-fact
+ * evidence + ai-review findings + a plain-English outcome per rule — no
+ * configured thresholds, no ai-review trace, no workflow snapshot (§10).
  */
 export function toPublicRunView(view: RunView): RunView {
 	return {
 		...view,
 		access: "public",
 		snapshot: null,
-		steps: view.steps.map(stripAiReviewTrace),
+		steps: view.steps.map(toPublicStep),
+	};
+}
+
+/**
+ * Session render — full raw evidence, unchanged. Drops only the public-partition
+ * carrier fields (they exist to feed `toPublicRunView`, never shown to a
+ * maintainer, who reads the complete `evidence`).
+ */
+export function toFullRunView(view: RunView): RunView {
+	return {
+		...view,
+		steps: view.steps.map(
+			({ publicEvidence: _pe, summary: _s, ...step }) => step,
+		),
 	};
 }

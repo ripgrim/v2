@@ -24,4 +24,7 @@ export const maxFilesChanged = defineRule({
 			evidence: { filesChanged: ctx.diff.length, max: config.max },
 		};
 	},
+	publicEvidence: (e) => ({ filesChanged: e.filesChanged }),
+	summarize: (e) =>
+		`this change touches ${e.filesChanged} ${e.filesChanged === 1 ? "file" : "files"}`,
 });

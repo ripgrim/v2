@@ -95,4 +95,9 @@ export const aiReview = defineRule({
 			evidence: { output, trace: response.trace },
 		};
 	},
+	// Keep the structured output (verdict, summary, confidence, findings); the
+	// sibling `trace` (tool calls, tokens, prompt flow) stays gated — internals
+	// + mildly evasion-aiding (§10).
+	publicEvidence: (e) => ({ output: e.output }),
+	summarize: (e) => e.output.summary,
 });

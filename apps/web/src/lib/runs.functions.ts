@@ -20,6 +20,13 @@ export interface RunStepView {
 	output: JsonValue;
 	durationMs: number;
 	startedAt: string;
+	/**
+	 * §10 stored public partition — raw material for the public swap; STRIPPED
+	 * from the session view (which shows full `evidence`).
+	 */
+	publicEvidence?: JsonValue;
+	/** §10 public view only — the rule's plain-English outcome. */
+	summary?: string | null;
 }
 
 export interface RunView {

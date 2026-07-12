@@ -60,4 +60,7 @@ export const prRateLimit = defineRule({
 			},
 		};
 	},
+	publicEvidence: (e) => ({ count: e.count, intervalCov: e.intervalCov }),
+	summarize: (e) =>
+		`${e.count} change ${e.count === 1 ? "request" : "requests"} in the window`,
 });

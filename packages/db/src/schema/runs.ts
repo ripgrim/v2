@@ -62,6 +62,14 @@ export const runSteps = pgTable(
 		output: jsonb("output"),
 		/** Rule-specific typed evidence (contracts RuleResult, validated on write). */
 		evidence: jsonb("evidence"),
+		/**
+		 * §10 public partition — the contributor-facing evidence subset + a
+		 * plain-English one-liner, projected by the rule (core) at persist time.
+		 * The public run page serves THESE; thresholds/trace stay in `evidence`
+		 * for the session view. Null for pre-§10 runs (public view degrades).
+		 */
+		publicEvidence: jsonb("public_evidence"),
+		summary: text("summary"),
 		startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
 		finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
 		durationMs: integer("duration_ms").notNull(),

@@ -24,4 +24,7 @@ export const minMergedPrs = defineRule({
 			evidence: { mergedInRepo: ctx.contributor.mergedInRepo, min: config.min },
 		};
 	},
+	publicEvidence: (e) => ({ mergedInRepo: e.mergedInRepo }),
+	summarize: (e) =>
+		`${e.mergedInRepo} merged change ${e.mergedInRepo === 1 ? "request" : "requests"} in this repo`,
 });

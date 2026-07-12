@@ -57,4 +57,14 @@ export const cryptoAddress = defineRule({
 			evidence: { matches },
 		};
 	},
+	// The matches are the contributor's own content — all public.
+	publicEvidence: (e) => ({ matches: e.matches }),
+	summarize: (e) => {
+		if (e.matches.length === 0) {
+			return "no crypto addresses found";
+		}
+		const locations = [...new Set(e.matches.map((m) => m.location))];
+		const where = locations.length > 0 ? ` in ${locations.join(", ")}` : "";
+		return `found ${e.matches.length} crypto ${e.matches.length === 1 ? "address" : "addresses"}${where}`;
+	},
 });

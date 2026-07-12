@@ -59,4 +59,12 @@ export const englishOnly = defineRule({
 			},
 		};
 	},
+	// No threshold in the evidence — ratio/sample are observed facts.
+	publicEvidence: (e) => ({
+		ratio: e.ratio,
+		lettersExamined: e.lettersExamined,
+		sample: e.sample,
+	}),
+	summarize: (e) =>
+		`${Math.round(e.ratio * 100)}% of the title is non-latin script`,
 });

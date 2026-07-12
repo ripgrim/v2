@@ -31,4 +31,10 @@ export const profileReadme = defineRule({
 			},
 		};
 	},
+	publicEvidence: (e) => ({
+		hasProfileText: e.hasProfileText,
+		length: e.length,
+	}),
+	summarize: (e) =>
+		`this profile has ${e.length} ${e.length === 1 ? "character" : "characters"} of text`,
 });

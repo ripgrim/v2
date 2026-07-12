@@ -11,6 +11,7 @@ import {
 	evaluateRule,
 	executeWorkflow,
 	getRule,
+	projectRulePublic,
 	type RuleContext,
 	type StepRecord,
 } from "@tripwire/core";
@@ -232,7 +233,7 @@ export async function runWorkflows(
 		status: paused ? "paused" : "completed",
 		verdict,
 	});
-	await runServices.recordSteps(db, runId, steps);
+	await runServices.recordSteps(db, runId, withPublicProjection(steps));
 
 	for (const execution of executions) {
 		if (execution.result.pausedAtNodeId) {
@@ -270,6 +271,32 @@ export async function runWorkflows(
 	};
 	logger.info({ runId, verdict, paused, steps: steps.length }, "run persisted");
 	return { runId, verdict, paused, actionRows, stats, degraded };
+}
+
+/**
+ * §10 — enrich each rule step with its public partition + one-liner, projected
+ * by the rule itself (core). Non-rule steps and skipped rules (null evidence)
+ * pass through with no public evidence. This is the ONLY place the projection
+ * runs — a single home for the rule knowledge, no drift surface.
+ */
+export type PersistStep = StepRecord & {
+	publicEvidence?: unknown;
+	summary?: string | null;
+};
+
+export function withPublicProjection(steps: StepRecord[]): PersistStep[] {
+	return steps.map((step) => {
+		if (step.nodeKind !== "rule" || !step.ruleRef) {
+			return step;
+		}
+		const envelope = step.output;
+		const inner =
+			envelope && typeof envelope === "object" && "evidence" in envelope
+				? (envelope as { evidence: unknown }).evidence
+				: null;
+		const { publicEvidence, summary } = projectRulePublic(step.ruleRef, inner);
+		return { ...step, publicEvidence, summary };
+	});
 }
 
 export function makeEvaluator(ctx: RuleContext, logger: Logger) {

@@ -31,4 +31,6 @@ export const accountAge = defineRule({
 			evidence: { accountAgeDays, minDays: config.minDays },
 		};
 	},
+	publicEvidence: (e) => ({ accountAgeDays: e.accountAgeDays }),
+	summarize: (e) => `this account is ${e.accountAgeDays} days old`,
 });

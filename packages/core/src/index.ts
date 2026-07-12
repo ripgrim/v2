@@ -18,7 +18,13 @@ export {
 	type RuleOutcome,
 	ruleRef,
 } from "./rules/define.ts";
-export { getRule, listRules } from "./rules/registry.ts";
+export {
+	getRule,
+	listRules,
+	PUBLIC_VIEW_OPT_OUT,
+	projectRulePublic,
+	type RulePublicProjection,
+} from "./rules/registry.ts";
 export { score } from "./scoring/score.ts";
 export {
 	clampSignalValue,

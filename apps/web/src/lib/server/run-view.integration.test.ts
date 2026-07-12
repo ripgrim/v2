@@ -69,6 +69,10 @@ async function seedRun(repoFullName: string): Promise<string> {
 			status: "failed",
 			input: null,
 			output: AI_REVIEW_ENVELOPE,
+			// §10 — the worker stores the rule-projected public partition; seed
+			// it directly here (findings public, trace gated) + the one-liner.
+			publicEvidence: { output: AI_REVIEW_ENVELOPE.evidence.output },
+			summary: "exfiltrates tokens in ci.",
 			startedAt: "2026-07-11T00:00:00.000Z",
 			finishedAt: "2026-07-11T00:00:01.000Z",
 			durationMs: 1000,
@@ -140,13 +144,17 @@ describe("loadRunView — §10 access model", () => {
 		expect(serialized).toContain("posts secrets to an external host");
 		expect(serialized).not.toContain("trace");
 		expect(view.snapshot).toBeNull();
+		// §10 — the public view carries the rule's plain-English one-liner.
+		expect(view.steps[0]?.summary).toBe("exfiltrates tokens in ci.");
 	});
 
-	test("session ⇒ full view, trace intact", async () => {
+	test("session ⇒ full view, trace intact, no public-partition carriers", async () => {
 		const view = await loadRunView(db, publicRunId, SESSION);
 		expect(view?.access).toBe("full");
 		expect(JSON.stringify(view)).toContain("trace");
 		expect(view?.snapshot).not.toBeNull();
+		expect(view?.steps[0]?.summary).toBeUndefined();
+		expect(view?.steps[0]?.publicEvidence).toBeUndefined();
 	});
 
 	test("open-dev posture ⇒ full view", async () => {

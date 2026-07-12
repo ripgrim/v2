@@ -10,7 +10,7 @@ import { z } from "zod";
 import { buildRuleContext } from "../context.ts";
 import { emitPrSurface } from "./pr-surface.ts";
 import type { ProcessEventDeps } from "./process-event.ts";
-import { makeEvaluator } from "./run-workflows.ts";
+import { makeEvaluator, withPublicProjection } from "./run-workflows.ts";
 
 /**
  * §6 — a moderation decision resumes the paused run down the corresponding
@@ -117,7 +117,7 @@ export async function resumeRun(
 			"deny with no deny edge — verdict floored to block",
 		);
 	}
-	await runServices.recordSteps(db, item.runId, steps);
+	await runServices.recordSteps(db, item.runId, withPublicProjection(steps));
 	await runServices.completeRun(db, item.runId, verdict);
 
 	const actionRows = await runServices.recordActions(db, item.runId, [

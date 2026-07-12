@@ -1,6 +1,10 @@
 import type { Verdict } from "@tripwire/contracts";
 import { type Db, repoServices, runServices } from "@tripwire/db";
-import { resolveRunAccess, toPublicRunView } from "#/lib/run-access";
+import {
+	resolveRunAccess,
+	toFullRunView,
+	toPublicRunView,
+} from "#/lib/run-access";
 import type { JsonValue, RunView } from "#/lib/runs.functions";
 import type { SessionState } from "#/lib/server/session";
 
@@ -57,6 +61,8 @@ export async function loadRunView(
 			output: step.output as JsonValue,
 			durationMs: step.durationMs,
 			startedAt: step.startedAt.toISOString(),
+			publicEvidence: step.publicEvidence as JsonValue,
+			summary: step.summary,
 		})),
 		actions: result.actions.map((action) => ({
 			kind: action.kind,
@@ -64,5 +70,5 @@ export async function loadRunView(
 			recordedAt: action.recordedAt.toISOString(),
 		})),
 	};
-	return access === "public" ? toPublicRunView(view) : view;
+	return access === "public" ? toPublicRunView(view) : toFullRunView(view);
 }

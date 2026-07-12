@@ -57,6 +57,9 @@ export interface RecordStepInput {
 	startedAt: string;
 	finishedAt: string;
 	durationMs: number;
+	/** §10 public partition — computed by the worker via the rule (core). */
+	publicEvidence?: unknown;
+	summary?: string | null;
 }
 
 export async function recordSteps(
@@ -82,6 +85,9 @@ export async function recordSteps(
 				step.nodeKind === "rule" && step.output
 					? ruleResultSchema.parse(step.output)
 					: null,
+			/** §10 — the rule-projected public partition (worker-supplied). */
+			publicEvidence: step.publicEvidence ?? null,
+			summary: step.summary ?? null,
 			startedAt: new Date(step.startedAt),
 			finishedAt: new Date(step.finishedAt),
 			durationMs: step.durationMs,
