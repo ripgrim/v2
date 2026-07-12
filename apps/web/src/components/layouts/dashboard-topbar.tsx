@@ -3,7 +3,6 @@ import {
 	Analytics01Icon,
 	CheckListIcon,
 	FlowIcon,
-	Legal01Icon,
 	Logout01Icon,
 	MoonIcon,
 	Queue01Icon,
@@ -54,7 +53,6 @@ export function DashboardTopbar({ moderator, counts }: DashboardTopbarProps) {
 				<NavLink to="/events" label="Events" icon={ActivityIcon} />
 				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
 				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
-				<NavLink to="/moderation" label="Moderation" icon={Legal01Icon} />
 				<NavLink
 					to="/analytics"
 					label="Analytics"

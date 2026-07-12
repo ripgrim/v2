@@ -1,18 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
-import {
-	LiveModerationQueue,
-	LiveModerationQueueSkeleton,
-} from "#/components/moderation/live-queue";
-import { buildSeo, formatPageTitle } from "#/lib/seo";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+/**
+ * The moderation queue is the home page now (§4 collapse — one queue surface).
+ * `/moderation` redirects so old links keep working.
+ */
 export const Route = createFileRoute("/moderation")({
-	component: LiveModerationQueue,
-	pendingComponent: LiveModerationQueueSkeleton,
-	head: ({ match }) =>
-		buildSeo({
-			path: match.pathname,
-			title: formatPageTitle("Moderation"),
-			description: "paused runs awaiting a decision.",
-			noindex: true,
-		}),
+	beforeLoad: () => {
+		throw redirect({ to: "/" });
+	},
 });

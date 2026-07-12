@@ -3,25 +3,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useRef } from "react";
 import { DitherStatCard } from "#/components/charts/dither-stat-card";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
-import { QueueList } from "#/components/moderation/queue-list";
-import { Skeleton } from "#/components/ui/skeleton";
 import {
-	moderationQueueQueryOptions,
-	moderationStatsQueryOptions,
-} from "#/lib/moderation.query";
+	ModerationQueue,
+	moderationQueueOptions,
+} from "#/components/moderation/moderation-queue";
+import { Skeleton } from "#/components/ui/skeleton";
+import { moderationStatsQueryOptions } from "#/lib/moderation.query";
 import { MODERATOR } from "#/lib/site-config";
 
 export const Route = createFileRoute("/")({
 	ssr: false,
 	loader: ({ context }) => {
-		void context.queryClient.prefetchQuery(moderationQueueQueryOptions());
+		void context.queryClient.prefetchQuery(moderationQueueOptions());
 		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
 	},
 	component: DashboardPage,
 });
 
 function DashboardPage() {
-	const queueQuery = useQuery(moderationQueueQueryOptions());
+	const queueQuery = useQuery(moderationQueueOptions());
 	const statsQuery = useQuery(moderationStatsQueryOptions());
 
 	if (queueQuery.error) throw queueQuery.error;
@@ -104,8 +104,7 @@ function DashboardPage() {
 					)}
 
 					{queueQuery.data ? (
-						<QueueList
-							items={items}
+						<ModerationQueue
 							title={
 								<h2 className="font-medium text-sm">
 									pending{" "}

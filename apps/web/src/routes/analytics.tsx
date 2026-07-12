@@ -18,14 +18,8 @@ import {
 } from "#/lib/analytics";
 import { analyticsActivityQueryOptions } from "#/lib/analytics-activity.query";
 import { closestEventId, seedAnalyticsEvents } from "#/lib/analytics-events";
-import {
-	automodRulesQueryOptions,
-	automodStatsQueryOptions,
-} from "#/lib/automod.query";
-import {
-	moderationQueueQueryOptions,
-	moderationStatsQueryOptions,
-} from "#/lib/moderation.query";
+import { automodStatsQueryOptions } from "#/lib/automod.query";
+import { moderationStatsQueryOptions } from "#/lib/moderation.query";
 import { MODERATOR } from "#/lib/site-config";
 import { cn } from "#/lib/utils";
 
@@ -40,8 +34,6 @@ export const Route = createFileRoute("/analytics")({
 	loader: ({ context }) => {
 		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
 		void context.queryClient.prefetchQuery(automodStatsQueryOptions());
-		void context.queryClient.prefetchQuery(moderationQueueQueryOptions());
-		void context.queryClient.prefetchQuery(automodRulesQueryOptions());
 	},
 	component: AnalyticsPage,
 });
@@ -50,13 +42,6 @@ function AnalyticsPage() {
 	const { source, metric } = Route.useSearch();
 	const moderationStats = useQuery(moderationStatsQueryOptions());
 	const automodStats = useQuery(automodStatsQueryOptions());
-	const queue = useQuery(moderationQueueQueryOptions());
-	const rules = useQuery(automodRulesQueryOptions());
-
-	const counts = {
-		queue: queue.data?.length,
-		automod: rules.data?.filter((rule) => rule.enabled).length,
-	};
 
 	const metrics = useMemo(() => {
 		if (source === "automod") {
@@ -120,7 +105,7 @@ function AnalyticsPage() {
 	}, [showMetrics]);
 
 	return (
-		<DashboardLayout moderator={MODERATOR} counts={counts}>
+		<DashboardLayout moderator={MODERATOR} counts={{}}>
 			<div className="relative flex h-full flex-col">
 				<div
 					ref={scrollRef}
