@@ -1646,3 +1646,40 @@ dashboard with a story in it.
 - **`dev:demo` sets a fixed `BETTER_AUTH_SECRET`** so posture is "enabled" and the
   gates + persona switcher work (the anonymous/public-run persona needs real
   no-session semantics). `.demo/` is gitignored.
+
+### Run page evidence — the stored §10 projection, never raw JSON (Unit 1)
+
+The run page rendered a raw evidence `<pre>` for every rule — the exact artifact
+the evidence split (§10) was built to replace. `run_steps` already store
+`summary` (the plain-English line) and `public_evidence` (the allow-listed
+facts); the page now consumes them.
+
+- **The statement is the stored `summary`.** For most rules that IS the whole
+  story ("your account is 5 days old", "you've opened 9 change requests today").
+- **Detail blocks ONLY for rules that point at THINGS**, in ai-review's visual
+  language (file rows / cards): honeypot ⇒ the `touched` files as file rows
+  (dir dim · basename bright · GitHub blob link); crypto-address ⇒ one card per
+  `matches` entry (address as a mono chip + where). Every other rule gets NO
+  detail block — inventing evidence UI for a rule that points at nothing is
+  noise.
+- **One set of primitives.** The file-row / file-path / blob-link pieces moved to
+  `evidence-parts.tsx`; ai-review's findings and the new rule detail blocks both
+  import them. No second set.
+- **Raw is maintainer-only, collapsed, and shows `evidence` — not the envelope.**
+  The old blob dumped the whole RuleResult envelope (`passed`/`ruleId`/`status`/
+  `evaluatedAt`) — plumbing. The disclosure now shows the inner `evidence` only
+  (thresholds, the ai-review trace), and never renders for a public visitor
+  (`maintainer = run.access !== "public"`).
+- **The fallback is the rule BLURB, not the id.** A pre-projection historical run
+  (null summary) falls back to what the rule CHECKS (its catalog blurb) — never a
+  blank step, never raw JSON, and never just echoing the rule id already in the
+  header. (The owner's brief said "rule name"; the blurb is strictly more
+  informative and same intent — noted here as the deviation.)
+- **The demo seed now produces the REAL projection.** `ruleProjection` builds
+  per-rule `evidence` + `public_evidence` + `summary` mirroring core's
+  `publicEvidence`/`summarize`, shared by the year-long story AND the single-run
+  path, so EVERY seeded run (including the public one) reads real — otherwise the
+  new UI would only ever show the fallback. A latent seed bug surfaced and was
+  fixed: a decided review's `decided_at` could land in the future, counting in
+  queue depth but not the pending count (breaking series[23] === value) — clamped
+  to `now`.

@@ -253,19 +253,26 @@ export async function seedRun(opts: SeedRunOptions): Promise<string> {
 			}),
 		);
 	} else {
+		const prng = mulberry32(0x5eed ^ number);
+		const rng: SeedRng = {
+			rint: (min, max) => Math.floor(prng() * (max - min + 1)) + min,
+			pick: <T>(arr: readonly T[]): T =>
+				arr[Math.floor(prng() * arr.length)] as T,
+		};
 		for (const node of DEFAULT_WORKFLOW.nodes) {
 			if (node.type !== "rule") {
 				continue;
 			}
 			const didFail = failed.has(node.ref);
+			const proj = ruleProjection(node.ref, didFail, rng);
 			steps.push(
 				ruleStep({
 					nodeId: node.id,
 					ref: node.ref,
 					passed: !didFail,
-					evidence: didFail
-						? { matched: true, detail: `${node.ref} tripped` }
-						: { matched: false },
+					evidence: proj.evidence,
+					publicEvidence: proj.publicEvidence,
+					summary: proj.summary ?? undefined,
 					at,
 				}),
 			);
@@ -565,6 +572,159 @@ const AI_TEMPLATES: AiReviewOutput[] = [
 	},
 ];
 
+/** Protected paths honeypot points at (its public evidence carries `touched`). */
+const HONEYPOT_PATHS = [
+	".github/workflows/release.yml",
+	".github/workflows/ci.yml",
+	".github/workflows/deploy.yml",
+	".github/workflows/publish.yml",
+];
+/** Crypto addresses + where found (its public evidence carries `matches`). */
+const CRYPTO_MATCHES: { kind: string; value: string; location: string }[] = [
+	{
+		kind: "eth",
+		value: "0x8f3b2a1c9d4e5f60718293a4b5c6d7e8f9012a3b",
+		location: "README.md",
+	},
+	{
+		kind: "eth",
+		value: "0x1c0ffee254729296a45a3885639AC7E10F9d54979",
+		location: "title",
+	},
+	{
+		kind: "btc",
+		value: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		location: "FUNDING.yml",
+	},
+	{
+		kind: "sol",
+		value: "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2",
+		location: "docs/sponsors.md",
+	},
+];
+/** Non-latin title samples for english-only. */
+const NON_LATIN_SAMPLES = [
+	"добавить функцию",
+	"更新文档",
+	"テストを追加",
+	"새 기능 추가",
+];
+
+interface SeedRng {
+	rint: (min: number, max: number) => number;
+	pick: <T>(arr: readonly T[]) => T;
+}
+
+function takeSome<T>(arr: readonly T[], n: number, rng: SeedRng): T[] {
+	const copy = [...arr];
+	const out: T[] = [];
+	for (let k = 0; k < n && copy.length > 0; k++) {
+		out.push(copy.splice(rng.rint(0, copy.length - 1), 1)[0] as T);
+	}
+	return out;
+}
+
+/**
+ * The REAL §10 projection per rule — `evidence` (full, with thresholds),
+ * `publicEvidence` (the allow-listed facts), and the plain-English `summary` —
+ * mirroring core's `publicEvidence`/`summarize`. This is what the run page
+ * renders: honeypot ⇒ touched files, crypto ⇒ matched addresses, the rest ⇒ the
+ * summary. Shared by the year-long story and single-run seeds so EVERY run
+ * (incl. the public one) reads real, never the fallback.
+ */
+export function ruleProjection(
+	ref: string,
+	failed: boolean,
+	rng: SeedRng,
+): { evidence: unknown; publicEvidence: unknown; summary: string | null } {
+	const id = ref.split("@")[0];
+	if (id === "account-age") {
+		const age = failed ? rng.rint(0, 6) : rng.rint(30, 900);
+		return {
+			evidence: { accountAgeDays: age, minDays: 7 },
+			publicEvidence: { accountAgeDays: age },
+			summary: `your account is ${age} days old`,
+		};
+	}
+	if (id === "crypto-address") {
+		if (!failed) {
+			return {
+				evidence: { matches: [] },
+				publicEvidence: { matches: [] },
+				summary: "no crypto addresses found",
+			};
+		}
+		const matches = takeSome(CRYPTO_MATCHES, rng.rint(1, 2), rng);
+		const where = [...new Set(matches.map((m) => m.location))].join(", ");
+		return {
+			evidence: { matches },
+			publicEvidence: { matches },
+			summary: `it adds ${matches.length} crypto ${matches.length === 1 ? "address" : "addresses"} in ${where}`,
+		};
+	}
+	if (id === "honeypot") {
+		if (!failed) {
+			return {
+				evidence: { touched: [] },
+				publicEvidence: { touched: [] },
+				summary: null,
+			};
+		}
+		const touched = takeSome(HONEYPOT_PATHS, rng.rint(1, 2), rng);
+		return {
+			evidence: { touched },
+			publicEvidence: { touched },
+			summary:
+				touched.length === 1
+					? "it touches a protected workflow file"
+					: `it touches ${touched.length} protected paths`,
+		};
+	}
+	if (id === "max-files-changed") {
+		const filesChanged = failed ? rng.rint(201, 800) : rng.rint(1, 150);
+		return {
+			evidence: { filesChanged, max: 200 },
+			publicEvidence: { filesChanged },
+			summary: `this change touches ${filesChanged} ${filesChanged === 1 ? "file" : "files"}`,
+		};
+	}
+	if (id === "english-only") {
+		if (!failed) {
+			return {
+				evidence: {
+					ratio: 0.02,
+					lettersExamined: rng.rint(20, 80),
+					sample: "",
+				},
+				publicEvidence: { ratio: 0.02, lettersExamined: 40, sample: "" },
+				summary: null,
+			};
+		}
+		const ev = {
+			ratio: 0.72,
+			lettersExamined: rng.rint(8, 30),
+			sample: rng.pick(NON_LATIN_SAMPLES),
+		};
+		return {
+			evidence: ev,
+			publicEvidence: ev,
+			summary: "the title isn't in latin script",
+		};
+	}
+	if (id === "min-merged-prs") {
+		const merged = failed ? 0 : rng.rint(1, 40);
+		return {
+			evidence: { mergedInRepo: merged, min: 1 },
+			publicEvidence: { mergedInRepo: merged },
+			summary:
+				merged === 0
+					? "you have no merged changes in this repo yet"
+					: `you have ${merged} merged ${merged === 1 ? "change" : "changes"} in this repo`,
+		};
+	}
+	return { evidence: { matched: failed }, publicEvidence: null, summary: null };
+}
+
 /**
  * Wipe one repo's seeded runs/events/moderation so re-seeding it is idempotent
  * WITHOUT touching other demo repos (a persona reseed must not nuke the rest).
@@ -726,6 +886,8 @@ export async function seedStory(
 		durationMs: rint(1, 8),
 	});
 
+	const rng: SeedRng = { rint, pick };
+
 	for (let d = days - 1; d >= 0; d--) {
 		const dayStart = new Date(startOfToday.getTime() - d * DAY);
 		const weekday = dayStart.getDay();
@@ -863,17 +1025,19 @@ export async function seedStory(
 					),
 				);
 			} else if (verdict === "needs_review") {
+				const proj = ruleProjection("min-merged-prs@1", true, rng);
 				stepRows.push(
 					ruleStepRow(
 						runId,
 						"min-prs",
 						"min-merged-prs@1",
 						false,
-						{
-							merged: 0,
-							required: 1,
-						},
+						proj.evidence,
 						at,
+						{
+							publicEvidence: proj.publicEvidence,
+							summary: proj.summary ?? undefined,
+						},
 					),
 				);
 			} else {
@@ -883,15 +1047,12 @@ export async function seedStory(
 						continue;
 					}
 					const didFail = failedSet.has(node.ref);
+					const proj = ruleProjection(node.ref, didFail, rng);
 					stepRows.push(
-						ruleStepRow(
-							runId,
-							node.id,
-							node.ref,
-							!didFail,
-							{ matched: didFail },
-							at,
-						),
+						ruleStepRow(runId, node.id, node.ref, !didFail, proj.evidence, at, {
+							publicEvidence: proj.publicEvidence,
+							summary: proj.summary ?? undefined,
+						}),
 					);
 				}
 			}
@@ -943,8 +1104,13 @@ export async function seedStory(
 					nodeId: "review",
 					status: decided ? (chance(0.5) ? "approved" : "denied") : "pending",
 					createdAt: at,
+					// A decision must never land in the future — else the item counts in
+					// queue depth at `now` but not the pending count, breaking §13.10
+					// (series[23] === value).
 					decidedAt: decided
-						? new Date(at.getTime() + rint(1, 20) * HOUR)
+						? new Date(
+								Math.min(at.getTime() + rint(1, 20) * HOUR, now.getTime()),
+							)
 						: null,
 				});
 			}

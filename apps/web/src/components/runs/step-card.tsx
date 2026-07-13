@@ -1,7 +1,5 @@
-import type { AiReviewOutput } from "@tripwire/contracts";
-import { aiReviewOutputSchema } from "@tripwire/contracts";
-import { AiFindings } from "#/components/runs/ai-findings";
-import { EvidenceView } from "#/components/runs/evidence-view";
+import { RULE_CATALOG } from "@tripwire/contracts";
+import { RuleEvidence } from "#/components/runs/rule-evidence";
 import type { RunStepView } from "#/lib/runs.functions";
 import { describeSyntheticStep } from "#/lib/synthetic-steps";
 import { cn } from "#/lib/utils";
@@ -32,33 +30,15 @@ const STATUS_CHIP: Record<string, { label: string; className: string }> = {
 	},
 };
 
-function extractReview(evidence: unknown): AiReviewOutput | null {
-	if (
-		evidence &&
-		typeof evidence === "object" &&
-		"evidence" in evidence &&
-		evidence.evidence &&
-		typeof evidence.evidence === "object" &&
-		"output" in evidence.evidence
-	) {
-		const parsed = aiReviewOutputSchema.safeParse(evidence.evidence.output);
-		return parsed.success ? parsed.data : null;
-	}
-	return null;
-}
-
-function renderRuleEvidence(
-	step: RunStepView,
-	repo: string,
-	sha: string | null,
-) {
-	if (step.ruleRef?.startsWith("ai-review@")) {
-		const output = extractReview(step.evidence);
-		if (output) {
-			return <AiFindings output={output} repo={repo} sha={sha} />;
-		}
-	}
-	return <EvidenceView evidence={step.evidence} />;
+/** A step with no stored summary (a pre-projection historical run) falls back to
+ * what the rule CHECKS — its catalog blurb — never a blank statement, never raw
+ * JSON, and never just echoing the rule id in the header. */
+function ruleFallback(ruleRef: string): string {
+	const id = ruleRef.startsWith("ai-review@")
+		? "ai-review"
+		: ruleRef.split("@")[0];
+	const cat = RULE_CATALOG.find((r) => r.ruleId === id);
+	return cat?.blurb ?? ruleRef;
 }
 
 /** The step's display label: rule ref in mono, ai-review as its friendly name,
@@ -130,12 +110,15 @@ export function StepCard({
 	isLast,
 	repo,
 	sha,
+	maintainer,
 }: {
 	step: RunStepView;
 	isFirst: boolean;
 	isLast: boolean;
 	repo: string;
 	sha: string | null;
+	/** Full (session/open-dev) view — the raw disclosure is hidden from public. */
+	maintainer: boolean;
 }) {
 	const synthetic = describeSyntheticStep(step);
 	const dotColor = synthetic
@@ -167,8 +150,10 @@ export function StepCard({
 
 	const label = stepLabel(step);
 	// step.summary is the rule's plain-English line: quiet inline when passed,
-	// the prominent statement when failed.
-	const line = step.summary ?? null;
+	// the prominent statement when failed. A historical run with no projection
+	// falls back to the rule name — never a blank step.
+	const line =
+		step.summary ?? (step.ruleRef ? ruleFallback(step.ruleRef) : null);
 	const failed = step.status === "fail";
 
 	return (
@@ -199,9 +184,14 @@ export function StepCard({
 								{line}
 							</p>
 						) : null}
-						{step.nodeKind === "rule"
-							? renderRuleEvidence(step, repo, sha)
-							: null}
+						{step.nodeKind === "rule" ? (
+							<RuleEvidence
+								maintainer={maintainer}
+								repo={repo}
+								sha={sha}
+								step={step}
+							/>
+						) : null}
 					</>
 				) : null}
 			</div>

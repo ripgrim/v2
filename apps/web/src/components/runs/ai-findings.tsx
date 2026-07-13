@@ -5,7 +5,14 @@ import type {
 	Finding,
 	FindingSeverity,
 } from "@tripwire/contracts";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
+import {
+	blobUrl,
+	FileIcon,
+	FileLink,
+	FilePath,
+	renderBackticks,
+} from "#/components/runs/evidence-parts";
 import { cn } from "#/lib/utils";
 
 /**
@@ -42,58 +49,6 @@ const SEVERITY: Record<
 
 const COLLAPSE_AT = 3;
 
-/** Inline `code` in a reason → mono chips. Sanitized: rendered as text, not HTML. */
-function renderBackticks(text: string): ReactNode {
-	return text.split(/(`[^`]+`)/g).map((part, i) => {
-		if (part.length > 2 && part.startsWith("`") && part.endsWith("`")) {
-			return (
-				<code
-					className="rounded bg-surface-2 px-1 py-px font-mono text-[11.5px]"
-					// biome-ignore lint/suspicious/noArrayIndexKey: static split, stable order
-					key={i}
-				>
-					{part.slice(1, -1)}
-				</code>
-			);
-		}
-		return part;
-	});
-}
-
-function FileIcon() {
-	return (
-		<svg
-			className="shrink-0 text-muted-foreground/55"
-			fill="none"
-			height="13"
-			role="img"
-			stroke="currentColor"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="1.7"
-			viewBox="0 0 24 24"
-			width="13"
-		>
-			<title>file</title>
-			<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-			<polyline points="14 2 14 8 20 8" />
-		</svg>
-	);
-}
-
-/** Path with a dim directory and a bright basename — that's what reads as a file. */
-function FilePath({ file }: { file: string }) {
-	const cut = file.lastIndexOf("/");
-	const dir = cut >= 0 ? file.slice(0, cut + 1) : "";
-	const base = cut >= 0 ? file.slice(cut + 1) : file;
-	return (
-		<span className="truncate font-mono text-[12px]/4">
-			<span className="text-muted-foreground/55">{dir}</span>
-			<span className="font-medium text-foreground">{base}</span>
-		</span>
-	);
-}
-
 function severityCounts(findings: Finding[]): string {
 	return (Object.keys(SEVERITY) as FindingSeverity[])
 		.sort((a, b) => SEVERITY[a].order - SEVERITY[b].order)
@@ -101,18 +56,6 @@ function severityCounts(findings: Finding[]): string {
 		.filter((x) => x.n > 0)
 		.map((x) => `${x.n} ${SEVERITY[x.s].word}`)
 		.join(" · ");
-}
-
-function blobUrl(
-	repo: string,
-	sha: string | null,
-	file: string,
-	line?: number,
-) {
-	if (!sha) {
-		return null;
-	}
-	return `https://github.com/${repo}/blob/${sha}/${file}${line ? `#L${line}` : ""}`;
 }
 
 function FindingCard({
@@ -206,23 +149,6 @@ function FileContainer({
 				</div>
 			) : null}
 		</div>
-	);
-}
-
-function FileLink({
-	url,
-	children,
-}: {
-	url: string | null;
-	children: ReactNode;
-}) {
-	const className = "flex min-w-0 flex-1 items-center gap-2";
-	return url ? (
-		<a className={className} href={url} rel="noreferrer" target="_blank">
-			{children}
-		</a>
-	) : (
-		<div className={className}>{children}</div>
 	);
 }
 

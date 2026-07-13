@@ -1165,3 +1165,21 @@ repeat logins are instant; reset to reseed). The one-repo and many-repos persona
 now get stories too (many-repos lighter at 120 days each); empty stays
 intentionally empty. Verified live: dev:demo boots onto a populated dashboard.
 Checks: typecheck all, biome, boundaries, 216 tests.
+
+**Unit — run page evidence: raw JSON → the stored §10 projection.** The run page
+dumped a raw evidence `<pre>` for every rule (the artifact the §10 split was built
+to kill). It now consumes the stored projection: each step's `summary` is its
+statement; only rules that point at THINGS get a detail block in ai-review's
+visual language (honeypot ⇒ touched files as file rows with GitHub blob links,
+crypto-address ⇒ a card per matched address + where); every other rule is
+summary-only. The file-row/link primitives were extracted to `evidence-parts.tsx`
+and shared with ai-review's findings — one set, not two. Raw moved to a
+maintainer-only collapsed disclosure that shows the inner `evidence` (thresholds,
+ai-review trace), NOT the RuleResult envelope, and never renders for a public
+visitor. A pre-projection run (null summary) falls back to the rule's blurb — never
+blank, never raw JSON, never echoing the header id. `evidence-view.tsx` deleted.
+The demo seed now generates the REAL per-rule projection (`ruleProjection`, shared
+by the year-long story and the single-run/public path) so every run reads real;
+fixed a latent seed bug where a decided review's `decided_at` could land in the
+future (broke series[23] === value) by clamping to `now`. Checks: typecheck all,
+biome, boundaries, 216 tests.

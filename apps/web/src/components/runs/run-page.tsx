@@ -119,6 +119,7 @@ function RunBody({ run }: { run: RunView }) {
 						isFirst={i === 0}
 						isLast={i === run.steps.length - 1}
 						key={step.id}
+						maintainer={run.access !== "public"}
 						repo={run.repoFullName}
 						sha={run.headSha}
 						step={step}
