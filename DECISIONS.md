@@ -1870,3 +1870,29 @@ LISTEN/NOTIFY connection split in Unit 3).
   serves (307→/login under node). Posture guard confirmed: api with
   `NODE_ENV=production` and no `BETTER_AUTH_SECRET` **exits 1** ("refusing to
   boot").
+
+### Unit 2 — Railway config + env matrix + DEPLOY.md
+
+- **Config-as-code, one file per service:** `apps/{api,worker,web}/railway.json`
+  (builder `DOCKERFILE`, `dockerfilePath`, healthcheck, watch patterns). Each
+  Railway service points its config path at its own file.
+- **Root Directory = repo root for all three.** The Dockerfiles COPY from the
+  monorepo root; a per-app root directory would shrink the build context and
+  break the build. Documented as a load-bearing gotcha in DEPLOY.md.
+- **Watch patterns isolate rebuilds:** a change only under `apps/web/**` rebuilds
+  web alone; `packages/**` rebuilds all three (shared code). This is what keeps a
+  web-only change from rebuilding the worker.
+- **web healthcheck = `/login` (200), not `/` (307).** `/` redirects based on
+  auth state; Railway's healthcheck wants a stable 200. api/worker use `/healthz`.
+- **Env matrix documented in full** (which service, which is secret). Two names
+  the owner-supplied env list simplified: the "real public web URL" is actually
+  three web/api vars (`BETTER_AUTH_URL`, `VITE_SITE_URL` [build-time],
+  `WEB_ORIGIN`) plus the worker's `APP_URL`; `VITE_API_URL` is the public **api**
+  URL. `GITHUB_APP_*` + `GITHUB_WEBHOOK_SECRET` go on **both** api and worker.
+- **Production posture checks are asserted in the deploy checklist:** missing
+  `BETTER_AUTH_SECRET` refuses to boot (confirmed exit 1 in Unit 1), and
+  `TRIPWIRE_DISABLE_EXEMPTION=true` is refused under `NODE_ENV=production`.
+  DEPLOY.md tells the owner never to paper over either.
+- **Rollback documented:** Railway redeploy of the last good image; revert+push;
+  webhook repoint back to the tunnel; PlanetScale branch/backup restore
+  (migrations are forward-only — no down-migrations).

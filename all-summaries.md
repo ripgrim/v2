@@ -1271,3 +1271,19 @@ Verified against the compose Postgres: all three images build + boot; api/worker
 `/healthz` return ok; web serves (307→/login under node); the production posture
 guard fires — api exits 1 without `BETTER_AUTH_SECRET`. Checks: biome + typecheck
 clean on the touched app files, boundary check passes.
+
+**Unit — deploy, Unit 2: Railway config + env matrix + DEPLOY.md.** Three
+config-as-code files (`apps/{api,worker,web}/railway.json`): DOCKERFILE builder,
+per-service `dockerfilePath`, healthcheck (`/healthz` for api/worker, `/login`
+for web — `/` is a 307), and watch patterns that rebuild a service only when its
+own paths or shared `packages/**` change (a web-only change never rebuilds the
+worker). DEPLOY.md documents: the three services and their Railway settings
+(Root Directory MUST be the repo root or the monorepo COPYs break; worker gets
+no public domain), the full env matrix (every var × service × secret, plus the
+`VITE_SITE_URL` build-time-inlined gotcha and the `APP_URL`=real-web-URL fix),
+the production posture checks to assert FIRE (no `BETTER_AUTH_SECRET` ⇒ refuses
+to boot; `TRIPWIRE_DISABLE_EXEMPTION` refused in prod), the Northern-Virginia
+region pair (Railway us-east4 + PlanetScale AWS us-east-1, colocated because
+pg-boss polls and rules are chatty), and rollback. Unit 3/4 runbooks are
+appended to DEPLOY.md in their own commits. Checks: biome clean on the three
+railway.json, JSON valid.
