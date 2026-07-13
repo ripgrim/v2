@@ -1525,3 +1525,41 @@ prose. That's a material prompt change ⇒ a new version.
   flips · 0 skipped (the same unit-1 gate-reachability + unit-5 deny-floor
   flips). Replay reuses each run's stored snapshot and stored step envelopes and
   never re-invokes the model, so a prompt change cannot move a verdict.
+
+### Home stat cards — one window per card, queue-depth series (§13.10)
+
+The home cards showed a number and a sparkline computed over different windows, so
+they contradicted each other. The fix is one rule: **a card's `value` and its
+`series` describe the SAME window.**
+
+- **`sentToReview` is state, not flow.** Its number is the CURRENT queue depth
+  (`moderation_items` still pending, repo-scoped) and its series is a 24h
+  queue-DEPTH curve — `depth(t) = count(items created ≤ t AND not decided by t)`.
+  The last point (t = now) equals the number by construction. Owner's call, and
+  "the whole bug": the last point of the series IS the number.
+- **`blocked` / `passed` are 24h flow** — count of `runs` with that verdict in the
+  window, plus an hourly series over the same window; delta vs the prior 24h.
+- **Series bucket by hours-ago, not clock-hour.** `floor(extract(epoch FROM
+  (now() - t)) / 3600)` mapped to `series[23 - h]`, so index 23 is the current
+  hour (chart right edge = "now") and the window fills honestly. The old
+  `extract(hour FROM t)` clustered events by wall-clock hour. Same fix applied to
+  the /rules page series (`matchesSeries`, `actionedSeries`).
+- **Two dead cards retired.** "Automod · 24h" (automod concept killed) and
+  "Banned" (no ban concept — the value was a hard-coded 0). Replaced by the three
+  above; no vanity fourth ("evaluated · 24h" = blocked + passed + review, already
+  on screen).
+- **Delta colour is explicit per metric.** `invertDelta?: boolean` became
+  `goodDirection: "up" | "down" | "neutral"`. `sentToReview` down = good (queue
+  shrinking); `passed` up = good; `blocked` is **neutral grey** — up is genuinely
+  ambiguous (gate working OR under attack), and green would be the product
+  congratulating itself for blocking people, which §12 forbids. A ZERO delta is
+  neutral and omitted (never a red ▼0).
+- **Honest render.** An all-zero window shows "not enough data" in the card, not a
+  flat line pretending to be a trend.
+- **Analytics stays in sync in the same commit.** `moderationMetrics` and
+  `getAnalyticsActivity` (the /analytics drill-down) moved to the same
+  review/blocked/passed set, so the drill-down doesn't break. Contract
+  `modStatsSchema` renamed `pendingReports/resolvedToday/automodHits24h/
+  bannedUsers` → `sentToReview/blocked/passed`.
+- **Dither chart primitives untouched** — the owner considers them final; only the
+  card wrapper's delta logic and empty-state changed.

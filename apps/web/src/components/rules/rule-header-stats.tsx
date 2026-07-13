@@ -22,7 +22,7 @@ export function RuleHeaderStats({
 				color="purple"
 				delay={90}
 				delta={stats.matches24h.delta}
-				invertDelta
+				goodDirection="down"
 				label="matches · 24h"
 				series={stats.matches24h.series}
 				value={String(stats.matches24h.value)}

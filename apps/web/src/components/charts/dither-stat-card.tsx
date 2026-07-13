@@ -10,12 +10,17 @@ import {
 import { ScrambleText } from "#/components/charts/scramble-text";
 import { cn } from "#/lib/utils";
 
+/** Which direction of change is GOOD for this metric — drives the delta colour.
+ * "neutral" is honest for a metric where up/down isn't good or bad (e.g. blocks
+ * — either the gate is working or you're under attack). A ZERO delta is always
+ * neutral (omitted), never a red ▼0. */
+export type GoodDirection = "up" | "down" | "neutral";
+
 export type DitherStatCardProps = {
 	label: string;
 	value: string;
 	delta: number;
-	/** When true a positive delta reads as bad (down = good). */
-	invertDelta?: boolean;
+	goodDirection?: GoodDirection;
 	series: number[];
 	color: DitherColor;
 	/** Stagger the scramble intro across a row of cards. */
@@ -43,7 +48,7 @@ export function DitherStatCard({
 	label,
 	value,
 	delta,
-	invertDelta,
+	goodDirection = "up",
 	series,
 	color,
 	delay = 0,
@@ -55,11 +60,22 @@ export function DitherStatCard({
 	chartLayoutId,
 	className,
 }: DitherStatCardProps) {
-	const good = invertDelta ? delta < 0 : delta > 0;
 	const up = delta > 0;
+	// Zero delta is neutral (omitted). Otherwise colour by whether the change
+	// went the good way; a neutral metric stays grey.
+	const deltaTone =
+		delta === 0
+			? null
+			: goodDirection === "neutral"
+				? "text-muted-foreground"
+				: (goodDirection === "up" ? up : !up)
+					? "text-emerald-500"
+					: "text-red-500";
 
 	// The composable dither chart takes rows + a series config; the sparkline is a
-	// single series keyed "v".
+	// single series keyed "v". An all-zero window is "not enough data", not a flat
+	// line pretending to be a trend.
+	const hasData = useMemo(() => series.some((v) => v > 0), [series]);
 	const chartData = useMemo(() => series.map((v) => ({ v })), [series]);
 	const chartConfig = useMemo<ChartConfig>(() => ({ v: { color } }), [color]);
 
@@ -87,15 +103,17 @@ export function DitherStatCard({
 							className="font-sans text-2xl text-foreground"
 						/>
 					)}
-					<span
-						className={cn(
-							"inline-flex items-center gap-1 font-mono text-[11px] tabular-nums",
-							good ? "text-emerald-500" : "text-red-500",
-						)}
-					>
-						<span className="text-[8px] leading-none">{up ? "▲" : "▼"}</span>
-						{Math.abs(delta)}
-					</span>
+					{deltaTone ? (
+						<span
+							className={cn(
+								"inline-flex items-center gap-1 font-mono text-[11px] tabular-nums",
+								deltaTone,
+							)}
+						>
+							<span className="text-[8px] leading-none">{up ? "▲" : "▼"}</span>
+							{Math.abs(delta)}
+						</span>
+					) : null}
 				</div>
 			</div>
 			<motion.div
@@ -103,17 +121,23 @@ export function DitherStatCard({
 				transition={{ type: "spring", stiffness: 320, damping: 34 }}
 				className="relative h-11"
 			>
-				<AreaChart
-					data={chartData}
-					config={chartConfig}
-					interactive={false}
-					animate={animate}
-					bloom="aura"
-					margins={{ top: 0, right: 0, bottom: 0, left: 0 }}
-					className="absolute inset-0"
-				>
-					<Area dataKey="v" variant="gradient" />
-				</AreaChart>
+				{hasData ? (
+					<AreaChart
+						data={chartData}
+						config={chartConfig}
+						interactive={false}
+						animate={animate}
+						bloom="aura"
+						margins={{ top: 0, right: 0, bottom: 0, left: 0 }}
+						className="absolute inset-0"
+					>
+						<Area dataKey="v" variant="gradient" />
+					</AreaChart>
+				) : (
+					<div className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground/60">
+						not enough data
+					</div>
+				)}
 			</motion.div>
 		</div>
 	);

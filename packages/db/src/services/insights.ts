@@ -50,28 +50,36 @@ export async function computeDailyRollups(db: Db, day: string): Promise<void> {
 	`);
 }
 
-interface HourlyRow {
-	bucket: number;
+interface AgoRow {
+	h: number;
 	n: number;
 }
 
-async function hourlySeries(db: Db, query: ReturnType<typeof sql>) {
+/**
+ * A ROLLING 24h hourly series bucketed by hours-ago (0 = the current hour). The
+ * returned array is oldest-first (index 0 = 23h ago, index 23 = now), so the
+ * chart's right edge is "now" and the window fills honestly — never the
+ * clock-hour clustering the old `extract(hour …)` produced.
+ */
+async function rollingSeries(db: Db, query: ReturnType<typeof sql>) {
 	const result = await db.execute(query);
-	const rows = result.rows as unknown as HourlyRow[];
+	const rows = result.rows as unknown as AgoRow[];
 	const series = Array.from({ length: 24 }, () => 0);
 	for (const row of rows) {
-		const index = Number(row.bucket);
-		if (index >= 0 && index < 24) {
-			series[index] = Number(row.n);
+		const h = Number(row.h);
+		if (h >= 0 && h < 24) {
+			series[23 - h] = Number(row.n);
 		}
 	}
 	return series;
 }
 
 /**
- * Real Home stats in the demo's ModStats contract shape, SCOPED to the user's
- * active repo (§10). Moderation items reach the repo through their run
- * (`moderation_items.run_id → runs.repo_full_name`).
+ * Real Home stats (§13.10), SCOPED to the user's active repo. Each stat's value
+ * and series describe the SAME window: `blocked`/`passed` are 24h flow;
+ * `sentToReview` is the CURRENT queue depth with a 24h queue-DEPTH series whose
+ * last point equals the value (the number and the chart tell one story).
+ * Moderation items reach the repo through their run.
  */
 export async function getHomeStats(
 	db: Db,
@@ -86,68 +94,83 @@ export async function getHomeStats(
 
 	// moderation_items carry no repo column — scope them through their run.
 	const inRepo = sql`run_id IN (SELECT id FROM runs WHERE repo_full_name = ${repoFullName})`;
+	const ofRepo = sql`repo_full_name = ${repoFullName}`;
 
+	// A rolling 24h flow series bucketed by hours-ago, for a run verdict.
+	const verdictSeries = (verdict: string) =>
+		rollingSeries(
+			db,
+			sql`SELECT floor(extract(epoch FROM (now() - created_at)) / 3600)::int AS h,
+			           count(*)::int AS n
+			    FROM runs
+			    WHERE verdict = ${verdict} AND ${ofRepo}
+			      AND created_at > now() - interval '24 hours'
+			    GROUP BY 1`,
+		);
+	const count24 = (verdict: string) =>
+		scalar(
+			sql`SELECT count(*)::int AS n FROM runs
+			    WHERE verdict = ${verdict} AND ${ofRepo}
+			      AND created_at > now() - interval '24 hours'`,
+		);
+	const countPrev = (verdict: string) =>
+		scalar(
+			sql`SELECT count(*)::int AS n FROM runs
+			    WHERE verdict = ${verdict} AND ${ofRepo}
+			      AND created_at BETWEEN now() - interval '48 hours' AND now() - interval '24 hours'`,
+		);
+
+	const [blocked24, blockedPrev, blockedSeries] = await Promise.all([
+		count24("block"),
+		countPrev("block"),
+		verdictSeries("block"),
+	]);
+	const [passed24, passedPrev, passedSeries] = await Promise.all([
+		count24("pass"),
+		countPrev("pass"),
+		verdictSeries("pass"),
+	]);
+
+	// sentToReview: the CURRENT queue depth, with a 24h queue-depth series whose
+	// last point IS the value. depth(t) = items created by t and not yet decided
+	// by t. h=0 is the current hour, so series[23] = depth(now) = queue.
 	const pending = await scalar(
-		sql`SELECT count(*)::int AS n FROM moderation_items WHERE status = 'pending' AND ${inRepo}`,
-	);
-	const pendingYesterday = await scalar(
 		sql`SELECT count(*)::int AS n FROM moderation_items
-		    WHERE status = 'pending' AND created_at < now() - interval '24 hours' AND ${inRepo}`,
+		    WHERE status = 'pending' AND ${inRepo}`,
 	);
-	const resolvedToday = await scalar(
-		sql`SELECT count(*)::int AS n FROM moderation_items
-		    WHERE decided_at::date = now()::date AND ${inRepo}`,
+	const pendingPrev = await scalar(
+		sql`SELECT count(*)::int AS n FROM moderation_items mi
+		    WHERE created_at <= now() - interval '24 hours'
+		      AND (decided_at IS NULL OR decided_at > now() - interval '24 hours')
+		      AND ${inRepo}`,
 	);
-	const resolvedYesterday = await scalar(
-		sql`SELECT count(*)::int AS n FROM moderation_items
-		    WHERE decided_at::date = (now() - interval '1 day')::date AND ${inRepo}`,
-	);
-	const blocked24 = await scalar(
-		sql`SELECT count(*)::int AS n FROM runs
-		    WHERE verdict = 'block' AND repo_full_name = ${repoFullName}
-		      AND created_at > now() - interval '24 hours'`,
-	);
-	const blockedPrev = await scalar(
-		sql`SELECT count(*)::int AS n FROM runs
-		    WHERE verdict = 'block' AND repo_full_name = ${repoFullName}
-		      AND created_at BETWEEN now() - interval '48 hours' AND now() - interval '24 hours'`,
-	);
-
-	const moderationSeries = await hourlySeries(
+	const queueSeries = await rollingSeries(
 		db,
-		sql`SELECT extract(hour FROM created_at)::int AS bucket, count(*)::int AS n
-		    FROM moderation_items WHERE created_at > now() - interval '24 hours' AND ${inRepo}
-		    GROUP BY 1`,
-	);
-	const blockedSeries = await hourlySeries(
-		db,
-		sql`SELECT extract(hour FROM created_at)::int AS bucket, count(*)::int AS n
-		    FROM runs WHERE verdict = 'block' AND repo_full_name = ${repoFullName}
-		      AND created_at > now() - interval '24 hours'
-		    GROUP BY 1`,
+		sql`WITH b AS (SELECT h, now() - make_interval(hours => h) AS t FROM generate_series(0, 23) AS h)
+		    SELECT b.h,
+		           (SELECT count(*)::int FROM moderation_items mi
+		            WHERE mi.created_at <= b.t
+		              AND (mi.decided_at IS NULL OR mi.decided_at > b.t)
+		              AND mi.run_id IN (SELECT id FROM runs WHERE repo_full_name = ${repoFullName})
+		           ) AS n
+		    FROM b`,
 	);
 
 	return {
-		pendingReports: {
+		sentToReview: {
 			value: pending,
-			delta: pending - pendingYesterday,
-			series: moderationSeries,
+			delta: pending - pendingPrev,
+			series: queueSeries,
 		},
-		resolvedToday: {
-			value: resolvedToday,
-			delta: resolvedToday - resolvedYesterday,
-			series: moderationSeries,
-		},
-		automodHits24h: {
+		blocked: {
 			value: blocked24,
 			delta: blocked24 - blockedPrev,
 			series: blockedSeries,
 		},
-		/** No ban concept yet — honest zeros beat repurposed numbers. */
-		bannedUsers: {
-			value: 0,
-			delta: 0,
-			series: Array.from({ length: 24 }, () => 0),
+		passed: {
+			value: passed24,
+			delta: passed24 - passedPrev,
+			series: passedSeries,
 		},
 	};
 }
@@ -286,9 +309,10 @@ export async function getRulesStats(
 		WHERE r.repo_full_name = ${repoFullName}
 		  AND s.node_kind = 'rule' AND s.status = 'fail'
 		  AND s.started_at BETWEEN now() - interval '48 hours' AND now() - interval '24 hours'`);
-	const matchesSeries = await hourlySeries(
+	const matchesSeries = await rollingSeries(
 		db,
-		sql`SELECT extract(hour FROM s.started_at)::int AS bucket, count(*)::int AS n
+		sql`SELECT floor(extract(epoch FROM (now() - s.started_at)) / 3600)::int AS h,
+		           count(*)::int AS n
 		    FROM run_steps s JOIN runs r ON r.id = s.run_id
 		    WHERE r.repo_full_name = ${repoFullName}
 		      AND s.node_kind = 'rule' AND s.status = 'fail'
@@ -308,9 +332,10 @@ export async function getRulesStats(
 		WHERE r.repo_full_name = ${repoFullName}
 		  AND a.status = 'executed' AND a.kind IN (${ENFORCEMENT_LIST})
 		  AND a.executed_at BETWEEN now() - interval '48 hours' AND now() - interval '24 hours'`);
-	const actionedSeries = await hourlySeries(
+	const actionedSeries = await rollingSeries(
 		db,
-		sql`SELECT extract(hour FROM a.executed_at)::int AS bucket, count(*)::int AS n
+		sql`SELECT floor(extract(epoch FROM (now() - a.executed_at)) / 3600)::int AS h,
+		           count(*)::int AS n
 		    FROM run_actions a JOIN runs r ON r.id = a.run_id
 		    WHERE r.repo_full_name = ${repoFullName}
 		      AND a.status = 'executed' AND a.kind IN (${ENFORCEMENT_LIST})

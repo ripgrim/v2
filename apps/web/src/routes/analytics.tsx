@@ -7,7 +7,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsChart } from "#/components/analytics/analytics-chart";
 import { AnalyticsEvents } from "#/components/analytics/analytics-events";
 import { AnalyticsMetricsSheet } from "#/components/analytics/analytics-metrics-sheet";
-import { DitherStatCard } from "#/components/charts/dither-stat-card";
+import {
+	DitherStatCard,
+	type GoodDirection,
+} from "#/components/charts/dither-stat-card";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { Button } from "#/components/ui/button";
 import { hoursAgo, moderationMetrics } from "#/lib/analytics";
@@ -22,7 +25,7 @@ type AnalyticsSearch = { metric: string };
 export const Route = createFileRoute("/analytics")({
 	ssr: false,
 	validateSearch: (search: Record<string, unknown>): AnalyticsSearch => ({
-		metric: typeof search.metric === "string" ? search.metric : "pending",
+		metric: typeof search.metric === "string" ? search.metric : "review",
 	}),
 	loader: ({ context }) => {
 		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
@@ -123,7 +126,7 @@ function AnalyticsPage() {
 										/>
 										<Delta
 											delta={focusedMetric.delta}
-											invertDelta={focusedMetric.invertDelta}
+											goodDirection={focusedMetric.goodDirection}
 										/>
 										<span className="font-mono text-[11px] text-muted-foreground tabular-nums">
 											{ago === 0 ? "now" : `−${ago}h`}
@@ -191,7 +194,7 @@ function AnalyticsPage() {
 										color={m.color}
 										series={m.series}
 										delta={m.delta}
-										invertDelta={m.invertDelta}
+										goodDirection={m.goodDirection}
 										focused={isFocused}
 										onClick={() => setFocused(m.key)}
 										animate={false}
@@ -216,18 +219,26 @@ function AnalyticsPage() {
 
 function Delta({
 	delta,
-	invertDelta,
+	goodDirection,
 }: {
 	delta: number;
-	invertDelta?: boolean;
+	goodDirection: GoodDirection;
 }) {
-	const good = invertDelta ? delta < 0 : delta > 0;
+	if (delta === 0) {
+		return null;
+	}
 	const up = delta > 0;
+	const tone =
+		goodDirection === "neutral"
+			? "text-muted-foreground"
+			: (goodDirection === "up" ? up : !up)
+				? "text-emerald-500"
+				: "text-red-500";
 	return (
 		<span
 			className={cn(
 				"inline-flex items-center gap-1 font-mono text-xs tabular-nums",
-				good ? "text-emerald-500" : "text-red-500",
+				tone,
 			)}
 		>
 			<span className="text-[9px] leading-none">{up ? "▲" : "▼"}</span>

@@ -21,23 +21,7 @@ export const getAnalyticsActivity = createServerFn({ method: "GET" })
 		const { getDb } = await import("#/lib/server/db");
 		const { db } = getDb();
 
-		if (data.metric === "resolved") {
-			const decisions = await insightServices.listRecentDecisions(db);
-			return decisions.map((d) => ({
-				id: d.itemId,
-				kind: "resolve",
-				title:
-					d.status === "approved" ? "approved a change" : "denied a change",
-				detail: subject(d.repoFullName, d.subjectNumber),
-				at: (d.decidedAt ?? new Date(0)).toISOString(),
-				impact: {
-					label: d.status,
-					tone: d.status === "approved" ? "down" : "up",
-				},
-			}));
-		}
-
-		if (data.metric === "automod") {
+		if (data.metric === "blocked") {
 			const runs = await insightServices.listRecentRuns(db, {
 				verdicts: ["block"],
 			});
@@ -54,11 +38,21 @@ export const getAnalyticsActivity = createServerFn({ method: "GET" })
 			}));
 		}
 
-		if (data.metric === "banned") {
-			return [];
+		if (data.metric === "passed") {
+			const runs = await insightServices.listRecentRuns(db, {
+				verdicts: ["pass"],
+			});
+			return runs.map((r) => ({
+				id: r.runId,
+				kind: "resolve",
+				title: r.actorLogin ? `passed ${r.actorLogin}` : "passed a change",
+				detail: subject(r.repoFullName, r.subjectNumber),
+				at: r.createdAt.toISOString(),
+				impact: { label: "good to merge", tone: "down" },
+			}));
 		}
 
-		// "pending" (default): runs awaiting a maintainer.
+		// "review" (default): runs awaiting a maintainer's decision.
 		const runs = await insightServices.listRecentRuns(db, {
 			verdicts: ["needs_review"],
 		});

@@ -1081,3 +1081,28 @@ renderer already turns inline backticks into sanitized mono <code> chips, handli
 @2 backticked and @1 plain notes alike. Replay unchanged: 15 runs · 13 unchanged ·
 2 flips · 0 skipped (replay reuses stored snapshots/envelopes, never re-invokes the
 model). Checks: typecheck all, biome, boundaries, 204 tests.
+
+**Unit — home stat cards: number and series tell one story (§13.10).** The three
+home cards were lying three ways: a card read "0" while its sparkline spiked (the
+number and the series were computed over DIFFERENT windows — current-state vs 24h
+flow); series bucketed by absolute clock-hour (`extract(hour …)`) so spikes
+clustered ~15% from the left and "now" was never the right edge; and a zero delta
+rendered as a red "▼0" (direction↔colour was inconsistent across cards). Fixed all
+three plus retired two dead cards ("Automod · 24h" — concept killed; "Banned" — no
+ban concept, always 0). New card set (3, no filler): **Sent to review** (the
+actionable card — first, ringed, scrolls to the queue below, goodDirection down =
+work piling up is bad), **Blocked · 24h** (neutral grey — up is ambiguous, either
+the gate works or you're under attack; the constitution forbids congratulating
+ourselves for blocking people), **Passed · 24h** (green, up = good). Series are now
+rolling hours-ago buckets (index 23 = now, right edge); `sentToReview` is the
+CURRENT queue depth with a queue-DEPTH series whose last point IS the number
+(`depth(t) = items created ≤ t and not decided by t`) — the whole bug, per the
+owner. All-zero series render "not enough data", never a faked flat line. The
+/analytics drill-down metric set (`moderationMetrics` + `getAnalyticsActivity`)
+moved in the SAME commit so it stays in sync (review/blocked/passed). Contract
+`modStatsSchema` fields renamed accordingly; `invertDelta?: boolean` on the shared
+DitherStatCard became explicit `goodDirection: "up"|"down"|"neutral"` (rules-page
+"matches" carried over as down). Locked with a new getHomeStats integration test:
+`series[23] === value`, honest zeros for a quiet repo. Dither chart primitives
+untouched (owner considers them final). Checks: typecheck all, biome, boundaries,
+206 tests.

@@ -1,4 +1,5 @@
 import type { DitherColor } from "#/components/charts/dither-chart";
+import type { GoodDirection } from "#/components/charts/dither-stat-card";
 import type { ModStats } from "#/lib/moderation.types";
 
 export type AnalyticsMetric = {
@@ -7,41 +8,38 @@ export type AnalyticsMetric = {
 	color: DitherColor;
 	series: number[];
 	delta: number;
-	invertDelta?: boolean;
+	goodDirection: GoodDirection;
 	suffix?: string;
 };
 
+/** The same three metrics as Home, so the drill-down tells one story. */
 export function moderationMetrics(stats: ModStats): AnalyticsMetric[] {
 	return [
 		{
-			key: "pending",
-			label: "Pending reports",
-			color: "red",
-			series: stats.pendingReports.series,
-			delta: stats.pendingReports.delta,
-			invertDelta: true,
-		},
-		{
-			key: "resolved",
-			label: "Resolved today",
-			color: "blue",
-			series: stats.resolvedToday.series,
-			delta: stats.resolvedToday.delta,
-		},
-		{
-			key: "automod",
-			label: "Automod hits · 24h",
-			color: "purple",
-			series: stats.automodHits24h.series,
-			delta: stats.automodHits24h.delta,
-			invertDelta: true,
-		},
-		{
-			key: "banned",
-			label: "Banned users",
+			key: "review",
+			label: "Sent to review",
 			color: "orange",
-			series: stats.bannedUsers.series,
-			delta: stats.bannedUsers.delta,
+			series: stats.sentToReview.series,
+			delta: stats.sentToReview.delta,
+			// more awaiting your decision is work piling up.
+			goodDirection: "down",
+		},
+		{
+			key: "blocked",
+			label: "Blocked · 24h",
+			color: "red",
+			series: stats.blocked.series,
+			delta: stats.blocked.delta,
+			// up = the gate working OR more attacks — genuinely ambiguous.
+			goodDirection: "neutral",
+		},
+		{
+			key: "passed",
+			label: "Passed · 24h",
+			color: "green",
+			series: stats.passed.series,
+			delta: stats.passed.delta,
+			goodDirection: "up",
 		},
 	];
 }

@@ -8,6 +8,7 @@ import {
 	type TestDatabase,
 } from "../index.ts";
 import { events } from "../schema/events.ts";
+import { moderationItems } from "../schema/moderation.ts";
 import * as insightServices from "./insights.ts";
 import {
 	createRun,
@@ -131,5 +132,62 @@ describe("getRulesStats — repo-scoped, real stored data", () => {
 		expect(empty.matches24h.value).toBe(0);
 		expect(empty.actioned24h.value).toBe(0);
 		expect(empty.perRule).toHaveLength(0);
+	});
+});
+
+describe("getHomeStats — the number and its series tell one story", () => {
+	let seq = 0;
+	async function seedVerdictRun(
+		repoFullName: string,
+		verdict: "block" | "pass" | "needs_review",
+	): Promise<string> {
+		const id = `home-${seq++}`;
+		const eventId = await seedEvent(id, repoFullName);
+		return createRun(db, {
+			eventId,
+			repoFullName,
+			subjectNumber: 1,
+			headSha: `sha-${id}`,
+			snapshot: SNAPSHOT,
+			status: "completed",
+			verdict,
+		});
+	}
+
+	test("sentToReview is the current queue depth; series[23] IS the value", async () => {
+		const repo = "acme/home";
+		// Two blocks + one pass + one still awaiting review (24h flow counts).
+		await seedVerdictRun(repo, "block");
+		await seedVerdictRun(repo, "block");
+		await seedVerdictRun(repo, "pass");
+		const reviewRun = await seedVerdictRun(repo, "needs_review");
+		// The paused run becomes a pending moderation item — the live queue.
+		await db.insert(moderationItems).values({
+			id: "mi-home-1",
+			runId: reviewRun,
+			nodeId: "default@1:review",
+			status: "pending",
+		});
+
+		const stats = await insightServices.getHomeStats(db, repo);
+
+		// The whole bug: the last point of the queue series equals the number.
+		expect(stats.sentToReview.value).toBe(1);
+		expect(stats.sentToReview.series).toHaveLength(24);
+		expect(stats.sentToReview.series[23]).toBe(stats.sentToReview.value);
+
+		expect(stats.blocked.value).toBe(2);
+		expect(stats.passed.value).toBe(1);
+		expect(stats.blocked.series).toHaveLength(24);
+		expect(stats.passed.series).toHaveLength(24);
+	});
+
+	test("a repo with no activity reports honest zeros, not a faked line", async () => {
+		const empty = await insightServices.getHomeStats(db, "acme/quiet");
+		expect(empty.sentToReview.value).toBe(0);
+		expect(empty.blocked.value).toBe(0);
+		expect(empty.passed.value).toBe(0);
+		// An all-zero series is what the card renders as "not enough data".
+		expect(empty.sentToReview.series.every((n) => n === 0)).toBe(true);
 	});
 });

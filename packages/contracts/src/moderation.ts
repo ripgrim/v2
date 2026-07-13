@@ -92,11 +92,16 @@ export const modStatSchema = z.object({
 });
 export type ModStat = z.infer<typeof modStatSchema>;
 
+/**
+ * The maintainer's real questions on Home (§13.10). Each stat's `value` and
+ * `series` describe the SAME window: `blocked`/`passed` are 24h flow (count +
+ * hourly series); `sentToReview` is the CURRENT queue depth (the actionable
+ * number) with a 24h queue-depth series whose last point IS the value.
+ */
 export const modStatsSchema = z.object({
-	pendingReports: modStatSchema,
-	resolvedToday: modStatSchema,
-	automodHits24h: modStatSchema,
-	bannedUsers: modStatSchema,
+	sentToReview: modStatSchema,
+	blocked: modStatSchema,
+	passed: modStatSchema,
 });
 export type ModStats = z.infer<typeof modStatsSchema>;
 

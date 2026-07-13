@@ -5,10 +5,9 @@ const ZERO_SERIES = () => Array.from({ length: 24 }, () => 0);
 const ZERO_STAT = () => ({ value: 0, delta: 0, series: ZERO_SERIES() });
 /** A freshly-installed repo with no runs yet — honest zeros, not a spinner. */
 const ZERO_STATS = (): ModStats => ({
-	pendingReports: ZERO_STAT(),
-	resolvedToday: ZERO_STAT(),
-	automodHits24h: ZERO_STAT(),
-	bannedUsers: ZERO_STAT(),
+	sentToReview: ZERO_STAT(),
+	blocked: ZERO_STAT(),
+	passed: ZERO_STAT(),
 });
 
 // The home stat cards are REAL — rollup-backed via insights (§13.10), scoped to

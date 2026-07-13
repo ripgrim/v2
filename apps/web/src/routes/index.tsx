@@ -50,52 +50,48 @@ function DashboardPage() {
 					</header>
 
 					{statsQuery.data ? (
-						<div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+						<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+							{/* The actionable card — the queue you must clear. First, ringed,
+							    and it drops you into the queue below. */}
 							<DitherStatCard
-								label="Pending"
-								color="red"
-								chartLayoutId="chart-moderation-pending"
-								linkSearch={{ source: "moderation", metric: "pending" }}
+								label="Sent to review"
+								color="orange"
 								delay={0}
 								animate={animateStats}
-								value={String(statsQuery.data.pendingReports.value)}
-								delta={statsQuery.data.pendingReports.delta}
-								series={statsQuery.data.pendingReports.series}
-								invertDelta
+								focused
+								onClick={() =>
+									document
+										.getElementById("moderation-queue")
+										?.scrollIntoView({ behavior: "smooth", block: "start" })
+								}
+								value={String(statsQuery.data.sentToReview.value)}
+								delta={statsQuery.data.sentToReview.delta}
+								series={statsQuery.data.sentToReview.series}
+								goodDirection="down"
 							/>
 							<DitherStatCard
-								label="Resolved today"
-								color="blue"
-								chartLayoutId="chart-moderation-resolved"
-								linkSearch={{ source: "moderation", metric: "resolved" }}
+								label="Blocked · 24h"
+								color="red"
+								chartLayoutId="chart-moderation-blocked"
+								linkSearch={{ source: "moderation", metric: "blocked" }}
 								delay={90}
 								animate={animateStats}
-								value={String(statsQuery.data.resolvedToday.value)}
-								delta={statsQuery.data.resolvedToday.delta}
-								series={statsQuery.data.resolvedToday.series}
+								value={String(statsQuery.data.blocked.value)}
+								delta={statsQuery.data.blocked.delta}
+								series={statsQuery.data.blocked.series}
+								goodDirection="neutral"
 							/>
 							<DitherStatCard
-								label="Automod · 24h"
-								color="purple"
-								chartLayoutId="chart-moderation-automod"
-								linkSearch={{ source: "moderation", metric: "automod" }}
+								label="Passed · 24h"
+								color="green"
+								chartLayoutId="chart-moderation-passed"
+								linkSearch={{ source: "moderation", metric: "passed" }}
 								delay={180}
 								animate={animateStats}
-								value={String(statsQuery.data.automodHits24h.value)}
-								delta={statsQuery.data.automodHits24h.delta}
-								series={statsQuery.data.automodHits24h.series}
-								invertDelta
-							/>
-							<DitherStatCard
-								label="Banned"
-								color="orange"
-								chartLayoutId="chart-moderation-banned"
-								linkSearch={{ source: "moderation", metric: "banned" }}
-								delay={270}
-								animate={animateStats}
-								value={String(statsQuery.data.bannedUsers.value)}
-								delta={statsQuery.data.bannedUsers.delta}
-								series={statsQuery.data.bannedUsers.series}
+								value={String(statsQuery.data.passed.value)}
+								delta={statsQuery.data.passed.delta}
+								series={statsQuery.data.passed.series}
+								goodDirection="up"
 							/>
 						</div>
 					) : (
@@ -103,16 +99,18 @@ function DashboardPage() {
 					)}
 
 					{queueQuery.data ? (
-						<ModerationQueue
-							title={
-								<h2 className="font-medium text-sm">
-									pending{" "}
-									<span className="text-muted-foreground tabular-nums">
-										{items.length}
-									</span>
-								</h2>
-							}
-						/>
+						<div id="moderation-queue">
+							<ModerationQueue
+								title={
+									<h2 className="font-medium text-sm">
+										pending{" "}
+										<span className="text-muted-foreground tabular-nums">
+											{items.length}
+										</span>
+									</h2>
+								}
+							/>
+						</div>
 					) : (
 						<QueueSkeleton />
 					)}
@@ -123,11 +121,11 @@ function DashboardPage() {
 }
 
 const QUEUE_SLOTS = ["a", "b", "c", "d", "e", "f"];
-const CARD_SLOTS = ["pending", "resolved", "automod", "banned"];
+const CARD_SLOTS = ["review", "blocked", "passed"];
 
 function PanelSkeleton() {
 	return (
-		<div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+		<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 			{CARD_SLOTS.map((slot) => (
 				<Skeleton key={slot} className="h-28 rounded-xl" />
 			))}
