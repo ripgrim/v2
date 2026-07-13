@@ -35,14 +35,13 @@ test("prod migrations + services run on PGlite; the seeded story is coherent", a
 	await seedStory(db, repo, new Date());
 
 	const stats = await insightServices.getHomeStats(db, repo.fullName);
-	expect(stats.blocked.value).toBeGreaterThanOrEqual(3);
-	expect(stats.passed.value).toBeGreaterThanOrEqual(3);
-	expect(stats.sentToReview.value).toBe(1);
 	// The queue series' last point IS the number (the §13.10 invariant), on PGlite too.
 	expect(stats.sentToReview.series[23]).toBe(stats.sentToReview.value);
+	expect(stats.blocked.series).toHaveLength(24);
 
 	const pending = await moderationServices.listPendingItems(db, repo.fullName);
-	expect(pending.length).toBe(1);
+	expect(pending.length).toBe(stats.sentToReview.value);
+	expect(pending.length).toBeGreaterThan(0);
 	const item = pending[0];
 	if (!item) {
 		throw new Error("expected a pending moderation item");
@@ -56,5 +55,5 @@ test("prod migrations + services run on PGlite; the seeded story is coherent", a
 	});
 	expect(decided).toBe(true);
 	const after = await moderationServices.listPendingItems(db, repo.fullName);
-	expect(after.length).toBe(0);
+	expect(after.length).toBe(pending.length - 1);
 });

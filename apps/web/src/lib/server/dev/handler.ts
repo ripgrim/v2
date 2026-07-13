@@ -81,15 +81,22 @@ async function setupPersona(
 	}
 	if (persona === "one-repo") {
 		await link("demo-inst-one");
-		await ensureDemoRepo(db, "solo-webapp", {
+		// A year-old repo, auto-selected — the dashboard is populated on land.
+		const repo = await ensureDemoRepo(db, "solo-webapp", {
 			installationId: "demo-inst-one",
 		});
+		await seedStory(db, repo, now);
 		return;
 	}
 	if (persona === "many-repos") {
 		await link("demo-inst-many");
+		// Several granted repos, each with real (if lighter) history, so picking
+		// any one lands on a populated dashboard.
 		for (const name of ["many-api", "many-web", "many-docs", "many-infra"]) {
-			await ensureDemoRepo(db, name, { installationId: "demo-inst-many" });
+			const repo = await ensureDemoRepo(db, name, {
+				installationId: "demo-inst-many",
+			});
+			await seedStory(db, repo, now, { days: 120 });
 		}
 		return;
 	}

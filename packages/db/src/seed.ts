@@ -1,14 +1,17 @@
 import {
 	type AiReviewOutput,
 	DEFAULT_WORKFLOW,
-	type Finding,
 	type NormalizedEvent,
+	RULE_CATALOG,
 	type Verdict,
 	type WorkflowDefinition,
 } from "@tripwire/contracts";
+import { generateId } from "@tripwire/utils";
 import { sql } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { events } from "./schema/events.ts";
+import { moderationItems } from "./schema/moderation.ts";
+import { runActions, runSteps, runs } from "./schema/runs.ts";
 import * as insightServices from "./services/insights.ts";
 import * as moderationServices from "./services/moderation.ts";
 import * as repoServices from "./services/repos.ts";
@@ -319,28 +322,246 @@ export async function seedRun(opts: SeedRunOptions): Promise<string> {
 	return runId;
 }
 
-const SPAMMER: Contributor = { login: "crypto-spammer", externalId: "1003" };
-const DRIVEBY: Contributor = { login: "driveby-42", externalId: "1002" };
-const NEWCOMER: Contributor = { login: "newcomer", externalId: "1004" };
-const HONEST: Contributor = { login: "honest-dev", externalId: "1005" };
+const SPAMMER: Contributor = { login: "crypto-spammer", externalId: "3000" };
 
-const AI_FINDINGS: Finding[] = [
+const DAY = 24 * HOUR;
+
+/** A workflow that sends a change request to review (for needs_review runs). */
+const REVIEW_WORKFLOW: WorkflowDefinition = {
+	id: "review@1",
+	name: "review gate",
+	version: 1,
+	nodes: [
+		{
+			id: "trigger",
+			type: "trigger",
+			kinds: ["change-request.opened", "change-request.updated"],
+		},
+		{
+			id: "min-prs",
+			type: "rule",
+			ref: "min-merged-prs@1",
+			config: { min: 1 },
+		},
+		{ id: "gate", type: "gate", mode: "any-of" },
+		{ id: "review", type: "action", action: "send-to-moderation" },
+	],
+	edges: [
+		{ id: "e1", from: "trigger", to: "min-prs" },
+		{ id: "e2", from: "min-prs", to: "gate" },
+		{ id: "e3", from: "gate", to: "review", when: "fail" },
+	],
+};
+
+/** Recurring contributor pools — the mix a real active repo sees. */
+const REGULARS: Contributor[] = [
+	"ada-w",
+	"linus-t",
+	"grace-h",
+	"rob-pike",
+	"margaret-j",
+	"dennis-r",
+	"barbara-l",
+	"donald-k",
+	"edsger-d",
+	"alan-k",
+	"bjarne-s",
+	"guido-v",
+	"james-g",
+	"katherine-j",
+	"radia-p",
+].map((login, i) => ({ login, externalId: String(2000 + i) }));
+
+const OCCASIONALS: Contributor[] = Array.from({ length: 22 }, (_, i) => ({
+	login: `contributor-${i + 1}`,
+	externalId: String(4000 + i),
+}));
+
+const SPAMMERS: Contributor[] = [
+	"crypto-spammer",
+	"airdrop-bot",
+	"free-nft-99",
+	"pump-it-420",
+	"moon-wallet",
+	"token-drop",
+	"defi-degen",
+	"rug-puller",
+	"shill-master",
+	"gm-frens",
+].map((login, i) => ({ login, externalId: String(3000 + i) }));
+
+const NEWCOMERS: Contributor[] = [
+	"first-timer",
+	"new-here",
+	"day-one",
+	"just-joined",
+	"hello-world",
+	"drive-by",
+].map((login, i) => ({ login, externalId: String(5000 + i) }));
+
+const PASS_TITLES = [
+	"fix: correct typo in README",
+	"docs: clarify install steps",
+	"test: cover the parser edge cases",
+	"refactor: extract the config loader",
+	"chore: bump dependencies",
+	"fix: handle null repo in the loader",
+	"feat: add --json output flag",
+	"perf: memoize the rule registry",
+	"fix: off-by-one in pagination",
+	"docs: add a troubleshooting section",
+	"test: snapshot the verdict comment",
+	"ci: cache bun install between runs",
+	"fix: respect NO_COLOR",
+	"refactor: split the webhook parser",
+	"feat: support glob paths in config",
+	"fix: debounce the file watcher",
+	"docs: document the rule catalog",
+	"chore: drop the unused polyfill",
+];
+const REVIEW_TITLES = [
+	"feat: add locale files for i18n",
+	"large refactor of the core engine",
+	"vendor a third-party api client",
+	"feat: experimental plugin system",
+	"add a new storage backend",
+	"rewrite the queue consumer",
+];
+
+interface Reason {
+	failed: string[];
+	titles: string[];
+	actors: Contributor[];
+}
+const BLOCK_REASONS: Reason[] = [
 	{
-		severity: "critical",
-		file: ".github/workflows/release.yml",
-		line: 34,
-		note: "exfiltrates `secrets.NPM_TOKEN` to an external host on every push.",
+		failed: ["crypto-address@1"],
+		titles: [
+			"add donation wallet to README",
+			"update FUNDING.yml with an eth address",
+			"support crypto tips",
+			"add bitcoin address to sponsors",
+		],
+		actors: SPAMMERS,
 	},
 	{
-		severity: "warn",
-		file: "src/config/loader.ts",
-		line: 88,
-		note: "widens `allowedHosts` to `*` — disables the origin check.",
+		failed: ["honeypot@1"],
+		titles: [
+			"update CI workflow",
+			"add release automation",
+			"tweak the github action",
+			"add a deploy workflow",
+		],
+		actors: [...SPAMMERS, ...NEWCOMERS],
 	},
 	{
-		severity: "info",
-		file: "src/config/loader.ts",
-		note: "unrelated formatting churn mixed into a security-sensitive diff.",
+		failed: ["account-age@1"],
+		titles: [
+			"URGENT please merge",
+			"important update",
+			"great project!! merge",
+		],
+		actors: NEWCOMERS,
+	},
+	{
+		failed: ["max-files-changed@1"],
+		titles: [
+			"vendor the entire sdk",
+			"import upstream wholesale",
+			"add 400 generated files",
+		],
+		actors: [...OCCASIONALS, ...NEWCOMERS],
+	},
+	{
+		failed: ["english-only@1"],
+		titles: ["добавить функцию", "更新文档", "actualizar la configuración"],
+		actors: [...NEWCOMERS, ...OCCASIONALS],
+	},
+];
+
+/** Varied ai-review verdicts — findings across files, constitution voice. */
+const AI_TEMPLATES: AiReviewOutput[] = [
+	{
+		verdict: "block",
+		confidence: 0.94,
+		summary:
+			"workflow change exfiltrates an npm token and disables the origin allowlist.",
+		findings: [
+			{
+				severity: "critical",
+				file: ".github/workflows/release.yml",
+				line: 34,
+				note: "exfiltrates `secrets.NPM_TOKEN` to an external host on every push.",
+			},
+			{
+				severity: "warn",
+				file: "src/config/loader.ts",
+				line: 88,
+				note: "widens `allowedHosts` to `*` — disables the origin check.",
+			},
+			{
+				severity: "info",
+				file: "src/config/loader.ts",
+				note: "unrelated formatting churn mixed into a security-sensitive diff.",
+			},
+		],
+	},
+	{
+		verdict: "block",
+		confidence: 0.88,
+		summary: "adds a postinstall script that curls and pipes a remote payload.",
+		findings: [
+			{
+				severity: "critical",
+				file: "package.json",
+				line: 12,
+				note: "`postinstall` runs `curl … | sh` from an unpinned host.",
+			},
+			{
+				severity: "warn",
+				file: "scripts/setup.sh",
+				line: 3,
+				note: "downloads and executes a binary with no checksum.",
+			},
+		],
+	},
+	{
+		verdict: "block",
+		confidence: 0.91,
+		summary: "obfuscated base64 blob decoded and eval'd at runtime.",
+		findings: [
+			{
+				severity: "critical",
+				file: "src/util/telemetry.ts",
+				line: 47,
+				note: "`eval(atob(…))` executes a decoded blob — classic loader.",
+			},
+			{
+				severity: "warn",
+				file: "src/util/telemetry.ts",
+				line: 51,
+				note: "beacons the decoded result to a hardcoded IP.",
+			},
+		],
+	},
+	{
+		verdict: "needs_review",
+		confidence: 0.55,
+		summary: "broad dependency bump touches auth; worth a human glance.",
+		findings: [
+			{
+				severity: "warn",
+				file: "package.json",
+				line: 20,
+				note: "major bump of the auth library — check the migration notes.",
+			},
+			{
+				severity: "info",
+				file: "src/auth/session.ts",
+				line: 14,
+				note: "session cookie flags changed alongside the bump.",
+			},
+		],
 	},
 ];
 
@@ -366,101 +587,393 @@ export async function resetRepoData(
 	);
 }
 
+type EventInsert = typeof events.$inferInsert;
+type RunInsert = typeof runs.$inferInsert;
+type StepInsert = typeof runSteps.$inferInsert;
+type ActionInsert = typeof runActions.$inferInsert;
+type ModInsert = typeof moderationItems.$inferInsert;
+
+/** Small deterministic PRNG so the story is identical on every seed. */
+function mulberry32(seed: number): () => number {
+	let a = seed;
+	return () => {
+		a |= 0;
+		a = (a + 0x6d2b79f5) | 0;
+		let t = Math.imul(a ^ (a >>> 15), 1 | a);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+async function bulkInsert<T>(
+	db: Db,
+	table: Parameters<Db["insert"]>[0],
+	rows: T[],
+): Promise<void> {
+	for (let i = 0; i < rows.length; i += 400) {
+		const chunk = rows.slice(i, i + 400);
+		if (chunk.length > 0) {
+			// biome-ignore lint/suspicious/noExplicitAny: heterogeneous insert tables
+			await db.insert(table).values(chunk as any);
+		}
+	}
+}
+
 /**
- * A full, presentable story for one repo (§13.10): change requests across
- * states, an ai-review block with findings across files, a pending moderation
- * item, activity, and populated rollups so the Home cards show real series.
- * Idempotent per-repo — safe to re-run for the same repo.
+ * A full year of realistic activity for one repo (§13.10) — this is what an
+ * ACTIVE, ~year-old maintainer repo looks like: change requests every day
+ * (weekday rhythm + occasional spam waves), a dense recent window so the Home
+ * sparklines are alive, a realistic verdict mix from dozens of contributors,
+ * varied ai-review findings, a real pending review queue, enabled rule configs,
+ * and daily rollups across the whole year. Bulk-inserted for speed. Idempotent:
+ * skips if the repo is already populated (reset first to reseed).
  */
 export async function seedStory(
 	db: Db,
-	repo: { externalId: string; owner: string; name: string; fullName: string },
+	repo: {
+		id: string;
+		externalId: string;
+		owner: string;
+		name: string;
+		fullName: string;
+	},
 	now: Date,
+	opts: { days?: number } = {},
 ): Promise<void> {
-	await resetRepoData(db, repo.fullName);
-	let n = 100;
-	const ago = (hours: number) => new Date(now.getTime() - hours * HOUR);
+	const existing = (
+		await db.execute(
+			sql`SELECT count(*)::int AS n FROM runs WHERE repo_full_name = ${repo.fullName}`,
+		)
+	).rows as { n: number }[];
+	if (Number(existing[0]?.n ?? 0) > 0) {
+		return; // already populated — a fast no-op for repeat logins
+	}
 
-	// Blocks — crypto / honeypot spray across the last day.
-	await seedRun({
-		db,
-		repo,
-		actor: SPAMMER,
-		number: n++,
-		title: "add donation address to README",
-		verdict: "block",
-		failed: ["crypto-address@1"],
-		at: ago(1),
-	});
-	await seedRun({
-		db,
-		repo,
-		actor: DRIVEBY,
-		number: n++,
-		title: "update CI workflow",
-		verdict: "block",
-		failed: ["honeypot@1", "account-age@1"],
-		at: ago(6),
-	});
-	await seedRun({
-		db,
-		repo,
-		actor: SPAMMER,
-		number: n++,
-		title: "chore: tidy deps",
-		verdict: "block",
-		failed: ["crypto-address@1"],
-		at: ago(20),
+	const days = opts.days ?? 365;
+	const rnd = mulberry32(0x7317_c0de);
+	const rint = (min: number, max: number) =>
+		Math.floor(rnd() * (max - min + 1)) + min;
+	const pick = <T>(arr: readonly T[]): T =>
+		arr[Math.floor(rnd() * arr.length)] as T;
+	const chance = (p: number) => rnd() < p;
+
+	const eventRows: EventInsert[] = [];
+	const runRows: RunInsert[] = [];
+	const stepRows: StepInsert[] = [];
+	const actionRows: ActionInsert[] = [];
+	const modRows: ModInsert[] = [];
+
+	const startOfToday = new Date(now);
+	startOfToday.setHours(0, 0, 0, 0);
+
+	// Weekday base volume (Sun..Sat) — weekdays busy, weekends quiet.
+	const weekdayBase = [2, 7, 8, 8, 7, 6, 2];
+	let pr = 1;
+	let pending = 0;
+	const MAX_PENDING = 7;
+
+	const ruleStepRow = (
+		runId: string,
+		nodeId: string,
+		ref: string,
+		passed: boolean,
+		evidence: unknown,
+		at: Date,
+		extra?: { publicEvidence?: unknown; summary?: string },
+	): StepInsert => {
+		const [, version] = ref.split("@");
+		const output = {
+			ruleId: ref.split("@")[0],
+			version: Number(version),
+			status: "evaluated" as const,
+			passed,
+			evidence,
+			evaluatedAt: at.toISOString(),
+		};
+		return {
+			id: generateId(),
+			runId,
+			nodeId,
+			nodeKind: "rule",
+			ruleId: ref,
+			status: passed ? "pass" : "fail",
+			input: {},
+			output,
+			evidence: output,
+			publicEvidence: extra?.publicEvidence ?? null,
+			summary: extra?.summary ?? null,
+			startedAt: at,
+			finishedAt: at,
+			durationMs: rint(2, 60),
+		};
+	};
+	const plainStepRow = (
+		runId: string,
+		nodeId: string,
+		nodeKind: string,
+		status: string,
+		at: Date,
+	): StepInsert => ({
+		id: generateId(),
+		runId,
+		nodeId,
+		nodeKind,
+		status,
+		input: {},
+		output: {},
+		startedAt: at,
+		finishedAt: at,
+		durationMs: rint(1, 8),
 	});
 
-	// The ai-review showcase — a block with real findings across two files.
-	await seedRun({
-		db,
-		repo,
-		actor: DRIVEBY,
-		number: n++,
-		title: "perf: cache release artifacts",
-		verdict: "block",
-		aiReview: {
-			output: {
-				verdict: "block",
-				confidence: 0.94,
-				summary:
-					"workflow change exfiltrates an npm token and disables the origin allowlist.",
-				findings: AI_FINDINGS,
-			},
-		},
-		at: ago(3),
-	});
+	for (let d = days - 1; d >= 0; d--) {
+		const dayStart = new Date(startOfToday.getTime() - d * DAY);
+		const weekday = dayStart.getDay();
+		let count = (weekdayBase[weekday] ?? 5) + rint(-2, 3);
+		// Occasional spam wave.
+		if (chance(0.05)) {
+			count += rint(8, 20);
+		}
+		// Dense recent window so the 24h sparklines look alive.
+		if (d <= 1) {
+			count += rint(10, 18);
+		}
+		count = Math.max(0, count);
 
-	// Passes — the honest contributors.
-	for (const h of [2, 8, 12, 18]) {
-		await seedRun({
-			db,
-			repo,
-			actor: HONEST,
-			number: n++,
-			title: "fix: correct typo in docs",
-			verdict: "pass",
-			at: ago(h),
+		for (let i = 0; i < count; i++) {
+			// Spread across the working day; clamp today's runs to before `now`.
+			let at = new Date(
+				dayStart.getTime() + rint(7, 22) * HOUR + rint(0, 59) * 60_000,
+			);
+			if (at.getTime() > now.getTime()) {
+				at = new Date(now.getTime() - rint(1, 90) * 60_000);
+			}
+
+			// Verdict mix: mostly pass, a quarter block, a tenth to review.
+			const roll = rnd();
+			const verdict: Verdict =
+				roll < 0.62 ? "pass" : roll < 0.9 ? "block" : "needs_review";
+
+			const runId = generateId();
+			const number = pr++;
+			const eventId = `demo-evt-${repo.name}-${number}`;
+			const headSha = `demo${number.toString(16).padStart(8, "0")}`;
+			const useAi =
+				verdict !== "pass" && chance(verdict === "block" ? 0.14 : 0.25);
+			const aiTemplate = useAi
+				? pick(
+						AI_TEMPLATES.filter((t) =>
+							verdict === "block"
+								? t.verdict === "block"
+								: t.verdict === "needs_review",
+						),
+					)
+				: null;
+
+			let actor: Contributor;
+			let title: string;
+			const failed: string[] = [];
+			if (verdict === "pass") {
+				actor = chance(0.7) ? pick(REGULARS) : pick(OCCASIONALS);
+				title = pick(PASS_TITLES);
+			} else if (verdict === "block") {
+				const reason = pick(BLOCK_REASONS);
+				actor = pick(reason.actors);
+				title = pick(reason.titles);
+				failed.push(...reason.failed);
+				if (chance(0.25)) {
+					failed.push("account-age@1");
+				}
+			} else {
+				actor = chance(0.5) ? pick(NEWCOMERS) : pick(OCCASIONALS);
+				title = pick(REVIEW_TITLES);
+			}
+
+			const snapshot =
+				verdict === "needs_review"
+					? [REVIEW_WORKFLOW]
+					: useAi
+						? [AI_REVIEW_WORKFLOW]
+						: [DEFAULT_WORKFLOW];
+
+			// Decide the pending queue: only recent reviews stay pending, capped.
+			const stayPending =
+				verdict === "needs_review" && d <= 4 && pending < MAX_PENDING;
+			if (stayPending) {
+				pending++;
+			}
+			const status =
+				verdict === "needs_review" && stayPending ? "paused" : "completed";
+
+			const normalized = changeRequestEvent({
+				eventId,
+				repo,
+				actor,
+				number,
+				title,
+				headSha,
+				at,
+			});
+			eventRows.push({
+				id: eventId,
+				forge: "github",
+				deliveryId: `demo-${eventId}`,
+				rawKind: "pull_request",
+				raw: {},
+				receivedAt: at,
+				kind: "change-request.opened",
+				repoFullName: repo.fullName,
+				actorLogin: actor.login,
+				subjectNumber: number,
+				headSha,
+				normalized,
+				normalizedAt: at,
+			});
+			runRows.push({
+				id: runId,
+				eventId,
+				repoFullName: repo.fullName,
+				subjectNumber: number,
+				headSha,
+				status,
+				verdict,
+				workflowSnapshot: snapshot,
+				createdAt: at,
+				completedAt: status === "completed" ? at : null,
+			});
+
+			// Steps: trigger → rules → gate → terminal action.
+			stepRows.push(plainStepRow(runId, "trigger", "trigger", "pass", at));
+			if (aiTemplate) {
+				stepRows.push(
+					ruleStepRow(
+						runId,
+						"ai",
+						"ai-review@2",
+						aiTemplate.verdict === "pass",
+						{
+							output: aiTemplate,
+							trace: { findings: aiTemplate.findings.length },
+						},
+						at,
+						{
+							publicEvidence: { output: aiTemplate },
+							summary: aiTemplate.summary,
+						},
+					),
+				);
+			} else if (verdict === "needs_review") {
+				stepRows.push(
+					ruleStepRow(
+						runId,
+						"min-prs",
+						"min-merged-prs@1",
+						false,
+						{
+							merged: 0,
+							required: 1,
+						},
+						at,
+					),
+				);
+			} else {
+				const failedSet = new Set(failed);
+				for (const node of DEFAULT_WORKFLOW.nodes) {
+					if (node.type !== "rule") {
+						continue;
+					}
+					const didFail = failedSet.has(node.ref);
+					stepRows.push(
+						ruleStepRow(
+							runId,
+							node.id,
+							node.ref,
+							!didFail,
+							{ matched: didFail },
+							at,
+						),
+					);
+				}
+			}
+			const gateFailed = verdict !== "pass";
+			stepRows.push(
+				plainStepRow(runId, "gate", "gate", gateFailed ? "fail" : "pass", at),
+			);
+			const terminal =
+				verdict === "block"
+					? "block"
+					: verdict === "needs_review"
+						? "review"
+						: "block";
+			stepRows.push(
+				plainStepRow(
+					runId,
+					terminal,
+					"action",
+					gateFailed ? "pass" : "not-reached",
+					at,
+				),
+			);
+
+			// Actions — recorded then executed (final state for the seed).
+			const kinds =
+				verdict === "block"
+					? ["block", "comment", "set-check"]
+					: verdict === "needs_review"
+						? ["send-to-moderation", "comment", "set-check"]
+						: ["comment", "set-check"];
+			for (const kind of kinds) {
+				actionRows.push({
+					id: generateId(),
+					runId,
+					kind,
+					payload: {},
+					idempotencyKey: `${kind}:${repo.fullName}#${number}`,
+					status: "executed",
+					recordedAt: at,
+					executedAt: at,
+				});
+			}
+
+			if (verdict === "needs_review") {
+				const decided = !stayPending;
+				modRows.push({
+					id: generateId(),
+					runId,
+					nodeId: "review",
+					status: decided ? (chance(0.5) ? "approved" : "denied") : "pending",
+					createdAt: at,
+					decidedAt: decided
+						? new Date(at.getTime() + rint(1, 20) * HOUR)
+						: null,
+				});
+			}
+		}
+	}
+
+	await bulkInsert(db, events, eventRows);
+	await bulkInsert(db, runs, runRows);
+	await bulkInsert(db, runSteps, stepRows);
+	await bulkInsert(db, runActions, actionRows);
+	await bulkInsert(db, moderationItems, modRows);
+
+	// Enable the baseline rules (+ ai-review) so the Rules page shows real config.
+	for (const rule of RULE_CATALOG) {
+		await repoServices.upsertRuleConfig(db, repo.id, {
+			ruleId: rule.ruleId,
+			version: rule.version,
+			enabled: true,
+			config: rule.defaultConfig,
 		});
 	}
 
-	// Sent to review — the pending queue item awaiting a maintainer's decision.
-	await seedRun({
-		db,
-		repo,
-		actor: NEWCOMER,
-		number: n++,
-		title: "feat: add locale files",
-		verdict: "needs_review",
-		failed: ["english-only@1"],
-		at: ago(4),
-	});
-
-	// Rollups for the window the Home cards read.
-	await insightServices.computeDailyRollups(db, isoDay(now));
-	await insightServices.computeDailyRollups(db, isoDay(ago(24)));
+	// Daily rollups across the whole window — analytics history.
+	for (let d = 0; d < days; d++) {
+		await insightServices.computeDailyRollups(
+			db,
+			isoDay(new Date(startOfToday.getTime() - d * DAY)),
+		);
+	}
 }
 
 /** A single public (non-private) run a stranger can read — persona 6. */

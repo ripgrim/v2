@@ -1149,3 +1149,19 @@ vite pointed at the same dir with a fixed `BETTER_AUTH_SECRET` so the gates +
 persona switcher work. README documents the command; `.demo/` is gitignored. New
 test: prod migrations + services + the worker-free decision path all run on
 PGlite (dialect parity). Checks: typecheck all, biome, boundaries, 216 tests.
+
+**Unit — demo seed: a full year of realistic activity.** The seeded story was a
+thin handful of runs (read as a toy). Rebuilt `seedStory` to simulate an ACTIVE,
+~year-old maintainer repo: ~2,500 change requests over 365 days with a weekday
+rhythm, occasional spam waves, and a dense recent window so the home sparklines
+are alive; a realistic verdict mix (≈62% pass / 28% block / 10% review) from
+dozens of contributors (regulars, occasionals, spammers, newcomers) with
+reason-matched titles + failing rules; varied ai-review findings across files; a
+real capped pending queue plus decided-review history; enabled rule configs
+(baseline + ai-review) so the rules page has data; and daily rollups across the
+whole year for analytics. Deterministic (seeded PRNG) and bulk-inserted — ~2,500
+runs / 19k steps in ~3s — and idempotent (skips an already-populated repo, so
+repeat logins are instant; reset to reseed). The one-repo and many-repos personas
+now get stories too (many-repos lighter at 120 days each); empty stays
+intentionally empty. Verified live: dev:demo boots onto a populated dashboard.
+Checks: typecheck all, biome, boundaries, 216 tests.

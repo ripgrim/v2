@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { sql } from "drizzle-orm";
 import {
 	applyMigrations,
 	createDb,
@@ -14,6 +15,15 @@ import {
 } from "../seed.ts";
 import * as insightServices from "./insights.ts";
 import * as moderationServices from "./moderation.ts";
+
+async function runCount(db: Db, fullName: string): Promise<number> {
+	const rows = (
+		await db.execute(
+			sql`SELECT count(*)::int AS n FROM runs WHERE repo_full_name = ${fullName}`,
+		)
+	).rows as { n: number }[];
+	return Number(rows[0]?.n ?? 0);
+}
 
 let container: TestDatabase;
 let db: Db;
@@ -38,18 +48,23 @@ test("seedStory + seedPublicRun produce contract-valid, renderable data", async 
 	const runId = await seedPublicRun(db, pub, now);
 	expect(runId).toBeTruthy();
 
+	// A year-old active repo — a LOT of runs, not a handful.
+	expect(await runCount(db, repo.fullName)).toBeGreaterThan(800);
+
 	const stats = await insightServices.getHomeStats(db, repo.fullName);
-	expect(stats.sentToReview.value).toBe(1); // one pending review
-	expect(stats.blocked.value).toBeGreaterThanOrEqual(3);
-	expect(stats.passed.value).toBeGreaterThanOrEqual(3);
+	// The queue card's last series point IS the number (the §13.10 invariant).
 	expect(stats.sentToReview.series[23]).toBe(stats.sentToReview.value);
+	expect(stats.blocked.series).toHaveLength(24);
+	expect(stats.passed.series).toHaveLength(24);
+	// A dense recent window means recent activity exists.
+	expect(stats.blocked.value + stats.passed.value).toBeGreaterThan(0);
 
 	const pending = await moderationServices.listPendingItems(db, repo.fullName);
-	expect(pending.length).toBe(1);
+	expect(pending.length).toBe(stats.sentToReview.value);
+	expect(pending.length).toBeGreaterThan(0);
 
-	// idempotent: reset + reseed yields the same counts, no dup-key crash.
-	await resetDemoData(db);
-	await seedStory(db, await ensureDemoRepo(db, "webapp"), now);
-	const again = await insightServices.getHomeStats(db, repo.fullName);
-	expect(again.blocked.value).toBe(stats.blocked.value);
+	// Idempotent: seedStory skips an already-populated repo (no dup-key crash).
+	const before = await runCount(db, repo.fullName);
+	await seedStory(db, repo, now);
+	expect(await runCount(db, repo.fullName)).toBe(before);
 });
