@@ -6,6 +6,7 @@ import {
 	commentHeadline,
 	howDoIFix,
 	reasonsBlock,
+	supersededBody,
 	WHAT_IS_TRIPWIRE,
 } from "../copy.ts";
 
@@ -23,6 +24,7 @@ import {
  * `${appUrl}/badges/view-run.png`.
  */
 
+/** Stable identifier in EVERY live tripwire comment (also drives `byTripwire`). */
 export const COMMENT_MARKER = "<!-- tripwire:run -->";
 export const BADGE_PATH = "/badges/view-run.png";
 /** The button's intrinsic 1x design width — the 3x asset renders crisp. */
@@ -39,15 +41,16 @@ export interface CommentInput {
 	badgeUrl: string;
 	/** Fail-closed floor fired — the headline names the degradation. */
 	degraded?: boolean;
+	/** The active comment's verdict — drives the resolution headline (§7). */
+	previousVerdict?: Verdict | null;
 }
 
 export function renderCommentBody(input: CommentInput): string {
 	const button = `<a href="${input.runUrl}"><img src="${input.badgeUrl}" width="${BADGE_WIDTH}" alt="${BUTTON_ALT}" /></a>`;
-	const headline = commentHeadline(
-		input.verdict,
-		input.contributorLogin,
-		input.degraded,
-	);
+	const headline = commentHeadline(input.verdict, input.contributorLogin, {
+		degraded: input.degraded,
+		previousVerdict: input.previousVerdict,
+	});
 	const lines: string[] = [headline, ""];
 	if (input.verdict === "block") {
 		lines.push(reasonsBlock(input.reasons), "", button, "");
@@ -67,32 +70,83 @@ interface IssueComment {
 }
 
 /**
- * Upsert: find the marker comment on the thread and edit it; create only when
- * none exists. Idempotent by construction.
+ * Verdict-aware upsert (§7). RUN HISTORY is the source of truth for what
+ * happened: `previousVerdict` (the verdict the PR already shows) decides
+ * edit-vs-transition — NEVER the comment thread. The marker is used ONLY to
+ * LOCATE the active comment (superseding strips it, so there is at most one).
+ *
+ * - NOT a transition (same/first verdict) ⇒ edit the active comment in place;
+ *   if it's gone (a human deleted it), post a fresh one. Ten broken pushes are
+ *   one comment, ten edits, zero thread noise.
+ * - a TRANSITION ⇒ post a NEW comment after the contributor's commit, and
+ *   supersede the old one IF it's still there. If the old comment was deleted or
+ *   edited away, there is nothing to supersede — post the resolution anyway
+ *   (run history knows it's a transition), never silently a "first verdict".
  */
 export async function upsertComment(
 	http: GithubHttp,
 	repoFullName: string,
 	number: number,
 	body: string,
-): Promise<{ externalId: string; created: boolean }> {
+	verdict: Verdict,
+	previousVerdict: Verdict | null,
+): Promise<{
+	externalId: string;
+	created: boolean;
+	supersededId: string | null;
+}> {
 	const comments = (await http.get(
 		repoFullName,
 		`/repos/${repoFullName}/issues/${number}/comments?per_page=100`,
 	)) as IssueComment[];
-	const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
-	if (existing) {
+	// The active comment is the LAST one still carrying the marker.
+	const active = [...comments]
+		.reverse()
+		.find((c) => c.body?.includes(COMMENT_MARKER));
+
+	const post = async (
+		supersededId: string | null,
+	): Promise<{
+		externalId: string;
+		created: boolean;
+		supersededId: string | null;
+	}> => {
+		const created = (await http.post(
+			repoFullName,
+			`/repos/${repoFullName}/issues/${number}/comments`,
+			{ body },
+		)) as IssueComment;
+		return { externalId: String(created.id), created: true, supersededId };
+	};
+
+	const transition = previousVerdict !== null && previousVerdict !== verdict;
+
+	if (!transition) {
+		// Same/first verdict: edit the active comment, or post a fresh one if a
+		// human deleted it.
+		if (!active) {
+			return await post(null);
+		}
 		await http.patch(
 			repoFullName,
-			`/repos/${repoFullName}/issues/comments/${existing.id}`,
+			`/repos/${repoFullName}/issues/comments/${active.id}`,
 			{ body },
 		);
-		return { externalId: String(existing.id), created: false };
+		return {
+			externalId: String(active.id),
+			created: false,
+			supersededId: null,
+		};
 	}
-	const created = (await http.post(
-		repoFullName,
-		`/repos/${repoFullName}/issues/${number}/comments`,
-		{ body },
-	)) as IssueComment;
-	return { externalId: String(created.id), created: true };
+
+	// Transition: supersede the old comment if it's still there, then post new.
+	if (active) {
+		await http.patch(
+			repoFullName,
+			`/repos/${repoFullName}/issues/comments/${active.id}`,
+			{ body: supersededBody(active.body ?? "") },
+		);
+		return await post(String(active.id));
+	}
+	return await post(null);
 }

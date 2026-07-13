@@ -76,8 +76,28 @@ export type ForgeAction =
 			number: number;
 			/** Full markdown body including the tripwire marker. Upsert, never append. */
 			body: string;
+			/** This run's verdict. */
+			verdict: Verdict;
+			/**
+			 * The verdict the PR ALREADY shows, from RUN HISTORY (§7) — the single
+			 * source of truth, never re-inferred from the thread. Differs from
+			 * `verdict` ⇒ a transition: supersede the old comment (if still present)
+			 * and post a NEW one. null ⇒ first-time verdict.
+			 */
+			previousVerdict: Verdict | null;
 	  }
 	| { kind: "request-review"; repoFullName: string; number: number }
+	| {
+			/**
+			 * Dismiss a stale tripwire request-changes review after a block clears —
+			 * a CHANGES_REQUESTED review can't self-edit and would keep blocking merge
+			 * on repos with required reviews. Best-effort, idempotent.
+			 */
+			kind: "dismiss-review";
+			repoFullName: string;
+			number: number;
+			reviewId: string;
+	  }
 	| { kind: "set-check"; repoFullName: string; check: CheckState };
 
 /** The result of executing an action — the forge-side artifact id, if any. */

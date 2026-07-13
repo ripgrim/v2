@@ -93,11 +93,28 @@ export async function emitPrSurface(
 	const { reasons } = input;
 	const review = reviewBody(reasons);
 
+	// The verdict the PR already shows — drives the resolution copy AND whether a
+	// stale request-changes review must be dismissed (§7).
+	const previousVerdict = await runServices.getPreviousVerdict(
+		db,
+		repoFullName,
+		number,
+		runId,
+	);
+	// A block that just cleared ⇒ dismiss its outstanding request-changes review
+	// (it can't self-edit and would keep gating merge on required-review repos).
+	const reviewToDismiss =
+		verdict !== "block" && previousVerdict === "block"
+			? await runServices.getLatestBlockReviewId(db, repoFullName, number)
+			: null;
+
 	const surfaceRows = await runServices.recordActions(db, runId, [
 		{
 			kind: "comment",
 			payload: {
 				number,
+				verdict,
+				previousVerdict,
 				body: renderCommentBody({
 					verdict,
 					contributorLogin: event.actor.login,
@@ -105,6 +122,7 @@ export async function emitPrSurface(
 					runUrl,
 					badgeUrl,
 					degraded: input.degraded,
+					previousVerdict,
 				}),
 			},
 			idempotencyKey: `comment:${number}:${verdict}`,
@@ -119,6 +137,15 @@ export async function emitPrSurface(
 			},
 			idempotencyKey: `check:${sha}:${verdict}`,
 		},
+		...(reviewToDismiss
+			? [
+					{
+						kind: "dismiss-review",
+						payload: { number, reviewId: reviewToDismiss },
+						idempotencyKey: `dismiss-review:${reviewToDismiss}`,
+					},
+				]
+			: []),
 	]);
 
 	if (!adapter) {
@@ -143,11 +170,18 @@ export async function emitPrSurface(
 	);
 
 	for (const row of [...input.pendingActionRows, ...surfaceRows]) {
-		if (row.kind === "comment" && latestRunId && latestRunId !== runId) {
+		// Ownership (§6): only the latest run writes to the shared PR — the comment
+		// AND the review dismissal. A stale run must not post a transition or
+		// dismiss the current run's review.
+		if (
+			(row.kind === "comment" || row.kind === "dismiss-review") &&
+			latestRunId &&
+			latestRunId !== runId
+		) {
 			await runServices.markActionSuperseded(db, row.id);
 			logger.info(
-				{ runId, latestRunId, number },
-				"comment superseded — not the latest run for this change request",
+				{ runId, latestRunId, number, kind: row.kind },
+				"action superseded — not the latest run for this change request",
 			);
 			continue;
 		}
@@ -156,10 +190,12 @@ export async function emitPrSurface(
 			const result = await adapter.execute(forgeAction);
 			await runServices.markActionExecuted(db, row.id, result.externalId);
 		} catch (error) {
-			if (row.kind === "block") {
+			// Best-effort actions: the check is the real gate, and a review dismiss
+			// is a nicety — a failure warns and settles the row, never kills the run.
+			if (row.kind === "block" || row.kind === "dismiss-review") {
 				logger.warn(
-					{ actionId: row.id, error: getErrorMessage(error) },
-					"request-changes review failed (legal on own PRs / missing permission) — check remains the gate",
+					{ actionId: row.id, kind: row.kind, error: getErrorMessage(error) },
+					"best-effort forge action failed — check remains the gate",
 				);
 				await runServices.markActionExecuted(db, row.id, null);
 				continue;
@@ -185,6 +221,16 @@ export function toForgeAction(
 				repoFullName,
 				number: (row.payload.number as number) ?? number,
 				body: row.payload.body as string,
+				verdict: row.payload.verdict as Verdict,
+				previousVerdict:
+					(row.payload.previousVerdict as Verdict | null | undefined) ?? null,
+			};
+		case "dismiss-review":
+			return {
+				kind: "dismiss-review" as const,
+				repoFullName,
+				number: (row.payload.number as number) ?? number,
+				reviewId: row.payload.reviewId as string,
 			};
 		case "set-check":
 			return {

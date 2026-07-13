@@ -34,21 +34,46 @@ export interface CommentReason {
 	waitHint?: string | null;
 }
 
-/** The bold first line — carries the verdict and @-mentions the contributor. */
+export interface HeadlineOptions {
+	degraded?: boolean;
+	/**
+	 * The verdict the ACTIVE comment already shows. When it differs from the new
+	 * verdict this comment is a RESOLUTION (§7) — the copy acknowledges the
+	 * change ("that's cleared") instead of stating it cold. null/undefined ⇒
+	 * first-time verdict, original copy.
+	 */
+	previousVerdict?: Verdict | null;
+}
+
+/**
+ * The bold first line — carries the verdict and @-mentions the contributor. On a
+ * TRANSITION it speaks to the change (the new comment knows the previous verdict).
+ */
 export function commentHeadline(
 	verdict: Verdict,
 	login: string,
-	degraded = false,
+	options: HeadlineOptions = {},
 ): string {
-	if (verdict === "block") {
-		return `**blocked** — @${login}, this can't merge yet.`;
+	const { degraded = false, previousVerdict = null } = options;
+	const transition = previousVerdict !== null && previousVerdict !== verdict;
+
+	if (verdict === "pass") {
+		return transition
+			? `**passed** — @${login}, that's cleared. good to merge.`
+			: "**passed** — nothing tripped. good to merge.";
 	}
 	if (verdict === "needs_review") {
-		return degraded
-			? "**sent to review** — couldn't finish checking this change, so a maintainer will decide."
+		if (degraded) {
+			return "**sent to review** — couldn't finish checking this change, so a maintainer will decide.";
+		}
+		return transition && previousVerdict === "block"
+			? `**sent to review** — @${login}, that's cleared the rules. a maintainer takes it from here.`
 			: `**sent to review** — @${login}, a maintainer needs to look at this before it can merge.`;
 	}
-	return "**passed** — nothing tripped. good to merge.";
+	// block
+	return transition
+		? `**blocked** — @${login}, the last push brought something back.`
+		: `**blocked** — @${login}, this can't merge yet.`;
 }
 
 function reasonLine(reason: CommentReason): string {
@@ -91,6 +116,29 @@ export function howDoIFix(reasons: CommentReason[]): string {
 /** The shared explainer — appended to blocked and sent-to-review comments. */
 export const WHAT_IS_TRIPWIRE =
 	"<details><summary>what is tripwire?</summary>\n\na firewall for open-source repos. the maintainers here set rules that every change has to clear before it can merge — account age, rate limits, hidden links, that kind of thing. org members are exempt.\n\nnothing is hidden: the run page shows every rule this change hit, the evidence, and the verdict.\n</details>";
+
+/**
+ * A superseded comment (§7): the human text of the old verdict, struck through,
+ * pointing at the newer comment below. The button + collapsibles + markers are
+ * dropped (everything from the first HTML block on) — a struck-through button is
+ * noise. Losing the marker also means the superseded comment is no longer the
+ * "active" tripwire comment: exactly one live comment carries the marker.
+ */
+export function supersededBody(originalBody: string): string {
+	const htmlAt = originalBody.search(/<a |<details/);
+	const kept = (
+		htmlAt >= 0 ? originalBody.slice(0, htmlAt) : originalBody
+	).trim();
+	const struck = kept
+		.split("\n")
+		.map((line) => (line.trim() ? `~~${line}~~` : line))
+		.join("\n");
+	return `${struck}\n\nsuperseded — see the newer check below.`;
+}
+
+/** The message stamped on a dismissed request-changes review (§7). */
+export const DISMISS_REVIEW_MESSAGE =
+	"cleared — this change now passes tripwire's checks.";
 
 /** The CHANGES_REQUESTED review stamp — one line, no link, no button. */
 export function reviewBody(reasons: CommentReason[]): string {

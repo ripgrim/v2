@@ -5,7 +5,7 @@ import {
 	workflowDefinitionSchema,
 } from "@tripwire/contracts";
 import { generateId } from "@tripwire/utils";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../client.ts";
 import { runActions, runSteps, runs } from "../schema/runs.ts";
@@ -247,6 +247,60 @@ export async function getLatestRunIdForChangeRequest(
 		.orderBy(desc(runs.createdAt), desc(runs.id))
 		.limit(1);
 	return rows[0]?.id ?? null;
+}
+
+/**
+ * The verdict the PR currently shows (the active tripwire comment's verdict):
+ * the most recent OTHER completed run for this change request. null ⇒ first-time
+ * verdict. Drives the resolution copy + whether to dismiss a stale review (§7).
+ */
+export async function getPreviousVerdict(
+	db: Db,
+	repoFullName: string,
+	subjectNumber: number,
+	currentRunId: string,
+): Promise<Verdict | null> {
+	const rows = await db
+		.select({ verdict: runs.verdict })
+		.from(runs)
+		.where(
+			and(
+				eq(runs.repoFullName, repoFullName),
+				eq(runs.subjectNumber, subjectNumber),
+				ne(runs.id, currentRunId),
+				isNotNull(runs.verdict),
+			),
+		)
+		.orderBy(desc(runs.createdAt), desc(runs.id))
+		.limit(1);
+	return (rows[0]?.verdict as Verdict | undefined) ?? null;
+}
+
+/**
+ * The forge id of the latest tripwire request-changes review on this change
+ * request (an executed `block` action's external id). null ⇒ none to dismiss.
+ */
+export async function getLatestBlockReviewId(
+	db: Db,
+	repoFullName: string,
+	subjectNumber: number,
+): Promise<string | null> {
+	const rows = await db
+		.select({ externalId: runActions.externalId })
+		.from(runActions)
+		.innerJoin(runs, eq(runActions.runId, runs.id))
+		.where(
+			and(
+				eq(runs.repoFullName, repoFullName),
+				eq(runs.subjectNumber, subjectNumber),
+				eq(runActions.kind, "block"),
+				eq(runActions.status, "executed"),
+				isNotNull(runActions.externalId),
+			),
+		)
+		.orderBy(desc(runActions.executedAt))
+		.limit(1);
+	return rows[0]?.externalId ?? null;
 }
 
 export async function completeRun(

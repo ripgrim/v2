@@ -1,5 +1,6 @@
 import type { ForgeAction, ForgeActionResult } from "@tripwire/forge";
 import type { GithubHttp } from "../client/http.ts";
+import { DISMISS_REVIEW_MESSAGE } from "../copy.ts";
 import { setCheck } from "./check.ts";
 import { upsertComment } from "./comment.ts";
 
@@ -38,8 +39,21 @@ export async function executeAction(
 				action.repoFullName,
 				action.number,
 				action.body,
+				action.verdict,
+				action.previousVerdict,
 			);
 			return { externalId: result.externalId };
+		}
+		case "dismiss-review": {
+			// The block clears ⇒ drop the stale request-changes review so it stops
+			// gating merge. Idempotent: re-dismissing an already-dismissed review is
+			// a harmless no-op the caller treats as best-effort.
+			await http.put(
+				action.repoFullName,
+				`/repos/${action.repoFullName}/pulls/${action.number}/reviews/${action.reviewId}/dismissals`,
+				{ message: DISMISS_REVIEW_MESSAGE, event: "DISMISS" },
+			);
+			return { externalId: action.reviewId };
 		}
 		case "request-review": {
 			await http.post(

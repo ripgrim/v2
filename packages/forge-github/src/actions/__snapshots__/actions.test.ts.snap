@@ -72,3 +72,11 @@ nothing is hidden: the run page shows every rule this change hit, the evidence, 
 <!-- tripwire:run -->
 "
 `;
+
+exports[`upsertComment — verdict-aware lifecycle (§7) superseded body — struck, marker-less, points forward 1`] = `
+"~~**blocked** — @octocat, this can't merge yet.~~
+
+~~your account is 2 days old~~
+
+superseded — see the newer check below."
+`;

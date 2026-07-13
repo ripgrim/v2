@@ -1206,3 +1206,28 @@ unavailable ⇒ skip; a reads test proving the search excludes owned repos and
 degrades to null; leak-invariant + registry table updated. History proven
 untouched: `replay --corpus` = 15 · 13 unchanged · 2 flips · 0 skipped. Checks:
 typecheck all, biome, boundaries, 223 tests.
+
+**Unit — PR comment lifecycle: verdict transitions get their own comment (§7).**
+After an incident where a blocked→passed resolution was edited in place (receipts
+gone, lost at the top of a long thread), the upsert is now verdict-aware: same
+verdict re-run edits in place (the common path, unchanged), a verdict TRANSITION
+posts a NEW comment after the commit AND marks the previous one superseded (struck
+text + "superseded — see the newer check below.", button/details/marker dropped).
+RUN HISTORY is the single source of truth: the worker computes `previousVerdict`
+(`getPreviousVerdict`) and passes it to the adapter, which decides
+edit-vs-transition SOLELY from it — the `<!-- tripwire:run -->` marker is used ONLY
+to locate the active comment, never to infer what happened (no dual detection: a
+deleted/edited comment can't make the adapter think "first verdict" while the
+worker knows it's a transition). If a transition's old comment is gone, the
+resolution posts anyway with nothing to supersede. Superseding strips the marker,
+so exactly one active comment ever carries it. Resolution copy knows the previous
+verdict (blocked→passed "that's cleared. good to merge.", etc.). Same incident, second fix: a cleared block
+left a CHANGES_REQUESTED review that can't self-edit and kept gating merge on
+required-review repos — on a block→(pass|sent-to-review) transition the worker
+dismisses the outstanding review (`getLatestBlockReviewId` → a new best-effort,
+idempotent `dismiss-review` action; adapter PUTs the dismissal). Comment ownership
+unchanged and now also gates the dismissal. Tests: same-verdict edits in place +
+ten re-runs = one comment; transition supersedes old + posts new; a transition
+whose old comment was DELETED still posts (no supersede, no crash); superseded
+golden snapshot; dismiss-review PUT; the two decision queries over real Postgres.
+Goldens regenerated. Checks: typecheck all, biome, boundaries, 229 tests.

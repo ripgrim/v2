@@ -1733,3 +1733,52 @@ silently banned every new contributor, forever; its "wait" remedy was a lie.
   `DEFAULT_WORKFLOW`, which never referenced min-merged-prs, so no baseline/derive
   edit was needed; `ruleExecutes` and the derived default still agree (both keyed
   off the same baseline set).
+
+### PR comment lifecycle — verdict transitions get their own comment (§7)
+
+Real incident (Boring-Software-Inc/dither-kit#8): a blocked contributor fixed the
+change and the comment was EDITED IN PLACE to "passed" — the receipts vanished and
+the resolution landed at the TOP of a long thread where nobody reads. This
+SUPERSEDES the earlier "one comment, always upsert" decision.
+
+- **Same verdict on a re-run ⇒ EDIT in place** (unchanged, the common path). Ten
+  broken pushes are one comment, ten edits, zero thread noise.
+- **A verdict transition ⇒ a NEW comment** (chronologically after the commit,
+  where the eye reads) AND the previous comment is marked SUPERSEDED. Only
+  transitions create comments — never a CodeRabbit thread.
+- **RUN HISTORY is the single source of truth — no dual detection.** The worker
+  computes `previousVerdict` from the run history (`getPreviousVerdict`) and passes
+  it to the adapter; `upsertComment` decides edit-vs-transition SOLELY from it. The
+  `<!-- tripwire:run -->` marker is used ONLY to LOCATE the active comment, never
+  to infer what happened. (An earlier draft inferred the previous verdict from a
+  second marker in the thread too — "they agree in practice" is the same excuse
+  that preceded the toggles-cosmetic bug; the moment a human deletes or edits the
+  comment the two disagree and you post "that's cleared" with no prior block in the
+  thread. Removed — the marker no longer encodes a verdict.)
+- **A transition whose old comment is GONE still posts.** If run history says
+  transition but the marker isn't found (deleted/edited by a human), the resolution
+  comment posts anyway with nothing to supersede — never silently a "first
+  verdict". A superseded comment LOSES its marker, so there is always exactly ONE
+  active comment; the find is unambiguous and idempotent (a retried transition
+  re-finds the new comment and edits it).
+- **Superseded format:** the old verdict's human text (headline + reasons) struck
+  through, then `superseded — see the newer check below.` The button + collapsibles
+  + marker are dropped (everything from the first HTML block on) — a struck-through
+  button is noise.
+- **Resolution copy knows the previous verdict.** `commentHeadline` takes the same
+  worker-supplied `previousVerdict`: blocked→passed "that's cleared. good to
+  merge."; blocked→sent to review "that's cleared the rules. a maintainer takes it
+  from here."; →blocked "the last push brought something back." (+ the normal block
+  body); first-time verdicts unchanged.
+- **Stale review dismissal (same incident).** A `block` files a CHANGES_REQUESTED
+  review that cannot self-edit, so a now-passing PR permanently carried "tripwire
+  requested changes" — dead-merge on required-review repos. On a block→(pass|sent
+  to review) transition the worker looks up the outstanding review's forge id
+  (`getLatestBlockReviewId` — the block action's stored external id) and enqueues a
+  new `dismiss-review` action; the adapter `PUT`s the dismissal. Best-effort (a
+  failure warns and settles the row, never kills the run) and idempotent
+  (keyed on the review id; re-dismissing is a harmless no-op).
+- **Comment ownership is UNCHANGED and now also gates the dismissal** — only the
+  latest run per change request may post a transition or dismiss a review; a stale
+  run's comment/dismiss row is superseded. The sweeper's staleness guard is
+  untouched.

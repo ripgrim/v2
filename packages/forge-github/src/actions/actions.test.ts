@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { GithubHttp } from "../client/http.ts";
+import { supersededBody } from "../copy.ts";
 import { CHECK_NAME, setCheck } from "./check.ts";
 import { COMMENT_MARKER, renderCommentBody, upsertComment } from "./comment.ts";
+
+/** Every hidden `<!-- tripwire:… -->` marker, so tests can check visible copy. */
+const MARKERS = /<!-- tripwire:[^>]*-->/g;
 
 /**
  * §11 snapshot layer: rendered PR comments vs golden files — the presenter
@@ -86,7 +90,7 @@ describe("renderCommentBody — snapshot golden files", () => {
 		// Verdict line present, @-mentions the contributor, no "tripwire:" prefix
 		// in the visible copy (the hidden marker is the only legit occurrence).
 		expect(lines[0]).toBe("**blocked** \u2014 @octocat, this can't merge yet.");
-		expect(body.replaceAll(COMMENT_MARKER, "")).not.toContain("tripwire:");
+		expect(body.replace(MARKERS, "")).not.toContain("tripwire:");
 		// Never counts rules.
 		expect(body).not.toMatch(/\d+ of \d+ rules?/);
 		// The wait-hint rides inline after its reason.
@@ -136,30 +140,137 @@ function fakeHttp(responses: Record<string, unknown>) {
 	return { http, calls };
 }
 
-describe("upsertComment", () => {
-	test("creates when no marker comment exists", async () => {
+const COMMON = {
+	contributorLogin: "octocat",
+	runUrl: "https://tripwire.sh/runs/x",
+	badgeUrl: "https://tripwire.sh/badges/view-run.png",
+};
+const BLOCK_COMMENT = renderCommentBody({
+	verdict: "block",
+	reasons: [{ text: "your account is 2 days old", remedy: "wait" }],
+	...COMMON,
+});
+const PASS_COMMENT = renderCommentBody({
+	verdict: "pass",
+	reasons: [],
+	...COMMON,
+});
+
+describe("upsertComment — verdict-aware lifecycle (§7)", () => {
+	test("creates when no tripwire comment exists", async () => {
 		const { http, calls } = fakeHttp({
-			"GET /repos/a/b/issues/7/comments": [
-				{ id: 1, body: "unrelated comment" },
-			],
+			"GET /repos/a/b/issues/7/comments": [{ id: 1, body: "unrelated" }],
 			"POST /repos/a/b/issues/7/comments": { id: 42 },
 		});
-		const result = await upsertComment(http, "a/b", 7, "body");
-		expect(result).toEqual({ externalId: "42", created: true });
+		// First-time verdict — run history has no previous verdict.
+		const result = await upsertComment(
+			http,
+			"a/b",
+			7,
+			BLOCK_COMMENT,
+			"block",
+			null,
+		);
+		expect(result).toEqual({
+			externalId: "42",
+			created: true,
+			supersededId: null,
+		});
 		expect(calls.map((c) => c.method)).toEqual(["GET", "POST"]);
 	});
 
-	test("edits the existing marker comment — never appends", async () => {
+	test("SAME verdict edits in place — never a new comment", async () => {
 		const { http, calls } = fakeHttp({
-			"GET /repos/a/b/issues/7/comments": [
-				{ id: 9, body: `old body\n${COMMENT_MARKER}` },
-			],
+			"GET /repos/a/b/issues/7/comments": [{ id: 9, body: BLOCK_COMMENT }],
 		});
-		const result = await upsertComment(http, "a/b", 7, "new body");
-		expect(result).toEqual({ externalId: "9", created: false });
+		const result = await upsertComment(
+			http,
+			"a/b",
+			7,
+			BLOCK_COMMENT,
+			"block",
+			"block",
+		);
+		expect(result).toEqual({
+			externalId: "9",
+			created: false,
+			supersededId: null,
+		});
+		expect(calls.some((c) => c.method === "POST")).toBe(false);
+		expect(calls.find((c) => c.method === "PATCH")?.path).toBe(
+			"/repos/a/b/issues/comments/9",
+		);
+	});
+
+	test("ten same-verdict re-runs = ONE comment (ten edits, zero posts)", async () => {
+		const { http, calls } = fakeHttp({
+			"GET /repos/a/b/issues/7/comments": [{ id: 9, body: BLOCK_COMMENT }],
+		});
+		for (let i = 0; i < 10; i++) {
+			await upsertComment(http, "a/b", 7, BLOCK_COMMENT, "block", "block");
+		}
+		expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+		expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(10);
+	});
+
+	test("a VERDICT TRANSITION supersedes the old comment AND posts a new one", async () => {
+		const { http, calls } = fakeHttp({
+			"GET /repos/a/b/issues/7/comments": [{ id: 9, body: BLOCK_COMMENT }],
+			"POST /repos/a/b/issues/7/comments": { id: 50 },
+		});
+		// Run history says the PR shows "block" → this is a transition.
+		const result = await upsertComment(
+			http,
+			"a/b",
+			7,
+			PASS_COMMENT,
+			"pass",
+			"block",
+		);
+		expect(result).toEqual({
+			externalId: "50",
+			created: true,
+			supersededId: "9",
+		});
+		// the old comment is struck + points forward, and loses its marker.
 		const patch = calls.find((c) => c.method === "PATCH");
 		expect(patch?.path).toBe("/repos/a/b/issues/comments/9");
-		expect(patch?.body).toEqual({ body: "new body" });
+		const patchedBody = (patch?.body as { body: string }).body;
+		expect(patchedBody).toContain("superseded — see the newer check below.");
+		expect(patchedBody).not.toContain(COMMENT_MARKER);
+		// a genuinely new comment is posted, chronologically last.
+		expect(calls.find((c) => c.method === "POST")?.path).toBe(
+			"/repos/a/b/issues/7/comments",
+		);
+	});
+
+	test("a transition whose old comment was DELETED still posts — no supersede, no crash", async () => {
+		const { http, calls } = fakeHttp({
+			// The tripwire comment is gone (a human deleted it); no marker in the thread.
+			"GET /repos/a/b/issues/7/comments": [{ id: 1, body: "unrelated" }],
+			"POST /repos/a/b/issues/7/comments": { id: 60 },
+		});
+		// Run history KNOWS this is blocked→passed — never a "first verdict".
+		const result = await upsertComment(
+			http,
+			"a/b",
+			7,
+			PASS_COMMENT,
+			"pass",
+			"block",
+		);
+		expect(result).toEqual({
+			externalId: "60",
+			created: true,
+			supersededId: null,
+		});
+		// Nothing to supersede — a resolution comment posts, no PATCH, no duplicate.
+		expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+		expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+	});
+
+	test("superseded body — struck, marker-less, points forward", () => {
+		expect(supersededBody(BLOCK_COMMENT)).toMatchSnapshot();
 	});
 });
 
@@ -232,5 +343,24 @@ describe("executeAction — block files a request-changes review", () => {
 		expect(String((post?.body as { body: string }).body)).toContain(
 			"blocked — your account is 2 days old.",
 		);
+	});
+});
+
+describe("executeAction — dismiss-review clears a stale request-changes", () => {
+	test("PUTs a dismissal for the stored review id", async () => {
+		const { http, calls } = fakeHttp({
+			"PUT /repos/a/b/pulls/7/reviews/91/dismissals": {},
+		});
+		const { executeAction } = await import("./execute.ts");
+		const result = await executeAction(http, {
+			kind: "dismiss-review",
+			repoFullName: "a/b",
+			number: 7,
+			reviewId: "91",
+		});
+		expect(result.externalId).toBe("91");
+		const put = calls.find((c) => c.method === "PUT");
+		expect(put?.path).toBe("/repos/a/b/pulls/7/reviews/91/dismissals");
+		expect(put?.body).toMatchObject({ event: "DISMISS" });
 	});
 });
