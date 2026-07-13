@@ -7,7 +7,7 @@
  */
 
 export type { Db } from "./client.ts";
-export { createDb, schema } from "./client.ts";
+export { createDb, createDirectPool, schema } from "./client.ts";
 export { applyMigrations } from "./migrate.ts";
 export {
 	applyPgliteMigrations,

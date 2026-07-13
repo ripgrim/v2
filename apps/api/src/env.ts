@@ -14,6 +14,12 @@ export interface ApiDeps {
 	auth: Auth | null;
 	db: Db;
 	pool: Pool;
+	/**
+	 * Direct/session pool for the SSE `LISTEN`. A transaction-pooled connection
+	 * can't hold a LISTEN through PlanetScale's pooler, so this uses
+	 * `DATABASE_URL_DIRECT` (falling back to `DATABASE_URL` locally).
+	 */
+	directPool: Pool;
 	boss: PgBoss;
 	webhookSecret: string;
 	/** Allowed CORS origin for the SSE stream (the web dashboard). */

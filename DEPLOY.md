@@ -122,11 +122,62 @@ confirmed on the live services:
 
 ---
 
-## 3. PlanetScale — see the dedicated verification gate
+## 3. PlanetScale (Unit 3)
 
-Region, pooling, transaction affinity, and LISTEN/NOTIFY are covered in **Unit 3**
-below. **Do not deploy the api/worker against the production DB until
-`bun run verify:planetscale` passes.**
+**Do not deploy the api/worker against the production DB until
+`bun run verify:planetscale` passes.** Two invariants a pooler can silently
+break gate the cutover; the script asserts both and exits non-zero on failure.
+
+### 3a. Two connection strings — pooled + direct
+
+PlanetScale Postgres serves through a connection pooler. LISTEN/NOTIFY needs a
+persistent SESSION, which a transaction-mode pooler drops. So the app uses TWO
+URLs (`createDirectPool` in `@tripwire/db`):
+
+- **`DATABASE_URL` — the POOLED endpoint.** Everything transactional and query:
+  the webhook `INSERT + enqueue` transaction, rule reads, web queries, pg-boss.
+- **`DATABASE_URL_DIRECT` — the DIRECT / session endpoint.** ONLY the SSE
+  stream's `LISTEN` (api) and the worker's `NOTIFY`. Unset ⇒ falls back to
+  `DATABASE_URL` (local dev, one Postgres, no pooler — unchanged).
+
+**FIRST confirm PlanetScale Postgres exposes a direct/non-pooled endpoint at
+all.** If it does not, this two-URL design is impossible — **STOP and report;
+do not deploy.** The polling fallback is a spec decision, not a default.
+
+### 3b. Create the database + branch, migrate
+
+```sh
+# (owner, authenticated pscale/psql — creds never enter an agent session)
+# 1. Create the prod database in the colocated region (§4), get the two URLs:
+#    - pooled  → DATABASE_URL
+#    - direct  → DATABASE_URL_DIRECT
+# 2. Run migrations against the pooled URL from the repo root:
+DATABASE_URL='<planetscale-pooled-url>' bun run db:migrate
+#    → "migrations applied". This installs the drizzle schema. pg-boss installs
+#      its own schema on first boss.start() (api/worker boot, or verify below).
+```
+
+### 3c. Gate — `bun run verify:planetscale`
+
+Run while **no worker is consuming** the prod queue (before cutover), so the
+affinity commit-probe's job is never picked up mid-check.
+
+```sh
+DATABASE_URL='<pooled-url>' DATABASE_URL_DIRECT='<direct-url>' bun run verify:planetscale
+```
+
+It asserts, exiting non-zero on any failure:
+- **A. Transaction affinity (pooled URL).** Runs the real ingest (INSERT event +
+  pg-boss enqueue in one tx) and confirms it commits atomically; then a second
+  attempt is **ROLLED BACK** and it proves NEITHER the event row NOR the job
+  survived. If either survives, the pooler broke transaction affinity
+  (statement-level pooling) → switch the pooled endpoint to transaction/session
+  pooling and re-run. (pg-boss also installs its schema here.)
+- **B. LISTEN/NOTIFY (direct URL).** Opens a `LISTEN`, fires a `NOTIFY` from a
+  second connection, asserts the payload arrives within 7s. **If B fails the
+  script STOPS and says so — it does NOT fall back to polling.** Report and wait.
+
+Both must print ✓ and the script must exit 0 before cutover.
 
 ---
 

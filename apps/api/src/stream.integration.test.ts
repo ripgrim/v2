@@ -37,6 +37,8 @@ function makeApp(auth: Auth | null) {
 		auth,
 		db,
 		pool,
+		// No pooler in the testcontainer, so the same pool holds the LISTEN.
+		directPool: pool,
 		boss,
 		webhookSecret: "s",
 		webOrigin: "http://localhost:3000",

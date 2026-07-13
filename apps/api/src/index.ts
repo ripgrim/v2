@@ -3,7 +3,7 @@ import {
 	createAuth,
 	resolveAuthPosture,
 } from "@tripwire/auth/server";
-import { createBoss, createDb } from "@tripwire/db";
+import { createBoss, createDb, createDirectPool } from "@tripwire/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import pino from "pino";
@@ -36,6 +36,7 @@ if (import.meta.main) {
 		process.exit(1);
 	}
 	const { db, pool } = createDb();
+	const directPool = createDirectPool();
 	const boss = await createBoss();
 
 	let auth: Auth | null = null;
@@ -66,6 +67,7 @@ if (import.meta.main) {
 		auth,
 		db,
 		pool,
+		directPool,
 		boss,
 		webhookSecret,
 		webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:3000",

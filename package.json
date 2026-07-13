@@ -23,7 +23,8 @@
 		"dev:worker": "bun run apps/worker/src/index.ts",
 		"replay": "bun run apps/worker/src/jobs/replay.ts",
 		"test:run": "bun run scripts/trigger-test-run.ts",
-		"test:lifecycle": "bun run scripts/test-lifecycle.ts"
+		"test:lifecycle": "bun run scripts/test-lifecycle.ts",
+		"verify:planetscale": "bun run scripts/verify-planetscale.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.5",

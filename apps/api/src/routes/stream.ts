@@ -31,8 +31,8 @@ export const stream = new Hono<ApiEnv>().get(
 	},
 	(c) =>
 		streamSSE(c, async (s) => {
-			const { db, pool, logger } = c.get("deps");
-			const client = await pool.connect();
+			const { db, directPool, logger } = c.get("deps");
+			const client = await directPool.connect();
 			let open = true;
 
 			const onNotification = async (msg: {

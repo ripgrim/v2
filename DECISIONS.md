@@ -1896,3 +1896,33 @@ LISTEN/NOTIFY connection split in Unit 3).
 - **Rollback documented:** Railway redeploy of the last good image; revert+push;
   webhook repoint back to the tunnel; PlanetScale branch/backup restore
   (migrations are forward-only — no down-migrations).
+
+### Unit 3 — PlanetScale: pooled/direct split + verify gate
+
+- **Two connection strings (sanctioned app change):** `DATABASE_URL` (pooled) for
+  all transactional/query work + pg-boss; `DATABASE_URL_DIRECT` (direct/session)
+  for LISTEN/NOTIFY ONLY. New `createDirectPool()` in `@tripwire/db` reads
+  `DATABASE_URL_DIRECT ?? DATABASE_URL`, so local dev (one Postgres, no pooler)
+  is byte-for-byte unchanged. Owner's design: LISTEN needs a persistent session
+  a transaction-mode pooler drops.
+  - api SSE stream: `directPool.connect()` holds the `LISTEN` (was `pool.connect()`).
+  - worker: its `pool` is used ONLY for `pg_notify`, so the whole worker `pool`
+    dep is now the direct pool; queries + pg-boss stay on the pooled `db`.
+- **`bun run verify:planetscale` — the pre-cutover gate** (`scripts/verify-planetscale.ts`,
+  depends only on `@tripwire/db` so it resolves from the repo root). Asserts and
+  exits non-zero:
+  - **A. Transaction affinity (pooled).** Runs the REAL ingest (`insertRawEvent`:
+    INSERT event + pg-boss enqueue in one tx) and confirms atomic commit; then a
+    second attempt is ROLLED BACK and it proves neither the event row nor the job
+    survived. A statement-level pooler would autocommit the pg-boss insert on a
+    different backend → it survives the ROLLBACK → the script fails loudly.
+  - **B. LISTEN/NOTIFY (direct).** LISTEN + NOTIFY across two direct connections,
+    payload asserted within 7s. **On failure the script STOPS — it does NOT fall
+    back to 2s polling** (a recorded spec decision, not the script's call).
+- **Verified locally:** exits 0 against the compose Postgres (both invariants
+  trivially hold with no pooler); exits 1 with the STOP message when
+  `DATABASE_URL_DIRECT` is unset. All 52 api/db/worker tests pass with the split;
+  the SSE integration test still exercises LISTEN/NOTIFY through the direct pool.
+- **Region pair (recorded):** Northern Virginia — Railway `us-east4` +
+  PlanetScale AWS `us-east-1`. Colocated because pg-boss polls and rules are
+  chatty; a cross-continent hop taxes every query.

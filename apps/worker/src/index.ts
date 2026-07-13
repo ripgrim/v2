@@ -1,6 +1,7 @@
 import {
 	createBoss,
 	createDb,
+	createDirectPool,
 	PROCESS_EVENT_QUEUE,
 	type ProcessEventJob,
 	RESUME_RUN_QUEUE,
@@ -29,7 +30,15 @@ import { sweepActions } from "./jobs/sweep-actions.ts";
  */
 if (import.meta.main) {
 	const logger = pino({ name: "worker" });
-	const { db, pool } = createDb();
+	const { db } = createDb();
+	/**
+	 * The worker's `pool` is used ONLY for `pg_notify` (the SSE fan-out signal),
+	 * so it goes through the direct/session endpoint — a NOTIFY delivered to the
+	 * api's direct LISTEN must reach the same Postgres backend, and PlanetScale's
+	 * transaction pooler would multiplex it away. Queries + pg-boss stay on the
+	 * pooled `db`/`DATABASE_URL`.
+	 */
+	const directPool = createDirectPool();
 	const boss = await createBoss();
 
 	const appId = process.env.GITHUB_APP_ID;
@@ -103,7 +112,7 @@ if (import.meta.main) {
 			await processEvent(
 				{
 					db,
-					pool,
+					pool: directPool,
 					reads,
 					adapter,
 					makeGenerate,
@@ -120,7 +129,7 @@ if (import.meta.main) {
 			await resumeRun(
 				{
 					db,
-					pool,
+					pool: directPool,
 					reads,
 					adapter,
 					makeGenerate,

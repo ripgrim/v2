@@ -1287,3 +1287,23 @@ region pair (Railway us-east4 + PlanetScale AWS us-east-1, colocated because
 pg-boss polls and rules are chatty), and rollback. Unit 3/4 runbooks are
 appended to DEPLOY.md in their own commits. Checks: biome clean on the three
 railway.json, JSON valid.
+
+**Unit — deploy, Unit 3: PlanetScale (pooled/direct split + verify gate).**
+PlanetScale's pooler drops the session a LISTEN needs, so the app now uses two
+URLs: `DATABASE_URL` (pooled) for all transactional/query work + pg-boss, and
+`DATABASE_URL_DIRECT` (direct/session) for LISTEN/NOTIFY only. New
+`createDirectPool()` in `@tripwire/db` falls back to `DATABASE_URL` when direct
+is unset, so local dev is unchanged. The api SSE stream now holds its `LISTEN`
+on the direct pool; the worker's `pool` (used only for `pg_notify`) is the
+direct pool, while queries + pg-boss stay pooled. New `bun run verify:planetscale`
+gates cutover: (A) transaction affinity on the pooled URL, PROVEN BY ROLLBACK —
+runs the real ingest (INSERT event + pg-boss enqueue in one tx), confirms atomic
+commit, then rolls back a second attempt and asserts neither the row nor the job
+survived (a statement-level pooler would autocommit the enqueue on another
+backend and it'd survive); (B) LISTEN/NOTIFY on the direct URL, payload asserted
+within 7s — and IF B FAILS THE SCRIPT STOPS, no polling fallback (that's a spec
+decision, not the script's). Region pair recorded: Railway us-east4 +
+PlanetScale AWS us-east-1 (N. Virginia), colocated. Verified: exits 0 against
+compose Postgres, exits 1 when DATABASE_URL_DIRECT is unset; 52 api/db/worker
+tests pass; typecheck all + biome + boundaries clean; api/worker images rebuilt
+and boot.

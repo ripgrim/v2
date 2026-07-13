@@ -38,6 +38,7 @@ beforeAll(async () => {
 		auth: null,
 		db,
 		pool,
+		directPool: pool,
 		boss,
 		webhookSecret: SECRET,
 		webOrigin: "http://localhost:3000",
