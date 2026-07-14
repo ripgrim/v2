@@ -1325,3 +1325,23 @@ on /activity that also proves LISTEN/NOTIFY survives the deployed direct
 connection end to end. Runbook covers deploy order + boot-health assertions
 (worker "github app credentials OK"), webhook repoint, the APP_URL fix, and
 rollback. Checks: biome clean on the new script + package.json; typecheck all.
+
+**Unit — deploy, Unit 4 follow-up: §10 leak invariant + smoke correction.** The
+owner asked the deploy smoke to prove the public run page leaks no threshold key
+(minDays/maxPerWindow/windowHours/max/minLength) or trace. Investigation found
+the run page has NO route loader — it hydrates client-side via the getRun GET
+server-fn, so the SSR HTML carries no run data (the runId isn't even in it) and a
+raw grep can't see a leak; worse, the old smoke's "powered by tripwire" footer
+grep would have FALSE-FAILED on a real deploy (footer renders post-hydration).
+Fixed both: (1) the mechanical §10 proof now lives in run-access.test.ts over
+toPublicRunView (the exact JSON the page fetches) — a run that tuned several
+rules (all five threshold keys in the snapshot + echoed into raw evidence, plus
+the ai-review raw trace) is projected to public and asserted to leak NONE of the
+six tokens, with teeth (each token asserted PRESENT in the full maintainer view
+so the pass isn't vacuous) + snapshot===null; runs every PR. (2) smoke:deploy's
+run-page check now asserts the page is SERVED 200 to an anonymous request (the
+public-path allowlist holds — a real regression guard) instead of grepping HTML;
+badge check unchanged. Rejected reverse-engineering getRun's seroval GET wire
+format + compiled id hash as brittle. Verified: 18 run-access tests pass (7 new,
+with teeth), web typecheck + biome clean, smoke passes against a seeded public
+run.

@@ -5,15 +5,21 @@
  * run link was unreachable for every blocked contributor (dither-kit#8). This
  * asserts they resolve over the public internet, exiting non-zero on failure.
  *
- * This is the MECHANICAL half. The owner still eyeballs that the badge visually
- * renders in the PR and that the run page READS right (plain-English summaries,
- * ai-review findings, no raw trace, no thresholds) — those are taste, not HTTP.
- * The PR flow itself (check fails on head SHA, one @-mention comment naming the
- * rule, supersede + resolution + review dismissal on the fix) is asserted by
- * `bun run test:lifecycle` against real GitHub state.
+ * This is the MECHANICAL, HTTP-layer half:
+ *   - the badge PNG is a real image (not a 404 / alt text);
+ *   - the public run page is SERVED to an anonymous request (200, not bounced to
+ *     /login) — the public-path allowlist holds.
+ * It deliberately does NOT grep the run page HTML: the page hydrates its data
+ * client-side (the getRun server-fn), so the SSR HTML carries no run data. The
+ * §10 LEAK invariant — no configured threshold, no raw trace reaches a stranger
+ * — is proven mechanically in `run-access.test.ts` over `toPublicRunView` (the
+ * exact JSON this page fetches), which runs every PR. The owner still eyeballs
+ * that the badge renders in the PR and the run page reads right. The PR flow
+ * (check fails on head SHA, one @-mention comment naming the rule, supersede +
+ * resolution + review dismissal) is asserted by `bun run test:lifecycle`.
  *
  *   APP_URL       the real public web URL (required) — same value the worker uses.
- *   SMOKE_RUN_ID  a real run id to fetch the public run page (optional; from the
+ *   SMOKE_RUN_ID  a real run id to reach the public run page (optional; from the
  *                 smoke PR's comment link). Skipped with a warning if unset.
  */
 const appUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
@@ -60,7 +66,7 @@ async function checkBadge(): Promise<void> {
 	}
 }
 
-/** 2 — the public run page must resolve with NO session and carry the footer. */
+/** 2 — the public run page must be SERVED to an anonymous request (not walled). */
 async function checkPublicRunPage(): Promise<void> {
 	if (!runId) {
 		process.stdout.write(
@@ -69,15 +75,21 @@ async function checkPublicRunPage(): Promise<void> {
 		return;
 	}
 	const url = `${appUrl}/runs/${runId}`;
-	process.stdout.write(`\n2. public run page (no session) — ${url}\n`);
+	process.stdout.write(
+		`\n2. public run page reachable (no session) — ${url}\n`,
+	);
 	try {
-		// No cookie header, manual redirect: a bounce to /login means the public
-		// stranger view is gated and a blocked contributor would hit a wall.
+		// The run page hydrates its data CLIENT-SIDE (the getRun server-fn), so the
+		// SSR HTML carries no run data — a raw grep can't see the projection here.
+		// What the HTTP layer CAN prove is the public-path allowlist: an anonymous
+		// request must be SERVED (200), not bounced to /login. The leak invariant
+		// itself (no thresholds / no trace reach public) is the mechanical proof in
+		// run-access.test.ts over toPublicRunView — the exact JSON this page fetches.
 		const res = await fetch(url, { redirect: "manual", headers: {} });
 		if (res.status >= 300 && res.status < 400) {
 			bad(
 				`redirect to ${res.headers.get("location") ?? "?"} — the run page is ` +
-					"session-gated; a signed-out contributor can't see it",
+					"session-gated; a signed-out contributor can't reach it",
 			);
 			return;
 		}
@@ -85,14 +97,7 @@ async function checkPublicRunPage(): Promise<void> {
 			bad(`status ${res.status} (want 200)`);
 			return;
 		}
-		const html = await res.text();
-		if (!html.toLowerCase().includes("powered by tripwire")) {
-			bad(
-				'missing the "powered by tripwire" footer (public projection marker)',
-			);
-			return;
-		}
-		pass('200, unauthenticated, "powered by tripwire" footer present');
+		pass("200 to an anonymous request (public-path allowlist holds)");
 	} catch (error) {
 		bad(`request failed: ${error instanceof Error ? error.message : error}`);
 	}

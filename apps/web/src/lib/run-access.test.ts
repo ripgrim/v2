@@ -214,6 +214,80 @@ describe("toPublicRunView", () => {
 	});
 });
 
+/**
+ * §10 leak invariant — the mechanical proof that a stranger never sees a repo's
+ * tuning. The public run page renders exactly `toPublicRunView`'s output (the
+ * getRun server-fn response it fetches), so asserting the projection is the
+ * proof: NO configured threshold key and NO raw trace may survive to public.
+ */
+describe("§10 leak invariant — no repo tuning reaches a stranger", () => {
+	/** Every config-threshold key a stranger must never see, plus the raw trace. */
+	const LEAK_TOKENS = [
+		"minDays",
+		"maxPerWindow",
+		"windowHours",
+		"max",
+		"minLength",
+		"trace",
+	];
+
+	// A run that tuned several rules: the thresholds live in the workflow
+	// snapshot AND echo into each rule's raw evidence; the ai-review step carries
+	// its raw trace. The stored public partitions carry none of it.
+	const tunedRuleStep: RunStepView = {
+		...ruleStep,
+		evidence: {
+			ruleId: "account-age",
+			version: 1,
+			status: "evaluated",
+			passed: false,
+			evaluatedAt: "2026-07-11T00:00:00.000Z",
+			evidence: {
+				accountAgeDays: 1,
+				minDays: 30,
+				maxPerWindow: 5,
+				windowHours: 24,
+				max: 500,
+				minLength: 20,
+			},
+		},
+		publicEvidence: { accountAgeDays: 1 },
+	};
+
+	const tunedView: RunView = {
+		...fullView,
+		snapshot: [
+			{
+				id: "default@1",
+				config: {
+					minDays: 30,
+					maxPerWindow: 5,
+					windowHours: 24,
+					max: 500,
+					minLength: 20,
+				},
+			},
+		],
+		steps: [tunedRuleStep, aiReviewStep],
+	};
+
+	const publicJson = JSON.stringify(toPublicRunView(tunedView));
+	const fullJson = JSON.stringify(tunedView);
+
+	for (const token of LEAK_TOKENS) {
+		test(`the public run view leaks no "${token}"`, () => {
+			// Teeth: the token IS in the full (maintainer) view, so a passing
+			// public assertion is meaningful — never vacuously green.
+			expect(fullJson).toContain(token);
+			expect(publicJson).not.toContain(token);
+		});
+	}
+
+	test("the public view carries no workflow snapshot at all", () => {
+		expect(toPublicRunView(tunedView).snapshot).toBeNull();
+	});
+});
+
 describe("toFullRunView", () => {
 	test("session view is unchanged raw evidence — publicEvidence stripped, summary kept", () => {
 		const full = toFullRunView(fullView);

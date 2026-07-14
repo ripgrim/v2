@@ -247,8 +247,13 @@ The 7 criteria and how each is covered:
    renders in the PR.
 5. **The run link RESOLVES to a real public run page, incognito, no session**:
    plain-English summaries, ai-review findings, no raw trace, no thresholds,
-   "powered by tripwire" footer. — `smoke:deploy` asserts 200 unauthenticated +
-   footer + no login redirect; **owner eyeballs** it reads right.
+   "powered by tripwire" footer. — `smoke:deploy` asserts the page is SERVED 200
+   to an anonymous request (the public-path allowlist holds, no /login bounce).
+   The page hydrates its data client-side, so the **leak invariant** (no
+   threshold key `minDays/maxPerWindow/windowHours/max/minLength`, no `trace`
+   reaches a stranger) is the mechanical CI proof in `run-access.test.ts` over
+   `toPublicRunView` — the exact JSON this page fetches. **Owner eyeballs** it
+   reads right in an incognito window.
 6. **Push a fix ⇒ block comment superseded + resolution comment below it +
    request-changes review dismissed.** — `test:lifecycle` (drives blocked →
    passed, asserts supersede/marker/review present→DISMISSED).

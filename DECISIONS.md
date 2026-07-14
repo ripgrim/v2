@@ -1954,3 +1954,32 @@ LISTEN/NOTIFY connection split in Unit 3).
   set `APP_URL` to the real web URL, the 7-criteria smoke mapped to the scripts,
   and rollback (Railway redeploy / revert+push / repoint webhook back to the
   tunnel / PlanetScale branch restore).
+
+### Unit 4 follow-up — §10 leak invariant (mechanical proof) + smoke correction
+
+- **Where the leak proof actually belongs.** The owner asked the deploy smoke to
+  assert the public run page HTML carries NO threshold key (`minDays`,
+  `maxPerWindow`, `windowHours`, `max`, `minLength`) and no `trace`. Investigating
+  showed the run page (`/runs/$runId`) has **no route loader** — it hydrates its
+  data CLIENT-SIDE via the `getRun` GET server-fn, so the SSR HTML carries no run
+  data at all (the runId isn't even in it). A raw-HTML grep therefore can't see a
+  leak — and the old smoke check for the "powered by tripwire" footer would have
+  **false-failed on a real deploy** (that footer renders after hydration). Fixed.
+- **The mechanical proof is a projection test, not an HTTP grep.** The public page
+  renders exactly `toPublicRunView`'s output (the getRun response), so asserting
+  that pure projection IS the proof, and it runs every PR (not just at deploy).
+  Extended `run-access.test.ts`: a run that tuned several rules (all five
+  threshold keys in the workflow snapshot AND echoed into raw evidence, plus the
+  ai-review raw `trace`) is projected to public and asserted to leak NONE of the
+  six tokens — WITH TEETH (the same tokens are asserted present in the full
+  maintainer view, so a pass is never vacuous), plus `snapshot === null`.
+- **Smoke corrected.** `smoke:deploy`'s run-page check no longer greps HTML for
+  the footer/leak; it asserts the page is SERVED 200 to an anonymous request (the
+  public-path allowlist holds — a real §10 regression guard: if `isPublicPath`
+  broke, a stranger would hit /login). The badge check (200 + image/png) is
+  unchanged. DEPLOY.md §5 step 5 updated to point the leak invariant at the CI
+  projection test.
+- **Not reverse-engineered.** Hitting `getRun` from the smoke would mean
+  replicating TanStack Start's seroval GET-payload wire format against a compiled
+  server-fn id hash — brittle coupling to build internals. Rejected in favor of
+  the projection test.
