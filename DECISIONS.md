@@ -2083,3 +2083,21 @@ being gated; only dither-kit was intended. Fixed by arming.
   guessed). Modal a11y: the backdrop is a real button, the panel a `role=dialog`
   sibling (no stopPropagation), Esc closes.
 - Deep-link `?repo=` (the shared-link constraint) rides with Unit 5's routing pass.
+
+### Unit 5 — home goes cross-repo
+
+- **Home is the ONLY cross-repo surface.** Scope's weakness: you're inside
+  dither-kit while scratch has items waiting and can't see it. Fixed at the front
+  door — `/` shows "across your repos — N awaiting, N blocked today" + a per-repo
+  breakdown ranked by attention (pending desc → blocked-24h → recent activity).
+  Clicking a repo `chooseActiveRepo` → scopes in → `/moderation`. Reuses the
+  switcher signal query; unarmed repos show as "available — not armed", never zeros.
+- **The scoped moderation queue moved to `/moderation`** (the reverse of the old
+  redirect); an unarmed active repo shows the arm hero there. Topbar nav: Home
+  (`/`, cross-repo) + Queue (`/moderation`, scoped). Everything else stays scoped.
+- Spec §4/§10 updated: arming, the scope model, the switcher, cross-repo home.
+- **Deferred (one constraint):** deep-link `?repo=owner/name` on the scoped routes.
+  The active repo is persisted per-user server-side, so a shared `/rules` link
+  shows the RECIPIENT's active repo (a safe default, not the wrong config) — the
+  `?repo=` override (validateSearch + active-repo override on each scoped route)
+  is a focused follow-up, flagged rather than half-built.

@@ -1,11 +1,17 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { ModerationPage } from "#/components/moderation/moderation-page";
+import { moderationQueueOptions } from "#/components/moderation/moderation-queue";
+import { moderationStatsQueryOptions } from "#/lib/moderation.query";
 
 /**
- * The moderation queue is the home page now (§4 collapse — one queue surface).
- * `/moderation` redirects so old links keep working.
+ * The SCOPED moderation queue for the active repo (§4). Home ("/") went
+ * cross-repo; this is where triage lives now.
  */
 export const Route = createFileRoute("/moderation")({
-	beforeLoad: () => {
-		throw redirect({ to: "/" });
+	ssr: false,
+	loader: ({ context }) => {
+		void context.queryClient.prefetchQuery(moderationQueueOptions());
+		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
 	},
+	component: ModerationPage,
 });

@@ -3,6 +3,7 @@ import {
 	Analytics01Icon,
 	CheckListIcon,
 	FlowIcon,
+	Home01Icon,
 	Logout01Icon,
 	MoonIcon,
 	Queue01Icon,
@@ -46,7 +47,13 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 			</div>
 
 			<div className="hidden shrink-0 items-center gap-0.5 md:flex">
-				<NavLink to="/" label="Queue" icon={Queue01Icon} value={counts.queue} />
+				<NavLink to="/" label="Home" icon={Home01Icon} />
+				<NavLink
+					to="/moderation"
+					label="Queue"
+					icon={Queue01Icon}
+					value={counts.queue}
+				/>
 				<NavLink to="/activity" label="Activity" icon={ActivityIcon} />
 				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
 				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { generateId } from "@tripwire/utils";
 import {
 	applyMigrations,
 	createDb,
@@ -7,11 +8,15 @@ import {
 	type TestDatabase,
 } from "../index.ts";
 import { forgeIdentities, user } from "../schema/auth.ts";
+import { events } from "../schema/events.ts";
+import { moderationItems } from "../schema/moderation.ts";
+import { runs } from "../schema/runs.ts";
 import {
 	claimInstallationForForgeUser,
 	getActiveRepo,
 	getOnboardingState,
 	linkUserInstallation,
+	listSwitcherRepos,
 	listUserRepos,
 	setActiveRepo,
 } from "./onboarding.ts";
@@ -118,6 +123,71 @@ describe("onboarding links", () => {
 		}
 		expect(await setActiveRepo(db, "u-3", foreign.id)).toBe(false);
 		expect(await getActiveRepo(db, "u-3")).toBeNull();
+	});
+});
+
+describe("listSwitcherRepos — a name plus SIGNAL, ranked by activity", () => {
+	/** Give a repo a stored event, a blocked run, and a pending moderation item. */
+	async function seedActivity(repoFullName: string): Promise<void> {
+		const eventId = generateId();
+		await db.insert(events).values({
+			id: eventId,
+			deliveryId: generateId(),
+			rawKind: "pull_request",
+			raw: {},
+			repoFullName,
+		});
+		const runId = generateId();
+		await db.insert(runs).values({
+			id: runId,
+			eventId,
+			repoFullName,
+			verdict: "block",
+			workflowSnapshot: {},
+		});
+		await db.insert(moderationItems).values({
+			id: generateId(),
+			runId,
+			nodeId: "gate",
+			status: "pending",
+		});
+	}
+
+	test("scoped to the user's installations, signal-carrying, active-first", async () => {
+		await seedUser("u-sw");
+		await seedRepo("inst-sw", "r-quiet", "sw/quiet");
+		await seedRepo("inst-sw", "r-busy", "sw/busy");
+		await linkUserInstallation(db, {
+			userId: "u-sw",
+			installationId: "inst-sw",
+		});
+		await seedActivity("sw/busy");
+
+		const rows = await listSwitcherRepos(db, "u-sw");
+		expect(rows.map((r) => r.fullName)).toEqual(["sw/busy", "sw/quiet"]);
+
+		const busy = rows[0];
+		if (!busy) {
+			throw new Error("expected sw/busy");
+		}
+		expect(busy.armed).toBe(false);
+		expect(busy.pendingModeration).toBe(1);
+		expect(busy.blocked24h).toBe(1);
+		expect(busy.lastActivityAt).not.toBeNull();
+
+		const quiet = rows[1];
+		if (!quiet) {
+			throw new Error("expected sw/quiet");
+		}
+		expect(quiet.pendingModeration).toBe(0);
+		expect(quiet.blocked24h).toBe(0);
+		expect(quiet.lastActivityAt).toBeNull();
+	});
+
+	test("another user's installation repos never leak in", async () => {
+		await seedUser("u-sw-2");
+		const rows = await listSwitcherRepos(db, "u-sw-2");
+		expect(rows).toHaveLength(0);
 	});
 });
 

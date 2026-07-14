@@ -283,10 +283,15 @@ src/
 The final, real surface set (owner decision — **tripwire doesn't re-render
 GitHub**, so the demo's GitHub-browser pages are cut):
 Every dashboard surface is SCOPED to the signed-in user's ONE active repo (§10
-onboarding) — no repo dropdown, no "select a repo" state.
-- `/` — **Home**: the REAL moderation queue (paused runs, approve/deny,
-  view-run) under the real `getHomeStats` header, scoped to the active repo. The
-  one queue surface; `/moderation` redirects here.
+onboarding) EXCEPT home. A topbar **repo switcher** (+ ⌘K) changes which repo is
+active — rows carry signal (armed · pending · blocked-24h), sorted by recent
+activity. **Arming (§4 below)** gates the switch: an unarmed repo is scoped for
+viewing but tripwire touches nothing until it's explicitly armed.
+- `/` — **Home**: the ONLY cross-repo surface — "across your repos, N awaiting,
+  N blocked today" + a per-repo breakdown ranked by attention; clicking a repo
+  scopes into it. Unarmed repos show as "available — not armed".
+- `/moderation` — the SCOPED moderation queue (paused runs, approve/deny,
+  view-run) for the active repo; an unarmed repo shows the arm call-to-action.
 - `/activity` — live feed chained by CHANGE REQUEST (SSE), scoped to the active
   repo: one stack of cards per PR (current verdict + timeline of every
   event/run), standalone rows for repo pushes · `/rules` — rule config for the
@@ -726,7 +731,12 @@ auth redirect to `/login`), gated in `__root` `beforeLoad`.
   user (an ownerless install is a bug); repos are reached through it
   (`repos.installation_id = user_installations.installation_id`). `user.active_repo_id`
   FK → `repos.id`. ALL granted repos stay synced (existing installation-sync
-  path); only the active one scopes the dashboard — no switcher (MVP).
+  path); the active one scopes the dashboard, and the topbar **repo switcher**
+  (§4) changes which. Picking a repo scopes it; it does NOT arm it — arming is a
+  separate, explicit act (`repos.armed`, default false): an unarmed repo ingests
+  events but runs NOTHING (no run/check/comment), so installing on a 400-repo org
+  gates none of them until the maintainer arms. Arming replays the repo's stored
+  events into real runs (`surface:false` — no comments on historical threads).
 - **CSRF:** the install `state` HMAC-binds the initiating user (BETTER_AUTH_SECRET);
   the callback links only when the state's user matches the session — a victim
   can't be tricked into claiming a foreign installation.

@@ -1401,3 +1401,18 @@ search (fine under ~200; server-side search noted as the scale follow-up). Modal
 a11y: backdrop is a real button, panel a role=dialog sibling, Esc closes.
 Deep-link ?repo= rides with Unit 5. Checks: typecheck web+db, biome, boundaries,
 51 web tests + full suite green.
+
+**Unit — repo arming, Unit 5: home goes cross-repo (§4).** Home is now the ONLY
+cross-repo surface: "across your repos — N awaiting, N blocked today" + a
+per-repo breakdown ranked by attention (pending → blocked-24h → recent
+activity), reusing the switcher signal query; clicking a repo scopes into it
+(chooseActiveRepo → /moderation). Unarmed repos show "available — not armed",
+never zeros. The scoped moderation queue moved to /moderation (reversing the old
+redirect); an unarmed active repo shows the arm hero. Topbar nav gained Home
+(cross-repo) + Queue (/moderation, scoped); everything else stays scoped. Spec
+§4/§10 updated (arming, scope model, switcher, cross-repo home). Added a
+listSwitcherRepos integration test (signal + ranking). One constraint deferred
+and flagged: deep-link ?repo= on scoped routes (active repo is persisted
+per-user, so a shared link shows the recipient's repo — a safe default; the
+override is a focused follow-up). Checks: typecheck all, biome, boundaries,
+242/242.
