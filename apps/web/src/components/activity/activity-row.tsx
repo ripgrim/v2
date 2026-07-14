@@ -88,7 +88,14 @@ function noRunReason(event: NormalizedEvent): string {
 	return "maintainer — exempt";
 }
 
-export function ActivityRow({ item }: { item: ActivityItem }) {
+export function ActivityRow({
+	item,
+	unarmed,
+}: {
+	item: ActivityItem;
+	/** §4 — the repo is scoped but not armed; no-run events read "not armed". */
+	unarmed?: boolean;
+}) {
 	const { event, run, pending } = item;
 	const hasRun = run !== null;
 
@@ -126,7 +133,11 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
 				</div>
 			</div>
 
-			<Status pending={pending} run={run} reason={noRunReason(event)} />
+			<Status
+				pending={pending}
+				reason={unarmed && !hasRun ? "not armed" : noRunReason(event)}
+				run={run}
+			/>
 
 			<span className="w-14 shrink-0 text-right text-muted-foreground text-xs">
 				{formatRelativeTime(event.occurredAt)}

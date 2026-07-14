@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef } from "react";
+import { ArmCallout } from "#/components/arming/arm-callout";
 import { DitherStatCard } from "#/components/charts/dither-stat-card";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import {
@@ -9,6 +10,7 @@ import {
 } from "#/components/moderation/moderation-queue";
 import { Skeleton } from "#/components/ui/skeleton";
 import { moderationStatsQueryOptions } from "#/lib/moderation.query";
+import { activeRepoQueryOptions } from "#/lib/onboarding.query";
 
 export const Route = createFileRoute("/")({
 	ssr: false,
@@ -20,17 +22,40 @@ export const Route = createFileRoute("/")({
 });
 
 function DashboardPage() {
+	const repoQuery = useQuery(activeRepoQueryOptions());
 	const queueQuery = useQuery(moderationQueueOptions());
 	const statsQuery = useQuery(moderationStatsQueryOptions());
 
-	if (queueQuery.error) throw queueQuery.error;
-	if (statsQuery.error) throw statsQuery.error;
-
 	// Only run the scramble intro when the stats actually had to fetch —
-	// a cached navigation renders the values immediately.
+	// a cached navigation renders the values immediately. (Above the early
+	// return so hooks stay unconditional.)
 	const fetchedStats = useRef(false);
 	if (statsQuery.isLoading) fetchedStats.current = true;
 	const animateStats = fetchedStats.current;
+
+	// §4 — an unarmed active repo is a call to action that dominates the page;
+	// the moderation dashboard is silent until the gate is on.
+	const repo = repoQuery.data;
+	if (repo && !repo.armed) {
+		return (
+			<DashboardLayout counts={{}}>
+				<div className="px-5 py-6 md:px-8 md:py-10">
+					<div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
+						<header className="flex flex-col gap-1.5">
+							<h1 className="font-semibold text-2xl tracking-tight">Home</h1>
+							<p className="text-muted-foreground text-sm">
+								the dashboard fills in the moment you arm this repo.
+							</p>
+						</header>
+						<ArmCallout repoFullName={repo.fullName} variant="hero" />
+					</div>
+				</div>
+			</DashboardLayout>
+		);
+	}
+
+	if (queueQuery.error) throw queueQuery.error;
+	if (statsQuery.error) throw statsQuery.error;
 
 	const items = queueQuery.data ?? [];
 	const counts = { queue: queueQuery.data?.length };

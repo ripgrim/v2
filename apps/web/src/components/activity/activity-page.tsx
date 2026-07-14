@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { ActivityRow } from "#/components/activity/activity-row";
 import { ActivityStack } from "#/components/activity/activity-stack";
 import { LiveIndicator } from "#/components/activity/live-indicator";
+import { ArmCallout } from "#/components/arming/arm-callout";
 import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import type { ActivityFeedItem } from "#/lib/activity.functions";
 import { activityQueryOptions, useActivityStream } from "#/lib/activity.query";
+import { activeRepoQueryOptions } from "#/lib/onboarding.query";
 import { cn } from "#/lib/utils";
 
 type Filter = "all" | "block" | "needs_review" | "pass" | "no-run";
@@ -41,8 +43,10 @@ function itemKey(item: ActivityFeedItem): string {
 
 export function ActivityPage() {
 	const { data, error, isSuccess } = useQuery(activityQueryOptions());
+	const { data: repo } = useQuery(activeRepoQueryOptions());
 	useActivityStream();
 	const [filter, setFilter] = useState<Filter>("all");
+	const unarmed = Boolean(repo && !repo.armed);
 
 	// Filter over the cached feed — instant, and live rows still land in cache.
 	const items = useMemo(
@@ -62,6 +66,14 @@ export function ActivityPage() {
 					</div>
 					<LiveIndicator live={isSuccess} />
 				</header>
+
+				{unarmed && repo ? (
+					<ArmCallout
+						className="mb-4"
+						repoFullName={repo.fullName}
+						variant="banner"
+					/>
+				) : null}
 
 				<div className="mb-4 flex flex-wrap gap-1.5">
 					{FILTERS.map((f) => (
@@ -107,7 +119,11 @@ export function ActivityPage() {
 							item.type === "group" ? (
 								<ActivityStack group={item.group} key={itemKey(item)} />
 							) : (
-								<ActivityRow item={item.entry} key={itemKey(item)} />
+								<ActivityRow
+									item={item.entry}
+									key={itemKey(item)}
+									unarmed={unarmed}
+								/>
 							),
 						)}
 					</div>

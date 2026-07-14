@@ -6,6 +6,7 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ArmCallout } from "#/components/arming/arm-callout";
 import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { WorkflowCanvas } from "#/components/workflows/editor/canvas";
@@ -60,6 +61,13 @@ export function WorkflowsPage() {
 						</span>
 					) : null}
 				</header>
+				{repo && !repo.armed ? (
+					<ArmCallout
+						className="mb-4"
+						repoFullName={repo.fullName}
+						variant="banner"
+					/>
+				) : null}
 				{repo === null ? (
 					<EmptyState
 						description="link a repo to shape its workflow. until then there's nothing to wire — the DAG runs per-repo."

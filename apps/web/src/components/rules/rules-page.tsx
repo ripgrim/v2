@@ -1,6 +1,7 @@
 import { CheckListIcon } from "@hugeicons/core-free-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
+import { ArmCallout } from "#/components/arming/arm-callout";
 import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { RuleCard } from "#/components/rules/rule-card";
@@ -60,6 +61,14 @@ export function RulesPage() {
 						</span>
 					) : null}
 				</header>
+
+				{repo && !repo.armed ? (
+					<ArmCallout
+						className="mb-6"
+						repoFullName={repo.fullName}
+						variant="banner"
+					/>
+				) : null}
 
 				{repo === null ? (
 					<EmptyState

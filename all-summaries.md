@@ -1361,3 +1361,15 @@ banner/inert states are Unit 2). `ensureDemoRepo` arms demo repos so dev:demo
 still shows the story. Run-expecting integration tests arm their fixture repo in
 setup; new dedicated test proves unarmed ⇒ 0 runs but the event normalizes.
 Checks: typecheck all, biome, boundaries, 239/239 tests.
+
+**Unit — repo arming, Unit 2: the arming affordance (§4).** Unarmed is a call to
+action, not an empty state. New `ArmCallout` (hero + banner variants): the hero
+dominates home (what arming does + ARM button), the banner leads rules/workflows/
+activity while their content stays visible-but-inert. New `armActiveRepo` server
+fn (the only UI path to arming) sets the active repo armed and invalidates
+broadly so the dashboard fills in; toasts in constitution voice ("tripwire is now
+watching {repo}", lowercase, no exclamation). The activity feed shows a no-run
+event on an unarmed repo as "not armed" (an `unarmed` prop on ActivityRow) rather
+than a stuck evaluation. Home's early return sits below the hooks (unconditional-
+hooks). Checks: typecheck web, biome, boundaries, 51 web tests + full 239 still
+green.

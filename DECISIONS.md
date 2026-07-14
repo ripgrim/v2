@@ -2019,3 +2019,21 @@ being gated; only dither-kit was intended. Fixed by arming.
 - **Tests:** the run-expecting integration suites (toggles, moderation,
   process-event) now arm their fixture repo in setup; new gate test added. Full
   suite 239/239.
+
+### Unit 2 — the arming affordance (unmissable)
+
+- **Unarmed is a call to action, never an empty state.** A single reusable
+  `ArmCallout` (`components/arming/`) with two variants: `hero` DOMINATES the home
+  page (what arming does + one ARM button), `banner` LEADS the scoped pages
+  (rules, workflows, activity) while their content stays visible-but-inert below
+  ("what's below is what will run once you arm it"). Constitution voice — lowercase,
+  no exclamation marks, "change request", never "bot".
+- **`armActiveRepo` server fn** (`arm.functions.ts`) is the only UI path to arming:
+  resolves the active repo (session or open-dev first-repo) and `setRepoArmed(true)`.
+  The mutation invalidates broadly on settle so the now-armed dashboard fills in;
+  toasts "tripwire is now watching {repo}". Unit 3 enqueues backfill from here.
+- **Activity feed:** a no-run event on an unarmed repo reads **"not armed"** (an
+  `unarmed` prop on `ActivityRow` overrides the generic no-run reason) instead of
+  looking like a stuck evaluation — the Unit 1 data (no runs) made visible.
+- Home's early return sits below the hooks (unconditional-hooks rule); the
+  moderation dashboard is silent until the gate is on.
