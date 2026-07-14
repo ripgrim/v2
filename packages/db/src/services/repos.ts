@@ -5,6 +5,7 @@ import {
 import { generateId } from "@tripwire/utils";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "../client.ts";
+import { userInstallations } from "../schema/auth.ts";
 import { repos, ruleConfigs, workflowDefinitions } from "../schema/repos.ts";
 
 /** Repo + config persistence (§4): installation sync, config CRUD, workflows. */
@@ -94,7 +95,14 @@ export async function syncInstallationRepos(
 	}
 }
 
-/** Uninstall: soft-delete every repo the installation granted. */
+/**
+ * Uninstall: soft-delete every repo the installation granted AND drop the
+ * `user_installations` link. Repos keep their history (soft-delete); the link is
+ * a live-ownership pointer, so it must go — otherwise `hasInstallation` stays
+ * true with zero repos and onboarding is stuck on the "syncing…" spinner with no
+ * install button, unable to reinstall. Reinstalling issues a fresh installation
+ * id and re-links cleanly.
+ */
 export async function removeInstallation(
 	db: Db,
 	installationId: string,
@@ -104,6 +112,14 @@ export async function removeInstallation(
 		.set({ removedAt: new Date() })
 		.where(
 			and(eq(repos.forge, "github"), eq(repos.installationId, installationId)),
+		);
+	await db
+		.delete(userInstallations)
+		.where(
+			and(
+				eq(userInstallations.forge, "github"),
+				eq(userInstallations.installationId, installationId),
+			),
 		);
 }
 

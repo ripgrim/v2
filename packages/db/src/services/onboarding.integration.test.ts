@@ -20,7 +20,7 @@ import {
 	listUserRepos,
 	setActiveRepo,
 } from "./onboarding.ts";
-import { syncInstallationRepos } from "./repos.ts";
+import { removeInstallation, syncInstallationRepos } from "./repos.ts";
 
 /**
  * §10 onboarding — the user ↔ installation ↔ active-repo links. An installation
@@ -123,6 +123,29 @@ describe("onboarding links", () => {
 		}
 		expect(await setActiveRepo(db, "u-3", foreign.id)).toBe(false);
 		expect(await getActiveRepo(db, "u-3")).toBeNull();
+	});
+});
+
+describe("uninstall drops the installation link — no onboarding limbo", () => {
+	test("removeInstallation clears hasInstallation so the user can reinstall", async () => {
+		await seedUser("u-uninstall");
+		await seedRepo("inst-uninstall", "r-un", "acme/uninstalled");
+		await linkUserInstallation(db, {
+			userId: "u-uninstall",
+			installationId: "inst-uninstall",
+		});
+
+		const before = await getOnboardingState(db, "u-uninstall");
+		expect(before.hasInstallation).toBe(true);
+		expect(before.repos.map((r) => r.fullName)).toEqual(["acme/uninstalled"]);
+
+		await removeInstallation(db, "inst-uninstall");
+
+		// The link is gone (not just the repos), so onboarding offers the install
+		// button again instead of spinning forever on "syncing…" with zero repos.
+		const after = await getOnboardingState(db, "u-uninstall");
+		expect(after.hasInstallation).toBe(false);
+		expect(after.repos).toHaveLength(0);
 	});
 });
 
