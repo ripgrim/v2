@@ -353,6 +353,23 @@ export async function listRuns(
 	return await db.select().from(runs).orderBy(desc(runs.id)).limit(limit);
 }
 
+/**
+ * The most recent run's id for a repo, or null when none exist — powers the
+ * command palette's "latest run" jump (§4). Backed by `runs_repo_created_idx`.
+ */
+export async function latestRunIdForRepo(
+	db: Db,
+	repoFullName: string,
+): Promise<string | null> {
+	const [row] = await db
+		.select({ id: runs.id })
+		.from(runs)
+		.where(eq(runs.repoFullName, repoFullName))
+		.orderBy(desc(runs.id))
+		.limit(1);
+	return row?.id ?? null;
+}
+
 export interface ReplayRunRow {
 	id: string;
 	status: string;

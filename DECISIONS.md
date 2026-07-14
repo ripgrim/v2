@@ -2102,6 +2102,45 @@ being gated; only dither-kit was intended. Fixed by arming.
   `?repo=` override (validateSearch + active-repo override on each scoped route)
   is a focused follow-up, flagged rather than half-built.
 
+### Follow-up — the switcher becomes a command palette (cmdk)
+
+- **Dependency: `cmdk ^1.1.1`** added to `apps/web`. It replaces the hand-rolled
+  switcher's keyboard/selection guts — arrow/enter/loop/active-item semantics that
+  are a11y-bug bait to reimplement. It's the shadcn/cmdk stack the app already
+  visually mimicked; no new peer footprint we use (`@radix-ui/react-dialog` comes
+  along but we keep our own overlay). This is the DECISIONS entry AGENTS.md
+  requires for new deps.
+- **Custom filtering, cmdk semantics.** `shouldFilter={false}` — cmdk owns
+  keyboard nav + selection; WE own matching. Each item carries `searchTags` (a
+  repo's owner + short + full name; a page's synonyms — "gate"/"block"/"checks"
+  all find Rules). A debounced (200ms) query is `tokenize`d and ANDed: every term
+  must appear in the item's `label + searchTags`. This is the reference's
+  `matchesSearchItem`, not cmdk's built-in fuzzy score.
+- **Three groups, two item modes.** REPOS (every synced repo, sorted by recent
+  activity, grouped by owner, carrying the same `listSwitcherRepos` signal — no
+  second query), ACTIONS (arm/disarm the active repo, open latest run, sign out),
+  NAVIGATION (Home/Moderation/Activity/Rules/Workflows). Items are the reference's
+  two-mode shape: `onSelect` either runs an action or navigates — navigation and
+  actions share one list.
+- **Armed vs unarmed select differs (the one behavioural rule).** Selecting an
+  ARMED repo scopes into it (`chooseActiveRepo`, closes); selecting an UNARMED one
+  ARMS it inline (`armRepoById`, "↵ to arm" hint, stays open so the dot flips) —
+  never silently scope a dead repo.
+- **Supersedes Unit 4's "default to repos with activity + toggle".** Owner asked
+  for all repos always; the activity filter and its footer toggle are gone (that
+  was also the earlier polish commit). Search is what narrows a large org now; the
+  footer shows a live result count. Sort-by-activity stays.
+- **New reads:** `runServices.latestRunIdForRepo` (one indexed row via
+  `runs_repo_created_idx`) behind `getLatestRunId` (active-repo scoped) →
+  `latestRunQueryOptions`; `disarmActiveRepo` server fn (setRepoArmed false, no
+  backfill on the way down — the stored events are still there to replay). All
+  three palette queries mount with the palette ⇒ fetch on OPEN, not app mount.
+- **Kept, not rewired:** the topbar trigger (still shows the active repo), the ⌘K
+  binding, and active-repo scoping. Added a global "/" open (guarded so it doesn't
+  fire while typing in a field). Overlay a11y unchanged (button backdrop +
+  `role=dialog` sibling, Esc closes). Deep-link `?repo=` still the flagged
+  follow-up — navigation here uses `to:path` without search, so it doesn't touch it.
+
 ## The interactive live-E2E harness — `bun run test` (2026-07-13, §11)
 
 Three one-off scripts (`test:run`, `test:lifecycle`, `smoke:deploy`) and a dozen

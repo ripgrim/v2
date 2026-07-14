@@ -283,10 +283,14 @@ src/
 The final, real surface set (owner decision — **tripwire doesn't re-render
 GitHub**, so the demo's GitHub-browser pages are cut):
 Every dashboard surface is SCOPED to the signed-in user's ONE active repo (§10
-onboarding) EXCEPT home. A topbar **repo switcher** (+ ⌘K) changes which repo is
-active — rows carry signal (armed · pending · blocked-24h), sorted by recent
-activity. **Arming (§4 below)** gates the switch: an unarmed repo is scoped for
-viewing but tripwire touches nothing until it's explicitly armed.
+onboarding) EXCEPT home. A topbar trigger opens a **command palette** (⌘K or "/",
+built on cmdk) — the app's one keyboard surface: switch repos (rows carry signal —
+armed · pending · blocked-24h — sorted by recent activity, grouped by owner), run
+actions (arm/disarm the active repo, open latest run, sign out), and navigate,
+all fuzzy-searchable by alternate names. **Arming (§4 below)** gates the switch: an
+unarmed repo is scoped for viewing but tripwire touches nothing until it's
+explicitly armed — selecting one in the palette arms it inline rather than scoping
+into a dead repo.
 - `/` — **Home**: the ONLY cross-repo surface — "across your repos, N awaiting,
   N blocked today" + a per-repo breakdown ranked by attention; clicking a repo
   scopes into it. Unarmed repos show as "available — not armed".
