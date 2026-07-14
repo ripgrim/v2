@@ -19,20 +19,23 @@ import { $ } from "bun";
  * and asserts the comment thread, the request-changes review, and the `tripwire`
  * check at each step. Idempotent: it wipes any prior lifecycle PR/branch first.
  *
- * Isolates the gate to crypto-address@1 for the duration (other baseline +
- * opt-in rules on TEST_REPO would keep phase 2 blocked — pr-rate-limit after
- * a few retries, ai-review on junk docs, profile-readme, …). Prior rule_configs
- * are snapshotted and restored on exit.
+ * ── TWO WAYS TO GET A NON-EXEMPT ACTOR ────────────────────────────────────
+ * Tripwire exempts anyone with write+ access (maintainer/org member). So the
+ * pushing actor must be non-exempt or nothing runs. Either:
+ *   A. LOCAL / same-repo: push straight to TEST_REPO with
+ *      `TRIPWIRE_DISABLE_EXEMPTION=true` on the worker (dev only — refused in
+ *      production). This is the default when TEST_CONTRIBUTOR is unset.
+ *   B. PROD / FORK MODE (set TEST_CONTRIBUTOR): the script `gh auth switch`es to
+ *      the contributor account, forks TEST_REPO, and opens a CROSS-REPO PR from
+ *      the fork. A fork PR's author has read-only access to the base → genuinely
+ *      non-exempt → the gate fires even in production. Both accounts must be
+ *      `gh auth login`'d already (no tokens). It restores the maintainer account
+ *      (TEST_MAINTAINER, or whatever was active) on exit.
  *
- * REQUIRES (document in the README): the gh CLI authenticated with push access;
- * `DATABASE_URL` (to pin rule_configs); a running worker + a tunnel routing
- * TEST_REPO's webhooks; and either
- *   - a pushing account that is NOT exempt (org member / maintainer) on
- *     TEST_REPO, OR
- *   - `TRIPWIRE_DISABLE_EXEMPTION=true` on the worker (dev only — refused in
- *     production). Without one of those, the actor is exempt → no run → the
- *     script times out waiting for a completed `tripwire` check.
- * Needs no `workflow` scope.
+ * REQUIRES: the gh CLI authenticated (both accounts, for fork mode); a running
+ * worker + the App's webhook routing TEST_REPO to it (in prod that's the live
+ * api URL, no tunnel); and `DATABASE_URL` = the DB the worker reads (to pin
+ * rule_configs). Needs no `workflow` scope.
  *
  * NOT AUTOMATED (by design): whether the copy READS well. A human reads the
  * thread once — the script proves the mechanics, taste stays human.
@@ -42,6 +45,10 @@ import { $ } from "bun";
  *   TEST_LIFECYCLE_BRANCH  head branch       (default tripwire-lifecycle-e2e)
  *   TEST_WORKDIR     clone dir               (default $TMPDIR/tripwire-lifecycle)
  *   TEST_TIMEOUT_MS  per-verdict wait        (default 120000)
+ *   TEST_CONTRIBUTOR gh username of the non-exempt alt  ⇒ enables FORK MODE
+ *   TEST_MAINTAINER  gh username to restore/merge as    (default: active at start)
+ *   TEST_MERGE       "true" ⇒ capstone: clear the PR then maintainer squash-merges
+ *                    it (writes to TEST_REPO's default branch — off by default)
  *   DATABASE_URL     postgres                (same DB the worker reads)
  */
 
@@ -52,6 +59,17 @@ const WORKDIR =
 	`${process.env.TMPDIR?.replace(/\/$/, "") ?? "/tmp"}/tripwire-lifecycle`;
 const TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS ?? 120_000);
 const POLL_MS = 3000;
+
+// Fork mode: a non-exempt contributor opens a cross-repo PR from their fork.
+const CONTRIBUTOR = process.env.TEST_CONTRIBUTOR;
+const MAINTAINER = process.env.TEST_MAINTAINER;
+const DO_MERGE = process.env.TEST_MERGE === "true";
+const FORK_MODE = Boolean(CONTRIBUTOR);
+const REPO_NAME = REPO.split("/")[1] ?? REPO;
+const FORK_REPO = FORK_MODE ? `${CONTRIBUTOR}/${REPO_NAME}` : REPO;
+// Where phase commits are pushed, and the ref GitHub sees as the PR head.
+const PUSH_REMOTE = FORK_MODE ? "fork" : "origin";
+const HEAD_REF = FORK_MODE ? `${CONTRIBUTOR}:${BRANCH}` : BRANCH;
 
 // A checksum-valid-looking eth address (40 hex) — trips crypto-address@1.
 const WALLET = "0x000000000000000000000000000000000000dEaD";
@@ -137,7 +155,7 @@ function fail(message: string): never {
 	console.error(`\n✗ ${message}`);
 	console.error(`  PR: https://github.com/${REPO}/pulls?q=head%3A${BRANCH}`);
 	console.error("  artifacts left for inspection; re-run for a clean slate.\n");
-	// Throw (don't process.exit) so the finally in main restores rule_configs.
+	// Throw (don't process.exit) so the finally in main restores state.
 	throw new Error(message);
 }
 
@@ -153,6 +171,15 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function api<T>(path: string): Promise<T> {
 	return (await $`gh api ${path} --paginate`.quiet().json()) as T;
+}
+
+/** The active gh account's login — captured to restore on exit (fork mode). */
+async function activeAccount(): Promise<string> {
+	return (await $`gh api user --jq .login`.quiet().text()).trim();
+}
+
+async function ghSwitch(user: string): Promise<void> {
+	await $`gh auth switch --user ${user}`.quiet();
 }
 
 async function comments(pr: number): Promise<Comment[]> {
@@ -178,6 +205,17 @@ async function prHeadSha(pr: number): Promise<string> {
 	return data.head.sha;
 }
 
+/** The open lifecycle PR number (matches by head branch), or null. */
+async function findOpenPr(): Promise<number | null> {
+	const out =
+		await $`gh pr list --repo ${REPO} --state open --head ${BRANCH} --json number --jq ${".[].number"}`
+			.nothrow()
+			.quiet()
+			.text();
+	const n = Number(out.trim().split("\n")[0]);
+	return Number.isInteger(n) ? n : null;
+}
+
 /** On a stall, print exactly what GitHub sees so the cause is obvious. */
 async function diagnose(pr: number, expected: string): Promise<void> {
 	try {
@@ -193,7 +231,7 @@ async function diagnose(pr: number, expected: string): Promise<void> {
 		);
 		console.error(
 			checks.check_runs.length === 0
-				? "  check runs on that SHA: NONE — the run never reached GitHub. check the worker logs: no forge creds (app not installed on this repo?), a 401 webhook (secret mismatch), the tunnel isn't the app's webhook URL, or the pusher is exempt (maintainer/org member) without TRIPWIRE_DISABLE_EXEMPTION=true."
+				? "  check runs on that SHA: NONE — the run never reached GitHub. check the worker logs: no forge creds (app not installed on this repo?), a 401 webhook (secret mismatch), the tunnel isn't the app's webhook URL, or the pusher is exempt (maintainer/org member) without TRIPWIRE_DISABLE_EXEMPTION=true / a fork PR."
 				: `  check runs on that SHA: ${checks.check_runs
 						.map(
 							(r) =>
@@ -203,7 +241,7 @@ async function diagnose(pr: number, expected: string): Promise<void> {
 		);
 		if (inProgress.length > 0) {
 			console.error(
-				"  stuck in_progress usually means the worker posted the pending gate then returned without a run (actor exempt) — set TRIPWIRE_DISABLE_EXEMPTION=true and restart the worker, or push as a non-maintainer.",
+				"  stuck in_progress usually means the worker posted the pending gate then returned without a run (actor exempt) — push as a non-exempt contributor (fork mode) or set TRIPWIRE_DISABLE_EXEMPTION=true locally.",
 			);
 		}
 		const cs = await comments(pr);
@@ -245,7 +283,7 @@ async function waitForVerdict(pr: number, pushed: string): Promise<CheckRun> {
 	}
 	await diagnose(pr, pushed);
 	return fail(
-		`no completed \`${CHECK_NAME}\` check for ${pushed.slice(0, 7)} within ${TIMEOUT_MS / 1000}s — if the check is stuck in_progress or missing: is the pusher a maintainer/org member without TRIPWIRE_DISABLE_EXEMPTION=true on the worker?`,
+		`no completed \`${CHECK_NAME}\` check for ${pushed.slice(0, 7)} within ${TIMEOUT_MS / 1000}s — is the pusher exempt (maintainer/org member)? in prod use fork mode (TEST_CONTRIBUTOR); locally set TRIPWIRE_DISABLE_EXEMPTION=true on the worker.`,
 	);
 }
 
@@ -264,16 +302,20 @@ async function pushWallet(present: boolean, message: string): Promise<string> {
 	);
 	await git("add", "WALLET.md");
 	await git("commit", "-m", message);
-	await git("push", "origin", BRANCH);
+	await git("push", PUSH_REMOTE, BRANCH);
 	return (await $`git rev-parse HEAD`.cwd(WORKDIR).text()).trim();
 }
 
 /** Close any open lifecycle PR and delete the branch — a clean slate. */
 async function cleanup(): Promise<void> {
-	await $`gh pr close ${BRANCH} --repo ${REPO} --delete-branch`
+	const n = await findOpenPr();
+	if (n !== null) {
+		await $`gh pr close ${n} --repo ${REPO}`.nothrow().quiet();
+	}
+	await $`git push ${PUSH_REMOTE} --delete ${BRANCH}`
+		.cwd(WORKDIR)
 		.nothrow()
 		.quiet();
-	await $`git push origin --delete ${BRANCH}`.cwd(WORKDIR).nothrow().quiet();
 }
 
 /**
@@ -330,13 +372,21 @@ async function restoreRuleConfigs(
 }
 
 async function main(): Promise<void> {
-	console.log(`lifecycle E2E on ${REPO} (branch ${BRANCH})`);
+	console.log(
+		`lifecycle E2E on ${REPO} (branch ${BRANCH})${FORK_MODE ? ` — FORK MODE as ${CONTRIBUTOR}` : ""}`,
+	);
 
 	if (!process.env.DATABASE_URL) {
-		fail("DATABASE_URL is required — the script pins rule_configs on TEST_REPO");
+		fail(
+			"DATABASE_URL is required — the script pins rule_configs on TEST_REPO",
+		);
 	}
 	const { db, pool } = createDb();
 	let restore: (() => Promise<void>) | null = null;
+	// In fork mode we switch gh accounts; remember who to hand back to.
+	const restoreAccount = FORK_MODE
+		? (MAINTAINER ?? (await activeAccount()))
+		: null;
 
 	try {
 		const { repoId, prior } = await pinCryptoOnly(db);
@@ -344,9 +394,23 @@ async function main(): Promise<void> {
 		ok("rule_configs pinned to crypto-address@1 only (will restore on exit)");
 
 		// ── setup: clean slate, fresh branch off the base, open the PR ────────
+		if (FORK_MODE) {
+			// Become the non-exempt contributor and ensure their fork exists.
+			await ghSwitch(CONTRIBUTOR as string);
+			await $`gh repo fork ${REPO} --clone=false`.nothrow().quiet();
+			ok(`switched to ${CONTRIBUTOR}; fork ${FORK_REPO} ready`);
+		}
+
 		const clone = await $`test -d ${WORKDIR}/.git`.nothrow().quiet();
 		if (clone.exitCode !== 0) {
 			await $`gh repo clone ${REPO} ${WORKDIR}`.quiet();
+		}
+		if (FORK_MODE) {
+			// Push phase commits to the contributor's fork, not the base repo.
+			await $`git remote remove fork`.cwd(WORKDIR).nothrow().quiet();
+			await $`git remote add fork https://github.com/${FORK_REPO}.git`
+				.cwd(WORKDIR)
+				.quiet();
 		}
 		const base =
 			process.env.TEST_BASE ??
@@ -368,20 +432,18 @@ async function main(): Promise<void> {
 
 		// ── phase 1: a wallet address trips crypto-address ⇒ blocked ──────────
 		console.log("\nphase 1 — blocked");
-		const sha1 = await pushWallet(
-			true,
-			"lifecycle: add wallet (trips crypto)",
-		);
-		await $`gh pr create --repo ${REPO} --base ${base} --head ${BRANCH} --title ${"tripwire lifecycle e2e"} --body ${"automated §11 live E2E — safe to close."}`
-			.nothrow()
-			.quiet();
-		const pr = Number(
-			(
-				await $`gh pr view ${BRANCH} --repo ${REPO} --json number --jq .number`.text()
-			).trim(),
-		);
+		const sha1 = await pushWallet(true, "lifecycle: add wallet (trips crypto)");
+		const created =
+			await $`gh pr create --repo ${REPO} --base ${base} --head ${HEAD_REF} --title ${"tripwire lifecycle e2e"} --body ${"automated §11 live E2E — safe to close."}`
+				.nothrow()
+				.text();
+		let pr = Number(created.trim().split("/").pop());
+		if (!Number.isInteger(pr)) {
+			// create can fail if a PR already exists — fall back to a lookup.
+			pr = (await findOpenPr()) ?? Number.NaN;
+		}
 		assert(Number.isInteger(pr), "could not open or find the lifecycle PR");
-		ok(`PR #${pr} opened`);
+		ok(`PR #${pr} opened (head ${HEAD_REF})`);
 
 		const check1 = await waitForVerdict(pr, sha1);
 		assert(
@@ -397,8 +459,7 @@ async function main(): Promise<void> {
 			`expected exactly ONE active tripwire comment (with the marker), found ${active1.length}`,
 		);
 		const bot = active1[0]?.user.login as string;
-		const mine = (list: Comment[]) =>
-			list.filter((c) => c.user.login === bot);
+		const mine = (list: Comment[]) => list.filter((c) => c.user.login === bot);
 		assert(
 			mine(thread).length === 1,
 			`expected exactly ONE tripwire comment total, found ${mine(thread).length}`,
@@ -453,9 +514,7 @@ async function main(): Promise<void> {
 			"old comment superseded (marker-less); new comment is a passed resolution",
 		);
 
-		const review1After = (await reviews(pr)).find(
-			(r) => r.id === review1?.id,
-		);
+		const review1After = (await reviews(pr)).find((r) => r.id === review1?.id);
 		assert(
 			review1After?.state === "DISMISSED",
 			`the request-changes review was not dismissed (state ${review1After?.state})`,
@@ -496,8 +555,34 @@ async function main(): Promise<void> {
 		assert(review3, "no NEW request-changes review on the re-block");
 		ok("three comments; a fresh blocked comment is last; a new review exists");
 
+		// ── optional capstone: clear it, then the MAINTAINER merges ───────────
+		if (DO_MERGE) {
+			console.log("\nphase 4 — clear + maintainer merge");
+			const sha4 = await pushWallet(false, "lifecycle: clear for merge");
+			const check4 = await waitForVerdict(pr, sha4);
+			assert(
+				check4.conclusion === "success",
+				`expected passed before merge, got ${check4.conclusion}`,
+			);
+			if (restoreAccount) {
+				await ghSwitch(restoreAccount);
+			}
+			await $`gh pr merge ${pr} --repo ${REPO} --squash`.quiet();
+			ok(`maintainer (${restoreAccount}) squash-merged the cleared PR`);
+			console.log(
+				`  note: this wrote LIFECYCLE.md/WALLET.md to ${REPO}#${base} — expected on a sacrificial repo.`,
+			);
+		}
+
 		// ── cleanup (success only — failures leave artifacts to inspect) ──────
-		await cleanup();
+		// Merge already closed the PR + consumed the branch; otherwise close it,
+		// deleting the fork branch as the contributor (its owner) before restore.
+		if (!DO_MERGE) {
+			if (FORK_MODE) {
+				await ghSwitch(CONTRIBUTOR as string);
+			}
+			await cleanup();
+		}
 		console.log(
 			"\n✓ lifecycle E2E passed — thread mechanics verified. cleaned up.",
 		);
@@ -512,6 +597,10 @@ async function main(): Promise<void> {
 					`  ✗ failed to restore rule_configs: ${String(error)} — fix by hand on ${REPO}`,
 				);
 			}
+		}
+		if (FORK_MODE && restoreAccount) {
+			await ghSwitch(restoreAccount).catch(() => undefined);
+			console.log(`  gh account restored to ${restoreAccount}`);
 		}
 		await pool.end();
 	}
