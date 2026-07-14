@@ -1,7 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { OnboardingState, RepoLite } from "@tripwire/db";
+import type { OnboardingState, RepoLite, SwitcherRepo } from "@tripwire/db";
 
-export type { OnboardingState, RepoLite };
+export type { OnboardingState, RepoLite, SwitcherRepo };
+
+/** §4 repo switcher — every repo the user can reach, with triage signal. */
+export const getSwitcherRepos = createServerFn({ method: "GET" }).handler(
+	async (): Promise<SwitcherRepo[]> => {
+		const { requireSession } = await import("#/lib/server/session");
+		const userId = await requireSession();
+		const { onboardingServices } = await import("@tripwire/db");
+		const { getDb } = await import("#/lib/server/db");
+		return await onboardingServices.listSwitcherRepos(getDb().db, userId);
+	},
+);
 
 /** The active repo the dashboard is scoped to — null until onboarded. */
 export const getActiveRepoInfo = createServerFn({ method: "GET" }).handler(

@@ -2062,3 +2062,24 @@ being gated; only dither-kit was intended. Fixed by arming.
   a backfill is in flight and shows "backfilling — N of M change requests" on
   home + activity; the dashboard fills in live via `pg_notify('runs')` per run.
 - dev:demo unaffected — arming there skips the enqueue (no worker/queue).
+
+### Unit 4 — the repo switcher
+
+- **Scope stays one active repo; the switcher changes which.** Topbar trigger
+  (shows the active repo) + a ⌘K command palette. Selecting a repo is
+  `chooseActiveRepo` → `user.active_repo_id` (already persisted server-side), so
+  the active repo survives reloads with no client storage.
+- **Rows carry SIGNAL, not just a name** — armed dot · pending-moderation count ·
+  blocked-24h — so the switcher is triage. `listSwitcherRepos` computes them in
+  ONE query (repos ⋈ user_installations, LEFT JOIN pending moderation / blocked-24h
+  runs / max event time), **sorted by recent activity** (the repo you want is the
+  one that just had something happen), grouped by owner in the UI.
+- **Defaults to repos WITH ACTIVITY**, a footer toggle shows all — a 400-repo org
+  drowns in empty repos otherwise. **Unarmed repos appear with an inline arm**
+  affordance (`armRepoById`, access-checked against the user's switcher list;
+  arming enqueues backfill like the CTA).
+- **Search is client-side** over the fetched list (the design guidance: fine under
+  ~200; server-side search is the scale follow-up for large orgs — noted, not
+  guessed). Modal a11y: the backdrop is a real button, the panel a `role=dialog`
+  sibling (no stopPropagation), Esc closes.
+- Deep-link `?repo=` (the shared-link constraint) rides with Unit 5's routing pass.

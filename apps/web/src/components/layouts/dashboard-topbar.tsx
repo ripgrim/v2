@@ -6,13 +6,13 @@ import {
 	Logout01Icon,
 	MoonIcon,
 	Queue01Icon,
-	Search01Icon,
 	Sun01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
+import { RepoSwitcher } from "#/components/layouts/repo-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import {
@@ -23,7 +23,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
-import { Input } from "#/components/ui/input";
 import { useHasMounted } from "#/hooks/use-has-mounted";
 import type { CurrentUser } from "#/lib/auth.functions";
 import { authClient } from "#/lib/auth-client";
@@ -59,18 +58,8 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 				/>
 			</div>
 
-			<div className="relative ml-auto hidden w-full max-w-xs items-center md:flex">
-				<HugeiconsIcon
-					icon={Search01Icon}
-					size={14}
-					strokeWidth={2}
-					className="pointer-events-none absolute left-2.5 text-muted-foreground"
-				/>
-				<Input
-					type="search"
-					placeholder="Search reports…"
-					className="h-8 bg-surface-1 pl-8 text-[13px]"
-				/>
+			<div className="ml-auto hidden items-center md:flex">
+				<RepoSwitcher />
 			</div>
 
 			<div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">

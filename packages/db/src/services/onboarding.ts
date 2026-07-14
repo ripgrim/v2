@@ -1,8 +1,73 @@
 import { generateId } from "@tripwire/utils";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../client.ts";
 import { forgeIdentities, user, userInstallations } from "../schema/auth.ts";
 import { repos } from "../schema/repos.ts";
+
+/**
+ * §4 repo switcher row — a name plus SIGNAL, so the switcher is triage, not
+ * navigation. Sorted by recent activity (the repo you want is the one that just
+ * had something happen), grouped by owner in the UI.
+ */
+export interface SwitcherRepo {
+	id: string;
+	owner: string;
+	name: string;
+	fullName: string;
+	armed: boolean;
+	pendingModeration: number;
+	blocked24h: number;
+	lastActivityAt: string | null;
+}
+
+/**
+ * Every repo the user's installations grant, each carrying its switcher signal.
+ * `null` userId (open-dev, no session) lists every installed repo.
+ */
+export async function listSwitcherRepos(
+	db: Db,
+	userId: string | null,
+): Promise<SwitcherRepo[]> {
+	const scope = userId
+		? sql`JOIN user_installations ui ON ui.installation_id = r.installation_id AND ui.forge = r.forge AND ui.user_id = ${userId}`
+		: sql``;
+	const result = await db.execute(sql`
+		SELECT r.id, r.owner, r.name, r.full_name AS "fullName", r.armed,
+		       COALESCE(pend.n, 0)::int AS "pendingModeration",
+		       COALESCE(blk.n, 0)::int AS "blocked24h",
+		       act.last AS "lastActivityAt"
+		FROM repos r
+		${scope}
+		LEFT JOIN (
+		  SELECT run.repo_full_name AS repo, count(*) AS n
+		  FROM moderation_items mi JOIN runs run ON run.id = mi.run_id
+		  WHERE mi.status = 'pending' GROUP BY run.repo_full_name
+		) pend ON pend.repo = r.full_name
+		LEFT JOIN (
+		  SELECT repo_full_name AS repo, count(*) AS n FROM runs
+		  WHERE verdict = 'block' AND created_at > now() - make_interval(hours => 24)
+		  GROUP BY repo_full_name
+		) blk ON blk.repo = r.full_name
+		LEFT JOIN (
+		  SELECT repo_full_name AS repo, max(received_at) AS last
+		  FROM events GROUP BY repo_full_name
+		) act ON act.repo = r.full_name
+		WHERE r.removed_at IS NULL
+		ORDER BY act.last DESC NULLS LAST, r.full_name
+	`);
+	return (result.rows as Record<string, unknown>[]).map((row) => ({
+		id: String(row.id),
+		owner: String(row.owner),
+		name: String(row.name),
+		fullName: String(row.fullName),
+		armed: Boolean(row.armed),
+		pendingModeration: Number(row.pendingModeration ?? 0),
+		blocked24h: Number(row.blocked24h ?? 0),
+		lastActivityAt: row.lastActivityAt
+			? new Date(row.lastActivityAt as string).toISOString()
+			: null,
+	}));
+}
 
 /**
  * Onboarding (§10): tie the signed-in user to their App installation and their

@@ -1388,3 +1388,16 @@ repos (backfill_total/done, migration 0004) → RepoLite; a BackfillProgress
 component polls every 2s and shows "backfilling — N of M change requests" on
 home + activity, the dashboard filling in live via pg_notify('runs'). dev:demo
 skips the enqueue (no worker). Checks: typecheck all, biome, boundaries, 240/240.
+
+**Unit — repo arming, Unit 4: the repo switcher (§4).** Scope stays one active
+repo; the switcher changes which. Topbar trigger + ⌘K palette; selecting is
+chooseActiveRepo → user.active_repo_id (persisted server-side, survives reloads).
+Rows carry signal — armed dot, pending-moderation count, blocked-24h — computed
+in one query (listSwitcherRepos: repos ⋈ user_installations + LEFT JOINs for
+pending/blocked/last-activity), sorted by recent activity, grouped by owner.
+Defaults to repos with activity with a footer toggle for all; unarmed repos show
+an inline arm (armRepoById, access-checked, enqueues backfill). Client-side
+search (fine under ~200; server-side search noted as the scale follow-up). Modal
+a11y: backdrop is a real button, panel a role=dialog sibling, Esc closes.
+Deep-link ?repo= rides with Unit 5. Checks: typecheck web+db, biome, boundaries,
+51 web tests + full suite green.

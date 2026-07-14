@@ -38,7 +38,11 @@ export {
 export * as eventServices from "./services/events.ts";
 export * as insightServices from "./services/insights.ts";
 export * as moderationServices from "./services/moderation.ts";
-export type { OnboardingState, RepoLite } from "./services/onboarding.ts";
+export type {
+	OnboardingState,
+	RepoLite,
+	SwitcherRepo,
+} from "./services/onboarding.ts";
 export * as onboardingServices from "./services/onboarding.ts";
 export * as repoServices from "./services/repos.ts";
 export * as runServices from "./services/runs.ts";
