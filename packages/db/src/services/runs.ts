@@ -105,6 +105,12 @@ export async function recordActions(
 	db: Db,
 	runId: string,
 	actions: RecordActionInput[],
+	/**
+	 * §4 backfill — `"suppressed"` records the row for data-model parity but keeps
+	 * it out of the sweeper (which only picks up `"recorded"`), so a backfilled
+	 * run never posts a comment/check on a historical change request.
+	 */
+	initialStatus: "recorded" | "suppressed" = "recorded",
 ): Promise<{ id: string; kind: string; payload: Record<string, unknown> }[]> {
 	if (actions.length === 0) {
 		return [];
@@ -115,6 +121,7 @@ export async function recordActions(
 		kind: action.kind,
 		payload: action.payload,
 		idempotencyKey: action.idempotencyKey,
+		status: initialStatus,
 	}));
 	const inserted = await db
 		.insert(runActions)

@@ -29,6 +29,13 @@
       "when": 1784000204800,
       "tag": "0003_omniscient_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784002768625,
+      "tag": "0004_big_emma_frost",
+      "breakpoints": true
     }
   ]
 }

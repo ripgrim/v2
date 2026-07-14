@@ -30,6 +30,8 @@ export async function getActiveRepo(): Promise<RepoLite | null> {
 				fullName: first.fullName,
 				private: first.private,
 				armed: first.armed,
+				backfillTotal: first.backfillTotal,
+				backfillDone: first.backfillDone,
 			}
 		: null;
 }

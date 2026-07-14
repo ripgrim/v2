@@ -1,4 +1,6 @@
 import {
+	BACKFILL_REPO_QUEUE,
+	type BackfillRepoJob,
 	createBoss,
 	createDb,
 	createDirectPool,
@@ -19,6 +21,7 @@ import { getErrorMessage } from "@tripwire/utils";
 import pino from "pino";
 import { createGenerate } from "./ai/generate.ts";
 import type { WorkerReads } from "./context.ts";
+import { backfillRepo } from "./jobs/backfill-repo.ts";
 import { processEvent } from "./jobs/process-event.ts";
 import { resumeRun } from "./jobs/resume-run.ts";
 import { rollup } from "./jobs/rollup.ts";
@@ -135,6 +138,21 @@ if (import.meta.main) {
 					makeGenerate,
 					appUrl: process.env.APP_URL ?? "http://localhost:3000",
 					logger: logger.child({ itemId: job.data.itemId }),
+				},
+				job.data,
+			);
+		}
+	});
+
+	await boss.work<BackfillRepoJob>(BACKFILL_REPO_QUEUE, async (jobs) => {
+		for (const job of jobs) {
+			await backfillRepo(
+				{
+					db,
+					pool: directPool,
+					reads,
+					makeGenerate,
+					logger: logger.child({ repoId: job.data.repoId, backfill: true }),
 				},
 				job.data,
 			);

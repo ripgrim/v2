@@ -15,6 +15,8 @@ export {
 	type PgliteHandle,
 } from "./pglite.ts";
 export {
+	BACKFILL_REPO_QUEUE,
+	type BackfillRepoJob,
 	createBoss,
 	PROCESS_EVENT_QUEUE,
 	type ProcessEventJob,

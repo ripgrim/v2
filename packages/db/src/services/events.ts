@@ -261,6 +261,43 @@ export async function getActivityForEvent(
 }
 
 /**
+ * §4 arm-time backfill corpus — the LATEST normalized change-request event per
+ * change request, within the window, most-recent first, capped. One event per
+ * change request (its current head ⇒ one run reflecting where it stands now);
+ * a comment/push event produces no run under the default workflow so they're
+ * excluded. The cap bounds the arm-time burst of forge reads.
+ */
+export async function listBackfillEvents(
+	db: Db,
+	repoFullName: string,
+	sinceDays: number,
+	cap: number,
+): Promise<{ id: string; normalized: NormalizedEvent }[]> {
+	const result = await db.execute(sql`
+		SELECT id, normalized FROM (
+			SELECT DISTINCT ON (subject_number) id, normalized, received_at
+			FROM events
+			WHERE repo_full_name = ${repoFullName}
+			  AND normalized IS NOT NULL
+			  AND subject_number IS NOT NULL
+			  AND normalized ? 'changeRequest'
+			  AND received_at > now() - make_interval(days => ${sinceDays})
+			ORDER BY subject_number, received_at DESC
+		) latest
+		ORDER BY received_at DESC
+		LIMIT ${cap}
+	`);
+	const out: { id: string; normalized: NormalizedEvent }[] = [];
+	for (const row of result.rows as { id: string; normalized: unknown }[]) {
+		const parsed = normalizedEventSchema.safeParse(row.normalized);
+		if (parsed.success) {
+			out.push({ id: row.id, normalized: parsed.data });
+		}
+	}
+	return out;
+}
+
+/**
  * The /activity feed grouped by CHANGE REQUEST (§9). The real unit is the
  * change request, not the event: "#1 fix typo" evaluated 15 times is one group,
  * not 15 rows. Grouping is done HERE (by repo + subject number) — never

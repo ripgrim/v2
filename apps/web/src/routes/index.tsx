@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef } from "react";
 import { ArmCallout } from "#/components/arming/arm-callout";
+import { BackfillProgress } from "#/components/arming/backfill-progress";
 import { DitherStatCard } from "#/components/charts/dither-stat-card";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import {
@@ -73,6 +74,8 @@ function DashboardPage() {
 							organization.
 						</p>
 					</header>
+
+					<BackfillProgress />
 
 					{statsQuery.data ? (
 						<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

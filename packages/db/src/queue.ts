@@ -15,6 +15,13 @@ export interface ResumeRunJob {
 	decision: "approve" | "deny";
 }
 
+/** Arming → arm-time backfill (§4): replay stored events into real runs. */
+export const BACKFILL_REPO_QUEUE = "backfill-repo";
+
+export interface BackfillRepoJob {
+	repoId: string;
+}
+
 /**
  * One PgBoss per process. `start()` installs the pgboss schema and runs
  * maintenance; `createQueue` is idempotent. The api head only sends (inside
@@ -30,5 +37,6 @@ export async function createBoss(
 	await boss.start();
 	await boss.createQueue(PROCESS_EVENT_QUEUE);
 	await boss.createQueue(RESUME_RUN_QUEUE);
+	await boss.createQueue(BACKFILL_REPO_QUEUE);
 	return boss;
 }

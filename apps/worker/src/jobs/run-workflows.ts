@@ -73,6 +73,12 @@ export interface RunWorkflowsDeps {
 	 * ⇒ no gate, no comment, no check).
 	 */
 	onBeforeEvaluate?: () => Promise<void>;
+	/**
+	 * §4 backfill — false ⇒ persist the run/steps/verdict exactly as a live run,
+	 * but record its actions as `suppressed` so nothing surfaces on the historical
+	 * change request (no comment, no check, no sweeper pickup). Default true.
+	 */
+	surface?: boolean;
 }
 
 export interface RunWorkflowsResult {
@@ -293,6 +299,7 @@ export async function runWorkflows(
 				idempotencyKey: `${action.action}:${execution.definition.id}:${action.nodeId}`,
 			})),
 		),
+		deps.surface === false ? "suppressed" : "recorded",
 	);
 
 	const reasons = buildCommentReasons(steps);

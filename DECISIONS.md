@@ -2037,3 +2037,28 @@ being gated; only dither-kit was intended. Fixed by arming.
   looking like a stuck evaluation — the Unit 1 data (no runs) made visible.
 - Home's early return sits below the hooks (unconditional-hooks rule); the
   moderation dashboard is silent until the gate is on.
+
+### Unit 3 — arm-time backfill
+
+- **Reuse the real engine, never hand-insert runs.** Arming enqueues a
+  `backfill-repo` pg-boss job; the worker replays the repo's STORED
+  change-request events through `runWorkflows`, producing real runs/steps/
+  verdicts — indistinguishable from live in the data model.
+- **The one hard requirement — no PR surfaces on historical threads.**
+  `runWorkflows({ surface: false })` records its action rows as **`suppressed`**
+  instead of `recorded`. The sweeper's `listStuckActions` filters `recorded`
+  only, so a suppressed row is never executed; the backfill path also never calls
+  `emitPrSurface`/`emitPendingCheck`. Result: history without a single comment or
+  check on an old change request. Proven by a test (run persists, verdict block,
+  every action row `suppressed`).
+- **Bounded burst.** N = **30 days**, capped at **50** change requests (one run
+  per change request — its current head), paced 400ms apart. Stored events don't
+  need re-fetching, but each RuleContext still needs forge reads (diff,
+  contributor) — sequential + delay keeps ~150 API calls well under an
+  installation's limit. A failed read degrades that one run (the fail-closed
+  floor), never the backfill.
+- **Progress is on `repos`** (`backfill_total`/`backfill_done`, migration 0004),
+  surfaced on `RepoLite`. `BackfillProgress` polls the active repo every 2s while
+  a backfill is in flight and shows "backfilling — N of M change requests" on
+  home + activity; the dashboard fills in live via `pg_notify('runs')` per run.
+- dev:demo unaffected — arming there skips the enqueue (no worker/queue).

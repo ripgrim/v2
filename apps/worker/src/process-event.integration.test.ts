@@ -9,10 +9,12 @@ import {
 	repoServices,
 	type TestDatabase,
 } from "@tripwire/db";
+import { normalizeWebhook } from "@tripwire/forge-github";
 import type { Pool } from "pg";
 import type { PgBoss } from "pg-boss";
 import pino from "pino";
 import { processEvent } from "./jobs/process-event.ts";
+import { runWorkflows } from "./jobs/run-workflows.ts";
 
 /**
  * §11 integration — the worker half of the §5 pipeline on REAL postgres:
@@ -287,6 +289,52 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 			// Re-arm for the run-expecting tests that follow.
 			await repoServices.setRepoArmed(db, repo.id, true);
 		}
+	});
+
+	test("§4 backfill (surface:false) ⇒ run persisted, actions SUPPRESSED (no sweeper pickup)", async () => {
+		const raw = await fixtureRaw();
+		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+			deliveryId: "backfill-1",
+			rawKind: "pull_request",
+			raw,
+		});
+		if (!eventId) {
+			throw new Error("insert failed");
+		}
+		const normalized = normalizeWebhook(
+			{
+				deliveryId: "backfill-1",
+				eventName: "pull_request",
+				body: JSON.stringify(raw),
+				signature: null,
+			},
+			new Date().toISOString(),
+		);
+		if (!(normalized && "changeRequest" in normalized)) {
+			throw new Error("fixture did not normalize to a change request");
+		}
+		const result = await runWorkflows(
+			{
+				db,
+				logger,
+				reads: freshAccountReads,
+				makeGenerate: null,
+				surface: false,
+			},
+			normalized,
+			eventId,
+		);
+		// A real run persists (indistinguishable in shape) — same verdict as live.
+		expect(result.runId).not.toBeNull();
+		expect(result.verdict).toBe("block");
+		// …but every action row is SUPPRESSED, so the sweeper (recorded-only) and
+		// the surface path never post a comment/check on a historical change request.
+		const actions = await pool.query(
+			"SELECT status FROM run_actions WHERE run_id = $1",
+			[result.runId],
+		);
+		expect(actions.rowCount).toBeGreaterThan(0);
+		expect(actions.rows.every((r) => r.status === "suppressed")).toBe(true);
 	});
 
 	test("fresh-account PR ⇒ run persisted with snapshot, steps, verdict block, action row", async () => {

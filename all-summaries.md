@@ -1373,3 +1373,18 @@ event on an unarmed repo as "not armed" (an `unarmed` prop on ActivityRow) rathe
 than a stuck evaluation. Home's early return sits below the hooks (unconditional-
 hooks). Checks: typecheck web, biome, boundaries, 51 web tests + full 239 still
 green.
+
+**Unit — repo arming, Unit 3: arm-time backfill (§4).** Arming enqueues a
+`backfill-repo` job; the worker replays the repo's stored change-request events
+through the REAL `runWorkflows` into real runs — no hand-inserted runs. The hard
+requirement (no comments/checks on historical threads) is met by
+`runWorkflows({surface:false})`, which records action rows as `suppressed` rather
+than `recorded`; the sweeper only picks up `recorded`, and the backfill path
+never calls emitPrSurface/emitPendingCheck — so history appears with zero PR
+surfaces (proven by a test: run persists, verdict block, all actions suppressed).
+Bounded: 30 days, cap 50 change requests (latest event per CR), paced 400ms;
+failed forge reads degrade one run via the fail-closed floor. Progress lives on
+repos (backfill_total/done, migration 0004) → RepoLite; a BackfillProgress
+component polls every 2s and shows "backfilling — N of M change requests" on
+home + activity, the dashboard filling in live via pg_notify('runs'). dev:demo
+skips the enqueue (no worker). Checks: typecheck all, biome, boundaries, 240/240.

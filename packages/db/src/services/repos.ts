@@ -130,6 +130,24 @@ export async function setRepoArmed(
 	await db.update(repos).set({ armed }).where(eq(repos.id, repoId));
 }
 
+/**
+ * §4 arm-time backfill progress. `null` clears it (idle / done); an object marks
+ * a replay in flight so the dashboard can show "backfilling — done of total".
+ */
+export async function setBackfillProgress(
+	db: Db,
+	repoId: string,
+	progress: { total: number; done: number } | null,
+): Promise<void> {
+	await db
+		.update(repos)
+		.set({
+			backfillTotal: progress?.total ?? null,
+			backfillDone: progress?.done ?? null,
+		})
+		.where(eq(repos.id, repoId));
+}
+
 export async function getRepoByFullName(db: Db, fullName: string) {
 	const rows = await db
 		.select()

@@ -19,6 +19,9 @@ export interface RepoLite {
 	private: boolean;
 	/** §4 — false ⇒ scoped for viewing but not gating; drives the arm CTA. */
 	armed: boolean;
+	/** §4 arm-time backfill progress; non-null total ⇒ a replay is in flight. */
+	backfillTotal: number | null;
+	backfillDone: number | null;
 }
 
 const REPO_LITE = {
@@ -28,6 +31,8 @@ const REPO_LITE = {
 	fullName: repos.fullName,
 	private: repos.private,
 	armed: repos.armed,
+	backfillTotal: repos.backfillTotal,
+	backfillDone: repos.backfillDone,
 } as const;
 
 /**

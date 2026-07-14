@@ -5,6 +5,7 @@ import { ActivityRow } from "#/components/activity/activity-row";
 import { ActivityStack } from "#/components/activity/activity-stack";
 import { LiveIndicator } from "#/components/activity/live-indicator";
 import { ArmCallout } from "#/components/arming/arm-callout";
+import { BackfillProgress } from "#/components/arming/backfill-progress";
 import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import type { ActivityFeedItem } from "#/lib/activity.functions";
@@ -73,7 +74,9 @@ export function ActivityPage() {
 						repoFullName={repo.fullName}
 						variant="banner"
 					/>
-				) : null}
+				) : (
+					<BackfillProgress className="mb-4" />
+				)}
 
 				<div className="mb-4 flex flex-wrap gap-1.5">
 					{FILTERS.map((f) => (

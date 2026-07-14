@@ -53,6 +53,8 @@ export const getOnboardingState = createServerFn({ method: "GET" }).handler(
 				fullName: r.fullName,
 				private: r.private,
 				armed: r.armed,
+				backfillTotal: r.backfillTotal,
+				backfillDone: r.backfillDone,
 			})),
 			activeRepo: null,
 		};

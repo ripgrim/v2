@@ -34,6 +34,13 @@ export const repos = pgTable(
 		 * is skipped, the same shape as the maintainer-exemption path.
 		 */
 		armed: boolean("armed").notNull().default(false),
+		/**
+		 * §4 arm-time backfill progress. Non-null `backfillTotal` ⇒ a backfill is
+		 * in flight (or just finished); the UI shows "backfilling — done of total".
+		 * Null when idle. Set when arming enqueues the replay, cleared when done.
+		 */
+		backfillTotal: integer("backfill_total"),
+		backfillDone: integer("backfill_done"),
 		/** GitHub App installation that grants access. */
 		installationId: text("installation_id"),
 		installedAt: timestamp("installed_at", { withTimezone: true })
