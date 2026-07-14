@@ -1,5 +1,3 @@
-import { SecurityIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
@@ -12,9 +10,6 @@ interface ArmCalloutProps {
 	variant?: "hero" | "banner";
 	className?: string;
 }
-
-const WHAT_ARMING_DOES =
-	"arming turns the gate on: every non-exempt change request is evaluated against your rules, and one that trips them is blocked with a comment naming why. nothing runs until you arm — tripwire won't touch a change request you didn't choose.";
 
 function useArm(repoFullName: string) {
 	const queryClient = useQueryClient();
@@ -48,36 +43,28 @@ export function ArmCallout({
 		return (
 			<div
 				className={cn(
-					"flex flex-col gap-5 rounded-xl bg-surface-1 p-6 md:p-8",
+					"flex flex-col gap-4 rounded-xl bg-surface-1 p-6 md:p-8",
 					className,
 				)}
 			>
-				<div className="flex items-center gap-2 text-muted-foreground">
-					<HugeiconsIcon icon={SecurityIcon} size={16} strokeWidth={2} />
-					<span className="font-medium text-xs uppercase tracking-wide">
-						not armed
-					</span>
-				</div>
 				<div className="flex flex-col gap-2">
 					<h2 className="font-semibold text-2xl tracking-tight">
-						tripwire isn't watching{" "}
-						<span className="font-mono text-xl">{repoFullName}</span> yet
+						tripwire isn't guarding{" "}
+						<span className="font-mono text-xl">{repoFullName}</span>
 					</h2>
 					<p className="max-w-xl text-muted-foreground text-sm">
-						{WHAT_ARMING_DOES}
+						unarmed, it ignores every change request here — no checks, no
+						comments, no blocks. arm it to start checking each one against your
+						rules and blocking the ones that break them.
 					</p>
 				</div>
-				<div>
-					<Button
-						disabled={arm.isPending}
-						iconLeft={
-							<HugeiconsIcon icon={SecurityIcon} size={16} strokeWidth={2} />
-						}
-						onClick={() => arm.mutate()}
-					>
-						{arm.isPending ? "arming…" : "arm this repo"}
-					</Button>
-				</div>
+				<Button
+					className="w-fit"
+					disabled={arm.isPending}
+					onClick={() => arm.mutate()}
+				>
+					{arm.isPending ? "arming…" : "arm this repo"}
+				</Button>
 			</div>
 		);
 	}
@@ -89,14 +76,9 @@ export function ArmCallout({
 				className,
 			)}
 		>
-			<div className="min-w-0 flex-1">
-				<p className="font-medium text-sm">
-					not armed — tripwire isn't watching this repo
-				</p>
-				<p className="text-muted-foreground text-xs">
-					what's below is what will run once you arm it.
-				</p>
-			</div>
+			<p className="min-w-0 flex-1 font-medium text-sm">
+				not armed — tripwire ignores every change request here until you arm it.
+			</p>
 			<Button
 				className="shrink-0"
 				disabled={arm.isPending}

@@ -18,8 +18,8 @@ import { cn } from "#/lib/utils";
 /**
  * §4 repo switcher — scope stays one active repo; this changes which. Topbar
  * trigger + ⌘K palette, rows carrying SIGNAL (armed · pending · blocked-24h) so
- * it's triage, not navigation. Sorted by recent activity, grouped by owner,
- * defaulting to repos with activity (a 400-repo org drowns in empty ones).
+ * it's triage, not navigation. Sorted by recent activity, grouped by owner; every
+ * repo shows (search narrows a 400-repo org).
  */
 export function RepoSwitcher() {
 	const [open, setOpen] = useState(false);
@@ -76,7 +76,6 @@ function SwitcherPalette({
 	const queryClient = useQueryClient();
 	const { data: repos } = useQuery(switcherReposQueryOptions());
 	const [query, setQuery] = useState("");
-	const [withActivityOnly, setWithActivityOnly] = useState(true);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -110,11 +109,9 @@ function SwitcherPalette({
 
 	const groups = useMemo(() => {
 		const term = query.trim().toLowerCase();
-		const list = (repos ?? [])
-			.filter((repo) =>
-				withActivityOnly ? repo.lastActivityAt !== null : true,
-			)
-			.filter((repo) => repo.fullName.toLowerCase().includes(term));
+		const list = (repos ?? []).filter((repo) =>
+			repo.fullName.toLowerCase().includes(term),
+		);
 		const byOwner = new Map<string, SwitcherRepo[]>();
 		for (const repo of list) {
 			const bucket = byOwner.get(repo.owner) ?? [];
@@ -122,7 +119,7 @@ function SwitcherPalette({
 			byOwner.set(repo.owner, bucket);
 		}
 		return [...byOwner.entries()];
-	}, [repos, query, withActivityOnly]);
+	}, [repos, query]);
 
 	return (
 		<div className="fixed inset-0 z-50">
@@ -181,13 +178,9 @@ function SwitcherPalette({
 					</div>
 
 					<div className="flex items-center justify-between border-t px-3 py-2 text-muted-foreground text-xs">
-						<button
-							className="transition-colors hover:text-foreground"
-							onClick={() => setWithActivityOnly((value) => !value)}
-							type="button"
-						>
-							{withActivityOnly ? "showing repos with activity" : "showing all"}
-						</button>
+						<span>
+							{groups.reduce((sum, [, list]) => sum + list.length, 0)} repos
+						</span>
 						<span className="font-mono">⌘K</span>
 					</div>
 				</div>
