@@ -29,9 +29,9 @@ export function BackfillProgress({ className }: { className?: string }) {
 		>
 			<div className="size-4 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
 			<p className="text-sm">
-				backfilling — <span className="tabular-nums">{done}</span> of{" "}
+				backfilling <span className="tabular-nums">{done}</span> of{" "}
 				<span className="tabular-nums">{repo.backfillTotal}</span> change
-				requests
+				requests, you can check back here later
 			</p>
 		</div>
 	);

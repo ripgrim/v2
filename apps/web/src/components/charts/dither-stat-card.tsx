@@ -73,8 +73,8 @@ export function DitherStatCard({
 					: "text-red-500";
 
 	// The composable dither chart takes rows + a series config; the sparkline is a
-	// single series keyed "v". An all-zero window is "not enough data", not a flat
-	// line pretending to be a trend.
+	// single series keyed "v". An all-zero window has no trend to draw — we show a
+	// flat baseline line instead of copy, so the card stays a chart, not fugly text.
 	const hasData = useMemo(() => series.some((v) => v > 0), [series]);
 	const chartData = useMemo(() => series.map((v) => ({ v })), [series]);
 	const chartConfig = useMemo<ChartConfig>(() => ({ v: { color } }), [color]);
@@ -134,8 +134,8 @@ export function DitherStatCard({
 						<Area dataKey="v" variant="gradient" />
 					</AreaChart>
 				) : (
-					<div className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground/60">
-						not enough data
+					<div className="absolute inset-0 flex items-center px-3">
+						<div className="h-px w-full bg-foreground/15" />
 					</div>
 				)}
 			</motion.div>

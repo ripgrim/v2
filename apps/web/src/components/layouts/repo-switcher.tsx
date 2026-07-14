@@ -2,19 +2,19 @@ import {
 	ActivityIcon,
 	CheckListIcon,
 	FlowIcon,
-	GitBranchIcon,
 	Home01Icon,
 	Logout01Icon,
 	Queue01Icon,
-	SecurityIcon,
+	Search01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Command as CommandPrimitive } from "cmdk";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { GithubIcon } from "#/components/icons/github";
 import {
 	armRepoById,
 	disarmActiveRepo,
@@ -66,12 +66,7 @@ export function RepoSwitcher() {
 				onClick={() => setOpen(true)}
 				type="button"
 			>
-				<HugeiconsIcon
-					className="shrink-0 text-muted-foreground"
-					icon={GitBranchIcon}
-					size={14}
-					strokeWidth={2}
-				/>
+				<GithubIcon className="size-3.5 shrink-0 text-muted-foreground" />
 				<span className="min-w-0 truncate font-medium">
 					{active ? active.fullName : "select a repo"}
 				</span>
@@ -103,9 +98,20 @@ interface PaletteItem {
 	label: string;
 	/** Alternate names so nothing needs to be typed verbatim. */
 	searchTags: string[];
-	icon: IconSvgElement;
+	/** A rendered icon node — a hugeicon or the GitHub vector (repos). */
+	icon: ReactNode;
 	hint?: React.ReactNode;
 	onSelect: () => void;
+}
+
+/** A hugeicon at the palette row's standard size. */
+function hugeicon(icon: IconSvgElement): ReactNode {
+	return <HugeiconsIcon icon={icon} size={15} strokeWidth={1.9} />;
+}
+
+/** The GitHub mark at the palette row's standard size (repo rows + actions). */
+function repoIcon(): ReactNode {
+	return <GithubIcon className="size-[15px]" />;
 }
 
 function CommandPalette({ onClose }: { onClose: () => void }) {
@@ -197,16 +203,16 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			active.armed
 				? {
 						id: "action:disarm",
-						label: `disarm ${active.name}`,
-						searchTags: ["disarm", "off", "stop", "gate", active.fullName],
-						icon: SecurityIcon,
+						label: `disarm ${active.fullName}`,
+						searchTags: ["disarm", "off", "stop", "gate", "repo", active.name],
+						icon: repoIcon(),
 						onSelect: () => disarmActive.mutate(),
 					}
 				: {
 						id: "action:arm",
-						label: `arm ${active.name}`,
-						searchTags: ["arm", "on", "enable", "gate", active.fullName],
-						icon: SecurityIcon,
+						label: `arm ${active.fullName}`,
+						searchTags: ["arm", "on", "enable", "gate", "repo", active.name],
+						icon: repoIcon(),
 						onSelect: () => armActive.mutate(),
 					},
 		);
@@ -216,7 +222,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			id: "action:latest-run",
 			label: "open latest run",
 			searchTags: ["run", "latest", "verdict", "result", "jump"],
-			icon: ActivityIcon,
+			icon: hugeicon(ActivityIcon),
 			onSelect: () => go(`/runs/${latestRunId}`),
 		});
 	}
@@ -224,7 +230,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 		id: "action:sign-out",
 		label: "sign out",
 		searchTags: ["sign out", "log out", "logout", "leave"],
-		icon: Logout01Icon,
+		icon: hugeicon(Logout01Icon),
 		onSelect: () =>
 			authClient.signOut({
 				fetchOptions: { onSuccess: () => window.location.assign("/login") },
@@ -237,35 +243,35 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			id: "nav:home",
 			label: "Home",
 			searchTags: ["home", "overview", "dashboard", "repos"],
-			icon: Home01Icon,
+			icon: hugeicon(Home01Icon),
 			onSelect: () => go("/"),
 		},
 		{
 			id: "nav:moderation",
 			label: "Moderation",
 			searchTags: ["moderation", "queue", "review", "pending", "triage"],
-			icon: Queue01Icon,
+			icon: hugeicon(Queue01Icon),
 			onSelect: () => go("/moderation"),
 		},
 		{
 			id: "nav:activity",
 			label: "Activity",
 			searchTags: ["activity", "events", "runs", "feed", "stream"],
-			icon: ActivityIcon,
+			icon: hugeicon(ActivityIcon),
 			onSelect: () => go("/activity"),
 		},
 		{
 			id: "nav:rules",
 			label: "Rules",
 			searchTags: ["rules", "gate", "block", "checks", "gatekeeper"],
-			icon: CheckListIcon,
+			icon: hugeicon(CheckListIcon),
 			onSelect: () => go("/rules"),
 		},
 		{
 			id: "nav:workflows",
 			label: "Workflows",
 			searchTags: ["workflows", "automation", "pipeline", "dag"],
-			icon: FlowIcon,
+			icon: hugeicon(FlowIcon),
 			onSelect: () => go("/workflows"),
 		},
 	];
@@ -300,7 +306,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 					<div className="flex items-center gap-2 border-b px-3">
 						<HugeiconsIcon
 							className="shrink-0 text-muted-foreground"
-							icon={GitBranchIcon}
+							icon={Search01Icon}
 							size={16}
 							strokeWidth={2}
 						/>
@@ -370,12 +376,9 @@ function PaletteRow({ item }: { item: PaletteItem }) {
 			onSelect={item.onSelect}
 			value={item.id}
 		>
-			<HugeiconsIcon
-				className="shrink-0 text-muted-foreground"
-				icon={item.icon}
-				size={15}
-				strokeWidth={1.9}
-			/>
+			<span className="flex size-[15px] shrink-0 items-center justify-center text-muted-foreground">
+				{item.icon}
+			</span>
 			<span className="min-w-0 flex-1 truncate">{item.label}</span>
 			{item.hint ? (
 				<span className="flex shrink-0 items-center gap-1.5">{item.hint}</span>
@@ -400,7 +403,7 @@ function repoItem(
 			repo.armed ? "armed" : "unarmed not armed arm",
 			isActive ? "current active" : "",
 		],
-		icon: GitBranchIcon,
+		icon: repoIcon(),
 		// Armed ⇒ scope into it. Unarmed ⇒ arm it — never silently scope a dead repo.
 		onSelect: repo.armed ? handlers.scope : handlers.arm,
 		hint: (
