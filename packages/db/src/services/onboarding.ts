@@ -17,6 +17,8 @@ export interface RepoLite {
 	name: string;
 	fullName: string;
 	private: boolean;
+	/** §4 — false ⇒ scoped for viewing but not gating; drives the arm CTA. */
+	armed: boolean;
 }
 
 const REPO_LITE = {
@@ -25,6 +27,7 @@ const REPO_LITE = {
 	name: repos.name,
 	fullName: repos.fullName,
 	private: repos.private,
+	armed: repos.armed,
 } as const;
 
 /**

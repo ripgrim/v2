@@ -1345,3 +1345,19 @@ badge check unchanged. Rejected reverse-engineering getRun's seroval GET wire
 format + compiled id hash as brittle. Verified: 18 run-access tests pass (7 new,
 with teeth), web typecheck + biome clean, smoke passes against a seeded public
 run.
+
+**Unit — repo arming, Unit 1: `repos.armed` safety floor (§4).** Installing on an
+org synced every repo and the derived baseline gate immediately blocked PRs on
+all of them (prod: 4 repos gated, only dither-kit intended). Added
+`repos.armed` bool NOT NULL DEFAULT false (migration 0003 — sets every existing
+repo, prod's four included, to unarmed). Arming is explicit: `setRepoArmed` is
+the only writer; `ensureRepo`/`syncInstallationRepos` never touch it, so re-sync/
+reinstall preserves the choice. The worker skips unarmed repos in `runWorkflows`
+(returns `none` right after the repo fetch, before any forge reads — no run/
+check/comment/action, same shape as the exemption path, logged) BUT events still
+ingest + normalize upstream, so the append-only store stays complete for
+arm-time backfill. `armed` added to `RepoLite`/`REPO_LITE` for the UI (the
+banner/inert states are Unit 2). `ensureDemoRepo` arms demo repos so dev:demo
+still shows the story. Run-expecting integration tests arm their fixture repo in
+setup; new dedicated test proves unarmed ⇒ 0 runs but the event normalizes.
+Checks: typecheck all, biome, boundaries, 239/239 tests.

@@ -25,6 +25,15 @@ export const repos = pgTable(
 		name: text("name").notNull(),
 		fullName: text("full_name").notNull(),
 		private: boolean("private").notNull().default(false),
+		/**
+		 * §4 arming — a repo is gated ONLY when explicitly armed. DEFAULT FALSE:
+		 * installing on an org syncs every repo, but tripwire touches none of them
+		 * until the maintainer arms it. Picking a repo (onboarding) scopes the
+		 * dashboard; it does NOT arm it. An unarmed repo still ingests events (the
+		 * append-only store stays complete for arm-time backfill) — only the RUN
+		 * is skipped, the same shape as the maintainer-exemption path.
+		 */
+		armed: boolean("armed").notNull().default(false),
 		/** GitHub App installation that grants access. */
 		installationId: text("installation_id"),
 		installedAt: timestamp("installed_at", { withTimezone: true })

@@ -107,6 +107,7 @@ describe("moderation queue = paused run", () => {
 			name: "Hello-World",
 			fullName: "Codertocat/Hello-World",
 		});
+		await repoServices.setRepoArmed(db, repoId, true);
 		await repoServices.saveWorkflowDefinition(db, repoId, MODERATED);
 
 		const { eventId } = await eventServices.insertRawEvent(pool, boss, {
@@ -261,6 +262,7 @@ describe("deny floor — deny with no deny edge never fails open", () => {
 			name: "Hello-World",
 			fullName: "Codertocat/Hello-World",
 		});
+		await repoServices.setRepoArmed(db, repoId, true);
 		await pool.query(
 			"UPDATE workflow_definitions SET enabled = false WHERE repo_id = $1",
 			[repoId],

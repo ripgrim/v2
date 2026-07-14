@@ -117,6 +117,19 @@ export async function getRepoById(db: Db, repoId: string) {
 	return rows[0] ?? null;
 }
 
+/**
+ * §4 arming — the ONLY writer of `armed`. Arming is always an explicit act
+ * (the Unit 2 ARM button, or tests); installation sync and `ensureRepo` never
+ * touch it, so a re-sync/reinstall preserves the maintainer's choice.
+ */
+export async function setRepoArmed(
+	db: Db,
+	repoId: string,
+	armed: boolean,
+): Promise<void> {
+	await db.update(repos).set({ armed }).where(eq(repos.id, repoId));
+}
+
 export async function getRepoByFullName(db: Db, fullName: string) {
 	const rows = await db
 		.select()

@@ -109,6 +109,23 @@ export async function runWorkflows(
 	 * nodes inside a saved workflow — those rules skip as `disabled`.
 	 */
 	const repo = await repoServices.getRepoByFullName(db, event.repo.fullName);
+
+	/**
+	 * §4 arming gate — an unarmed repo is skipped ENTIRELY: no run, no check, no
+	 * comment, no action rows (same shape as the exemption path below). The event
+	 * has already ingested + normalized upstream, so the append-only store stays
+	 * complete for arm-time backfill; only the RUN is skipped. This is the
+	 * product-safety floor: installing on a 400-repo org must not start blocking
+	 * PRs on repos the maintainer never armed.
+	 */
+	if (!repo?.armed) {
+		logger.info(
+			{ repo: event.repo.fullName },
+			"repo not armed — event ingested, run skipped",
+		);
+		return none;
+	}
+
 	const ruleConfigs = repo
 		? await repoServices.listRuleConfigs(db, repo.id)
 		: [];

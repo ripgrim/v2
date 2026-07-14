@@ -1183,6 +1183,9 @@ export async function ensureDemoRepo(
 		private: opts.private ?? false,
 		installationId: opts.installationId ?? null,
 	});
+	// §4 — the demo showcases a WORKING gate; arm every demo repo so dev:demo
+	// shows the story, not the "not armed" call-to-action.
+	await repoServices.setRepoArmed(db, id, true);
 	return { id, ...ref };
 }
 

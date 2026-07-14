@@ -6,6 +6,7 @@ import {
 	createTestDatabase,
 	type Db,
 	eventServices,
+	repoServices,
 	type TestDatabase,
 } from "@tripwire/db";
 import type { Pool } from "pg";
@@ -35,6 +36,15 @@ beforeAll(async () => {
 	({ db, pool } = createDb(container.url));
 	await applyMigrations(db);
 	boss = await createBoss(container.url);
+	// §4 arming — the fixture repo (Codertocat/Hello-World) must be armed for the
+	// run-expecting tests; the lazy upsert during processEvent preserves it.
+	const helloId = await repoServices.ensureRepo(db, {
+		externalId: "186853002",
+		owner: "Codertocat",
+		name: "Hello-World",
+		fullName: "Codertocat/Hello-World",
+	});
+	await repoServices.setRepoArmed(db, helloId, true);
 }, 120_000);
 
 afterAll(async () => {
@@ -230,6 +240,54 @@ describe("runWorkflows via processEvent (§13.6 done-when)", () => {
 				isMaintainer: false,
 			}),
 	};
+
+	test("§4 unarmed repo ⇒ event ingests + normalizes but NO run (the safety floor)", async () => {
+		const repo = await repoServices.getRepoByFullName(
+			db,
+			"Codertocat/Hello-World",
+		);
+		if (!repo) {
+			throw new Error("fixture repo missing");
+		}
+		await repoServices.setRepoArmed(db, repo.id, false);
+		try {
+			const raw = await fixtureRaw();
+			const { eventId } = await eventServices.insertRawEvent(pool, boss, {
+				deliveryId: "unarmed-1",
+				rawKind: "pull_request",
+				raw,
+			});
+			if (!eventId) {
+				throw new Error("insert failed");
+			}
+			await processEvent(
+				{
+					db,
+					pool,
+					logger,
+					reads: freshAccountReads,
+					adapter: null,
+					makeGenerate: null,
+					appUrl: "http://localhost:3000",
+				},
+				{ eventId },
+			);
+			const runRows = await pool.query(
+				"SELECT count(*)::int AS n FROM runs WHERE event_id = $1",
+				[eventId],
+			);
+			expect(runRows.rows[0].n).toBe(0);
+			// The append-only store stays complete — normalization still happened.
+			const evt = await pool.query(
+				"SELECT normalized FROM events WHERE id = $1",
+				[eventId],
+			);
+			expect(evt.rows[0].normalized).not.toBeNull();
+		} finally {
+			// Re-arm for the run-expecting tests that follow.
+			await repoServices.setRepoArmed(db, repo.id, true);
+		}
+	});
 
 	test("fresh-account PR ⇒ run persisted with snapshot, steps, verdict block, action row", async () => {
 		const raw = await fixtureRaw();

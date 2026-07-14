@@ -29,6 +29,7 @@ export async function getActiveRepo(): Promise<RepoLite | null> {
 				name: first.name,
 				fullName: first.fullName,
 				private: first.private,
+				armed: first.armed,
 			}
 		: null;
 }

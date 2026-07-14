@@ -1983,3 +1983,39 @@ LISTEN/NOTIFY connection split in Unit 3).
   replicating TanStack Start's seroval GET-payload wire format against a compiled
   server-fn id hash — brittle coupling to build internals. Rejected in favor of
   the projection test.
+
+## Repo arming + scope model (2026-07-14)
+
+Product-safety hole: GitHub's install flow offers "All repositories", and a synced
+repo with no rule_configs runs the DERIVED BASELINE gate (derive.ts) — so
+installing on a 400-repo org would immediately start BLOCKING PRs across all 400
+with rules the maintainer never chose. In prod today four synced repos were all
+being gated; only dither-kit was intended. Fixed by arming.
+
+### Unit 1 — `repos.armed` (the safety floor)
+
+- **`repos.armed` boolean NOT NULL DEFAULT false** (migration `0003`). The default
+  + `ADD COLUMN … DEFAULT false NOT NULL` sets EVERY existing repo (prod's four
+  included) to unarmed; the owner re-arms what he wants.
+- **Arming is always explicit.** `setRepoArmed` is the ONLY writer. `ensureRepo`
+  and `syncInstallationRepos` never touch `armed` (their upsert `set` excludes it),
+  so a re-sync / reinstall PRESERVES the maintainer's choice — a repo can't be
+  silently disarmed by an install refresh. Onboarding's "pick a repo" scopes the
+  dashboard; it does NOT arm.
+- **Worker skip = the exemption shape.** `runWorkflows` returns `none` right after
+  the repo fetch when `!repo?.armed` — no run, no check, no comment, no action
+  rows — and logs "repo not armed — event ingested, run skipped". Placed BEFORE
+  context-building so an unarmed repo costs zero forge reads.
+- **Events STILL ingest for unarmed repos** (owner decision): the webhook lands,
+  the raw event is stored, it normalizes — only the RUN is skipped. The
+  append-only store stays complete, which is what makes arm-time backfill (Unit 3)
+  possible. Proven by a dedicated test: unarmed repo ⇒ 0 runs but the event's
+  `normalized` column is non-null.
+- **`armed` surfaced on `RepoLite`** (+ `REPO_LITE` select) so the active repo
+  carries it to the UI; the arming UI (banner, inert states, feed "not armed")
+  lands in Unit 2 as one coherent pass.
+- **dev:demo unbroken:** `ensureDemoRepo` arms every demo repo, so the demo shows
+  the working-gate story, not the call-to-action.
+- **Tests:** the run-expecting integration suites (toggles, moderation,
+  process-event) now arm their fixture repo in setup; new gate test added. Full
+  suite 239/239.

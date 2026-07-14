@@ -125,6 +125,8 @@ beforeAll(async () => {
 		name: "Hello-World",
 		fullName: "Codertocat/Hello-World",
 	});
+	// §4 arming — these tests assert real runs, so the repo must be armed.
+	await repoServices.setRepoArmed(db, repoId, true);
 }, 120_000);
 
 afterEach(async () => {
