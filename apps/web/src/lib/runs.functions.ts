@@ -59,3 +59,20 @@ export const getRun = createServerFn({ method: "GET" })
 		const { getDb } = await import("#/lib/server/db");
 		return await loadRunView(getDb().db, data.runId, await readSessionState());
 	});
+
+/**
+ * §4 — the latest run id for the ACTIVE repo, powering the command palette's
+ * "latest run" jump. Null when the repo has no runs yet (nothing to jump to).
+ */
+export const getLatestRunId = createServerFn({ method: "GET" }).handler(
+	async (): Promise<string | null> => {
+		const { getActiveRepo } = await import("#/lib/server/active-repo");
+		const active = await getActiveRepo();
+		if (!active) {
+			return null;
+		}
+		const { runServices } = await import("@tripwire/db");
+		const { getDb } = await import("#/lib/server/db");
+		return await runServices.latestRunIdForRepo(getDb().db, active.fullName);
+	},
+);

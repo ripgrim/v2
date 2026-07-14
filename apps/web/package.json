@@ -33,12 +33,14 @@
 		"@tanstack/react-router-ssr-query": "~1.166.10",
 		"@tanstack/react-start": "~1.167.23",
 		"@tanstack/start-storage-context": "~1.166.35",
+		"@tripwire/auth": "workspace:*",
 		"@tripwire/contracts": "workspace:*",
 		"@tripwire/db": "workspace:*",
 		"@xyflow/react": "^12.11.2",
 		"better-auth": "^1.6.23",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
+		"cmdk": "^1.1.1",
 		"d3-scale": "^4.0.2",
 		"d3-shape": "^3.2.0",
 		"dialkit": "^1.3.0",
@@ -51,8 +53,7 @@
 		"react-dom": "^19.2.0",
 		"sonner": "^2.0.1",
 		"tailwind-merge": "^3.3.0",
-		"tailwindcss": "^4.1.18",
-		"@tripwire/auth": "workspace:*"
+		"tailwindcss": "^4.1.18"
 	},
 	"devDependencies": {
 		"@tanstack/router-plugin": "~1.167.12",

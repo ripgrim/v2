@@ -29,6 +29,25 @@ export const armActiveRepo = createServerFn({ method: "POST" }).handler(
 	},
 );
 
+/**
+ * Disarm the ACTIVE repo — turn the gate back OFF (the palette's disarm action).
+ * Events keep ingesting; only the RUN is skipped, same as a never-armed repo. No
+ * backfill on the way back on later — the stored events are still there to replay.
+ */
+export const disarmActiveRepo = createServerFn({ method: "POST" }).handler(
+	async (): Promise<{ armed: boolean; repoId: string | null }> => {
+		const { getActiveRepo } = await import("#/lib/server/active-repo");
+		const active = await getActiveRepo();
+		if (!active) {
+			return { armed: false, repoId: null };
+		}
+		const { repoServices } = await import("@tripwire/db");
+		const { getDb } = await import("#/lib/server/db");
+		await repoServices.setRepoArmed(getDb().db, active.id, false);
+		return { armed: false, repoId: active.id };
+	},
+);
+
 /** Arm a SPECIFIC repo (the switcher's inline arm) — only one the user can reach. */
 export const armRepoById = createServerFn({ method: "POST" })
 	.inputValidator((input: { repoId: string }) => input)
