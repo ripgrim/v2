@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { activeRepoQueryOptions } from "#/lib/onboarding.query";
+import { orgRepoQueryOptions } from "#/lib/org.query";
 import { cn } from "#/lib/utils";
 
 /**
@@ -7,9 +7,19 @@ import { cn } from "#/lib/utils";
  * count climbs live and the dashboard fills in behind it. Polls only while a
  * backfill is in flight (non-null total); renders nothing otherwise.
  */
-export function BackfillProgress({ className }: { className?: string }) {
+export function BackfillProgress({
+	org,
+	repo: repoName,
+	className,
+}: {
+	/** Org slug from the URL. */
+	org: string;
+	/** Repo NAME from the URL. */
+	repo: string;
+	className?: string;
+}) {
 	const { data: repo } = useQuery({
-		...activeRepoQueryOptions(),
+		...orgRepoQueryOptions(org, repoName),
 		refetchInterval: (query) =>
 			query.state.data && query.state.data.backfillTotal !== null
 				? 2000

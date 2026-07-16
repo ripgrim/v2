@@ -5,14 +5,15 @@ export const runsQueryKeys = {
 	all: ["runs"] as const,
 	details: () => [...runsQueryKeys.all, "detail"] as const,
 	detail: (runId: string) => [...runsQueryKeys.details(), runId] as const,
-	latestForActive: () => [...runsQueryKeys.all, "latest-active"] as const,
+	latest: (org: string, repo: string) =>
+		[...runsQueryKeys.all, "latest", org, repo] as const,
 };
 
-/** §4 — the active repo's most recent run, for the palette's "latest run" jump. */
-export const latestRunQueryOptions = () =>
+/** §4 — the URL repo's most recent run, for the palette's "latest run" jump. */
+export const latestRunQueryOptions = (org: string, repo: string) =>
 	queryOptions({
-		queryKey: runsQueryKeys.latestForActive(),
-		queryFn: ({ signal }) => getLatestRunId({ signal }),
+		queryKey: runsQueryKeys.latest(org, repo),
+		queryFn: ({ signal }) => getLatestRunId({ data: { org, repo }, signal }),
 		staleTime: 15_000,
 	});
 

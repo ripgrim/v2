@@ -5,14 +5,14 @@ import {
 } from "#/components/workflows/workflows-page";
 import { buildSeo, formatPageTitle } from "#/lib/seo";
 
-export const Route = createFileRoute("/workflows")({
+export const Route = createFileRoute("/$org/$repo/workflows")({
 	component: WorkflowsPage,
 	pendingComponent: WorkflowsPageSkeleton,
-	head: ({ match }) =>
+	head: ({ params, match }) =>
 		buildSeo({
 			path: match.pathname,
-			title: formatPageTitle("Workflows"),
-			description: "node-based rule workflows — the editor emits the DAG.",
+			title: formatPageTitle(`${params.repo} · workflows`),
+			description: "the workflow editor.",
 			noindex: true,
 		}),
 });

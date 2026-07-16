@@ -1,46 +1,47 @@
 import {
 	ActivityIcon,
+	Analytics01Icon,
 	CheckListIcon,
 	FlowIcon,
 	Home01Icon,
 	Logout01Icon,
+	PlusSignIcon,
 	Queue01Icon,
 	Search01Icon,
+	Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { orgSlugSchema, slugifyOrgName } from "@tripwire/contracts";
 import { Command as CommandPrimitive } from "cmdk";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { GithubIcon } from "#/components/icons/github";
-import {
-	armRepoById,
-	disarmActiveRepo,
-	armActiveRepo as fnArmActive,
-} from "#/lib/arm.functions";
+import { OrgAvatar } from "#/components/organizations/org-avatar";
+import { armRepo, disarmRepo } from "#/lib/arm.functions";
 import { authClient } from "#/lib/auth-client";
+import type { SwitcherRepo } from "#/lib/onboarding.functions";
+import { createOrg } from "#/lib/org.functions";
 import {
-	chooseActiveRepo,
-	type SwitcherRepo,
-} from "#/lib/onboarding.functions";
-import {
-	activeRepoQueryOptions,
-	switcherReposQueryOptions,
-} from "#/lib/onboarding.query";
-import { latestRunQueryOptions } from "#/lib/runs.query";
+	myOrgsQueryOptions,
+	orgHomeQueryOptions,
+	orgQueryKeys,
+} from "#/lib/org.query";
+import { getLatestRunId } from "#/lib/runs.functions";
 import { cn } from "#/lib/utils";
 
 /**
- * §4 command palette — opens on ⌘K / "/", the ONE keyboard surface for the app.
- * Repos (the switcher, now carrying signal), actions (arm/disarm, jump, sign
- * out), and navigation, all fuzzy-searchable by alternate names. Built on cmdk
- * for real keyboard semantics; the trigger + active-repo scoping are unchanged.
+ * §4 command palette — opens on ⌘K / "/", the ONE keyboard surface for the
+ * app. Orgs (the switcher), repos when an org is in URL context, actions
+ * (arm/disarm the current repo, jump, sign out), and navigation, all
+ * fuzzy-searchable. Scope is the URL (§8) — every jump is a navigation, never
+ * a server-side scope mutation.
  */
 export function RepoSwitcher() {
 	const [open, setOpen] = useState(false);
-	const { data: active } = useQuery(activeRepoQueryOptions());
+	const params = useParams({ strict: false });
 
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
@@ -59,6 +60,10 @@ export function RepoSwitcher() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [open]);
 
+	const label = params.repo
+		? `${params.org}/${params.repo}`
+		: (params.org ?? "switch org");
+
 	return (
 		<>
 			<button
@@ -66,10 +71,12 @@ export function RepoSwitcher() {
 				onClick={() => setOpen(true)}
 				type="button"
 			>
-				<GithubIcon className="size-3.5 shrink-0 text-muted-foreground" />
-				<span className="min-w-0 truncate font-medium">
-					{active ? active.fullName : "select a repo"}
-				</span>
+				{params.org ? (
+					<OrgAvatar className="shrink-0" name={params.org} size={14} />
+				) : (
+					<GithubIcon className="size-3.5 shrink-0 text-muted-foreground" />
+				)}
+				<span className="min-w-0 truncate font-medium">{label}</span>
 				<kbd className="ml-auto hidden shrink-0 rounded bg-background px-1 font-mono text-[10px] text-muted-foreground sm:block">
 					⌘K
 				</kbd>
@@ -98,7 +105,7 @@ interface PaletteItem {
 	label: string;
 	/** Alternate names so nothing needs to be typed verbatim. */
 	searchTags: string[];
-	/** A rendered icon node — a hugeicon or the GitHub vector (repos). */
+	/** A rendered icon node — a hugeicon, an org avatar, or the GitHub mark. */
 	icon: ReactNode;
 	hint?: React.ReactNode;
 	onSelect: () => void;
@@ -117,11 +124,29 @@ function repoIcon(): ReactNode {
 function CommandPalette({ onClose }: { onClose: () => void }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
-	// Mounted only while open ⇒ these fetch on open, not on app mount.
-	const { data: repos } = useQuery(switcherReposQueryOptions());
-	const { data: active } = useQuery(activeRepoQueryOptions());
-	const { data: latestRunId } = useQuery(latestRunQueryOptions());
+	const params = useParams({ strict: false });
+	const currentOrg = params.org;
+	const currentRepo = params.repo;
 
+	// Mounted only while open ⇒ these fetch on open, not on app mount.
+	const { data: orgs } = useQuery(myOrgsQueryOptions());
+	const { data: orgHome } = useQuery({
+		...orgHomeQueryOptions(currentOrg ?? ""),
+		enabled: currentOrg !== undefined,
+	});
+	const repoScope =
+		currentOrg && currentRepo ? { org: currentOrg, repo: currentRepo } : null;
+	const { data: latestRunId } = useQuery({
+		queryKey: ["runs", "latest", repoScope?.org, repoScope?.repo],
+		queryFn: ({ signal }) =>
+			repoScope
+				? getLatestRunId({ data: repoScope, signal })
+				: Promise.resolve(null),
+		enabled: repoScope !== null,
+		staleTime: 15_000,
+	});
+
+	const [view, setView] = useState<"list" | "create-org">("list");
 	const [query, setQuery] = useState("");
 	const deferred = useDebouncedValue(query, 200);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -139,13 +164,9 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 
 	const invalidate = () => queryClient.invalidateQueries();
 
-	const choose = useMutation({
-		mutationFn: (repoId: string) => chooseActiveRepo({ data: { repoId } }),
-		onSettled: invalidate,
-		onSuccess: onClose,
-	});
-	const armRepo = useMutation({
-		mutationFn: (repoId: string) => armRepoById({ data: { repoId } }),
+	const arm = useMutation({
+		mutationFn: (input: { org: string; repo: string }) =>
+			armRepo({ data: input }),
 		onSettled: invalidate,
 		onSuccess: (result) => {
 			if (result.armed) {
@@ -153,17 +174,9 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			}
 		},
 	});
-	const armActive = useMutation({
-		mutationFn: () => fnArmActive(),
-		onSettled: invalidate,
-		onSuccess: (result) => {
-			if (result.armed) {
-				toast.success("armed — backfilling its history");
-			}
-		},
-	});
-	const disarmActive = useMutation({
-		mutationFn: () => disarmActiveRepo(),
+	const disarm = useMutation({
+		mutationFn: (input: { org: string; repo: string }) =>
+			disarmRepo({ data: input }),
 		onSettled: invalidate,
 		onSuccess: () => toast.success("disarmed — events still ingest, gate off"),
 	});
@@ -173,19 +186,60 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 		onClose();
 	}
 
-	// ── REPOS: sorted by recent activity, grouped by owner ─────────────────────
-	const repoGroups = useMemo(() => {
-		const terms = tokenize(deferred);
-		const sorted = [...(repos ?? [])].sort(
+	const terms = tokenize(deferred);
+
+	// ── ORGS: the switcher, personal first (server order). Cheap to build, so
+	// not memoized — closures over `go` stay fresh. ─────────────────────────────
+	const orgItems = (() => {
+		const items: PaletteItem[] = [];
+		for (const org of orgs ?? []) {
+			items.push({
+				id: `org:${org.id}`,
+				label: org.name,
+				searchTags: [
+					org.slug,
+					org.name,
+					"org",
+					org.isPersonal ? "personal" : "team",
+					org.slug === currentOrg ? "current active" : "",
+				],
+				icon: <OrgAvatar hue={org.avatarHue} name={org.name} size={15} />,
+				onSelect: () => go(`/${org.slug}/home`),
+				hint: (
+					<>
+						{org.isPersonal ? (
+							<span className="text-muted-foreground text-xs">personal</span>
+						) : null}
+						{org.slug === currentOrg ? (
+							<span className="text-muted-foreground text-xs">current</span>
+						) : null}
+					</>
+				),
+			});
+		}
+		items.push({
+			id: "org:new",
+			label: "new org",
+			searchTags: ["new", "create", "org", "organization", "team"],
+			icon: hugeicon(PlusSignIcon),
+			onSelect: () => setView("create-org"),
+		});
+		return items.filter((item) => matches(item, terms));
+	})();
+
+	// ── REPOS: only inside an org route; each jump is a URL change ──────────────
+	const repoGroups = (() => {
+		if (!currentOrg) {
+			return [] as [string, PaletteItem[]][];
+		}
+		const sorted = [...(orgHome?.repos ?? [])].sort(
 			(a, b) => activityRank(b) - activityRank(a),
 		);
 		const byOwner = new Map<string, PaletteItem[]>();
 		for (const repo of sorted) {
-			const item = repoItem(repo, active?.id ?? null, {
-				scope: () => choose.mutate(repo.id),
-				arm: () => armRepo.mutate(repo.id),
-				arming: armRepo.isPending && armRepo.variables === repo.id,
-			});
+			const item = repoItem(repo, currentRepo ?? null, () =>
+				go(`/${currentOrg}/${repo.name}`),
+			);
 			if (!matches(item, terms)) {
 				continue;
 			}
@@ -194,26 +248,31 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			byOwner.set(repo.owner, bucket);
 		}
 		return [...byOwner.entries()];
-	}, [repos, active?.id, deferred, choose, armRepo]);
+	})();
 
 	// ── ACTIONS (cheap to build; not memoized so closures stay fresh) ───────────
 	const actionItems: PaletteItem[] = [];
-	if (active) {
+	const scopedRepo =
+		currentOrg && currentRepo
+			? (orgHome?.repos.find((repo) => repo.name === currentRepo) ?? null)
+			: null;
+	if (currentOrg && currentRepo && scopedRepo) {
 		actionItems.push(
-			active.armed
+			scopedRepo.armed
 				? {
 						id: "action:disarm",
-						label: `disarm ${active.fullName}`,
-						searchTags: ["disarm", "off", "stop", "gate", "repo", active.name],
+						label: `disarm ${scopedRepo.fullName}`,
+						searchTags: ["disarm", "off", "stop", "gate", "repo", currentRepo],
 						icon: repoIcon(),
-						onSelect: () => disarmActive.mutate(),
+						onSelect: () =>
+							disarm.mutate({ org: currentOrg, repo: currentRepo }),
 					}
 				: {
 						id: "action:arm",
-						label: `arm ${active.fullName}`,
-						searchTags: ["arm", "on", "enable", "gate", "repo", active.name],
+						label: `arm ${scopedRepo.fullName}`,
+						searchTags: ["arm", "on", "enable", "gate", "repo", currentRepo],
 						icon: repoIcon(),
-						onSelect: () => armActive.mutate(),
+						onSelect: () => arm.mutate({ org: currentOrg, repo: currentRepo }),
 					},
 		);
 	}
@@ -237,49 +296,68 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			}),
 	});
 
-	// ── NAVIGATION ──────────────────────────────────────────────────────────────
-	const navItems: PaletteItem[] = [
-		{
+	// ── NAVIGATION: org-scoped always; repo-scoped only with a repo in context ──
+	const navItems: PaletteItem[] = [];
+	if (currentOrg) {
+		navItems.push({
 			id: "nav:home",
 			label: "Home",
 			searchTags: ["home", "overview", "dashboard", "repos"],
 			icon: hugeicon(Home01Icon),
-			onSelect: () => go("/"),
-		},
-		{
-			id: "nav:moderation",
-			label: "Moderation",
-			searchTags: ["moderation", "queue", "review", "pending", "triage"],
-			icon: hugeicon(Queue01Icon),
-			onSelect: () => go("/moderation"),
-		},
-		{
-			id: "nav:activity",
-			label: "Activity",
-			searchTags: ["activity", "events", "runs", "feed", "stream"],
-			icon: hugeicon(ActivityIcon),
-			onSelect: () => go("/activity"),
-		},
-		{
-			id: "nav:rules",
-			label: "Rules",
-			searchTags: ["rules", "gate", "block", "checks", "gatekeeper"],
-			icon: hugeicon(CheckListIcon),
-			onSelect: () => go("/rules"),
-		},
-		{
-			id: "nav:workflows",
-			label: "Workflows",
-			searchTags: ["workflows", "automation", "pipeline", "dag"],
-			icon: hugeicon(FlowIcon),
-			onSelect: () => go("/workflows"),
-		},
-	];
+			onSelect: () => go(`/${currentOrg}/home`),
+		});
+		if (currentRepo) {
+			navItems.push(
+				{
+					id: "nav:moderation",
+					label: "Moderation",
+					searchTags: ["moderation", "queue", "review", "pending", "triage"],
+					icon: hugeicon(Queue01Icon),
+					onSelect: () => go(`/${currentOrg}/${currentRepo}/moderation`),
+				},
+				{
+					id: "nav:activity",
+					label: "Activity",
+					searchTags: ["activity", "events", "runs", "feed", "stream"],
+					icon: hugeicon(ActivityIcon),
+					onSelect: () => go(`/${currentOrg}/${currentRepo}/activity`),
+				},
+				{
+					id: "nav:rules",
+					label: "Rules",
+					searchTags: ["rules", "gate", "block", "checks", "gatekeeper"],
+					icon: hugeicon(CheckListIcon),
+					onSelect: () => go(`/${currentOrg}/${currentRepo}/rules`),
+				},
+				{
+					id: "nav:workflows",
+					label: "Workflows",
+					searchTags: ["workflows", "automation", "pipeline", "dag"],
+					icon: hugeicon(FlowIcon),
+					onSelect: () => go(`/${currentOrg}/${currentRepo}/workflows`),
+				},
+				{
+					id: "nav:analytics",
+					label: "Analytics",
+					searchTags: ["analytics", "stats", "charts", "trends"],
+					icon: hugeicon(Analytics01Icon),
+					onSelect: () => go(`/${currentOrg}/${currentRepo}/analytics`),
+				},
+			);
+		}
+		navItems.push({
+			id: "nav:settings",
+			label: "Settings",
+			searchTags: ["settings", "members", "invites", "org", "admin"],
+			icon: hugeicon(Settings01Icon),
+			onSelect: () => go(`/${currentOrg}/settings/members`),
+		});
+	}
 
-	const terms = tokenize(deferred);
 	const visibleActions = actionItems.filter((item) => matches(item, terms));
 	const visibleNav = navItems.filter((item) => matches(item, terms));
 	const resultCount =
+		orgItems.length +
 		repoGroups.reduce((sum, [, list]) => sum + list.length, 0) +
 		visibleActions.length +
 		visibleNav.length;
@@ -297,75 +375,212 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 				className="-translate-x-1/2 absolute top-[12vh] left-1/2 w-full max-w-lg px-4"
 				role="dialog"
 			>
-				<CommandPrimitive
-					className="overflow-hidden rounded-xl border bg-popover shadow-lg [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide"
-					label="Command palette"
-					loop
-					shouldFilter={false}
-				>
-					<div className="flex items-center gap-2 border-b px-3">
-						<HugeiconsIcon
-							className="shrink-0 text-muted-foreground"
-							icon={Search01Icon}
-							size={16}
-							strokeWidth={2}
-						/>
-						<CommandPrimitive.Input
-							className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-							onValueChange={setQuery}
-							placeholder="search repos, actions, pages…"
-							ref={inputRef}
-							value={query}
+				{view === "create-org" ? (
+					<div className="overflow-hidden rounded-xl border bg-popover shadow-lg">
+						<CreateOrgForm
+							onBack={() => setView("list")}
+							onCreated={(slug) => go(`/${slug}/home`)}
 						/>
 					</div>
+				) : (
+					<CommandPrimitive
+						className="overflow-hidden rounded-xl border bg-popover shadow-lg [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide"
+						label="Command palette"
+						loop
+						shouldFilter={false}
+					>
+						<div className="flex items-center gap-2 border-b px-3">
+							<HugeiconsIcon
+								className="shrink-0 text-muted-foreground"
+								icon={Search01Icon}
+								size={16}
+								strokeWidth={2}
+							/>
+							<CommandPrimitive.Input
+								className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+								onValueChange={setQuery}
+								placeholder="search orgs, repos, actions, pages…"
+								ref={inputRef}
+								value={query}
+							/>
+						</div>
 
-					<CommandPrimitive.List className="max-h-[50vh] overflow-y-auto py-1">
-						<CommandPrimitive.Empty className="px-4 py-6 text-center text-muted-foreground text-sm">
-							nothing matches.
-						</CommandPrimitive.Empty>
+						<CommandPrimitive.List className="max-h-[50vh] overflow-y-auto py-1">
+							<CommandPrimitive.Empty className="px-4 py-6 text-center text-muted-foreground text-sm">
+								nothing matches.
+							</CommandPrimitive.Empty>
 
-						{repoGroups.map(([owner, items]) => (
-							<CommandPrimitive.Group heading={owner} key={owner}>
-								{items.map((item) => (
-									<PaletteRow item={item} key={item.id} />
-								))}
-							</CommandPrimitive.Group>
-						))}
+							{orgItems.length > 0 ? (
+								<CommandPrimitive.Group heading="Orgs">
+									{orgItems.map((item) => (
+										<PaletteRow item={item} key={item.id} />
+									))}
+								</CommandPrimitive.Group>
+							) : null}
 
-						{visibleActions.length > 0 ? (
-							<CommandPrimitive.Group heading="Actions">
-								{visibleActions.map((item) => (
-									<PaletteRow item={item} key={item.id} />
-								))}
-							</CommandPrimitive.Group>
-						) : null}
+							{repoGroups.map(([owner, items]) => (
+								<CommandPrimitive.Group heading={owner} key={owner}>
+									{items.map((item) => (
+										<PaletteRow item={item} key={item.id} />
+									))}
+								</CommandPrimitive.Group>
+							))}
 
-						{visibleNav.length > 0 ? (
-							<CommandPrimitive.Group heading="Navigation">
-								{visibleNav.map((item) => (
-									<PaletteRow item={item} key={item.id} />
-								))}
-							</CommandPrimitive.Group>
-						) : null}
-					</CommandPrimitive.List>
+							{visibleActions.length > 0 ? (
+								<CommandPrimitive.Group heading="Actions">
+									{visibleActions.map((item) => (
+										<PaletteRow item={item} key={item.id} />
+									))}
+								</CommandPrimitive.Group>
+							) : null}
 
-					<div className="flex items-center justify-between border-t px-3 py-2 text-muted-foreground text-[11px]">
-						<span className="flex items-center gap-3">
-							<span>
-								<kbd className="font-mono">↑↓</kbd> navigate
+							{visibleNav.length > 0 ? (
+								<CommandPrimitive.Group heading="Navigation">
+									{visibleNav.map((item) => (
+										<PaletteRow item={item} key={item.id} />
+									))}
+								</CommandPrimitive.Group>
+							) : null}
+						</CommandPrimitive.List>
+
+						<div className="flex items-center justify-between border-t px-3 py-2 text-muted-foreground text-[11px]">
+							<span className="flex items-center gap-3">
+								<span>
+									<kbd className="font-mono">↑↓</kbd> navigate
+								</span>
+								<span>
+									<kbd className="font-mono">↵</kbd> select
+								</span>
+								<span>
+									<kbd className="font-mono">esc</kbd> close
+								</span>
 							</span>
-							<span>
-								<kbd className="font-mono">↵</kbd> select
-							</span>
-							<span>
-								<kbd className="font-mono">esc</kbd> close
-							</span>
-						</span>
-						<span className="tabular-nums">{resultCount} results</span>
-					</div>
-				</CommandPrimitive>
+							<span className="tabular-nums">{resultCount} results</span>
+						</div>
+					</CommandPrimitive>
+				)}
 			</div>
 		</div>
+	);
+}
+
+/**
+ * Inline org creation — the name drives a LIVE avatar preview (§7) and an
+ * auto-derived slug the user can take over; orgSlugSchema holds the line on
+ * both sides of the wire.
+ */
+function CreateOrgForm({
+	onCreated,
+	onBack,
+}: {
+	onCreated: (slug: string) => void;
+	onBack: () => void;
+}) {
+	const queryClient = useQueryClient();
+	const [name, setName] = useState("");
+	const [slugOverride, setSlugOverride] = useState<string | null>(null);
+	const [serverError, setServerError] = useState<string | null>(null);
+	const nameRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		nameRef.current?.focus();
+	}, []);
+
+	const slug = slugOverride ?? (name ? slugifyOrgName(name) : "");
+	const slugCheck = slug ? orgSlugSchema.safeParse(slug) : null;
+	const slugError =
+		slugCheck && !slugCheck.success
+			? (slugCheck.error.issues[0]?.message ?? "invalid slug")
+			: null;
+
+	const create = useMutation({
+		mutationFn: () => createOrg({ data: { name: name.trim(), slug } }),
+		onSuccess: (result) => {
+			if ("error" in result) {
+				setServerError(result.error);
+				return;
+			}
+			queryClient.invalidateQueries({ queryKey: orgQueryKeys.all });
+			onCreated(result.slug);
+		},
+	});
+
+	const canSubmit =
+		name.trim().length > 0 &&
+		slug.length > 0 &&
+		!slugError &&
+		!create.isPending;
+
+	return (
+		<form
+			className="flex flex-col gap-3 p-4"
+			onSubmit={(event) => {
+				event.preventDefault();
+				if (canSubmit) {
+					setServerError(null);
+					create.mutate();
+				}
+			}}
+		>
+			<div className="flex items-center justify-between">
+				<span className="font-medium text-[13px]">new org</span>
+				<button
+					className="text-[12px] text-muted-foreground hover:text-foreground"
+					onClick={onBack}
+					type="button"
+				>
+					back
+				</button>
+			</div>
+
+			<div className="flex items-center gap-3">
+				<OrgAvatar animate name={name} size={36} />
+				<input
+					className="h-9 w-full rounded-md border bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-foreground/30"
+					onChange={(event) => setName(event.target.value)}
+					placeholder="org name"
+					ref={nameRef}
+					value={name}
+				/>
+			</div>
+
+			<div className="flex flex-col gap-1">
+				<label
+					className="text-[11px] text-muted-foreground uppercase tracking-wide"
+					htmlFor="new-org-slug"
+				>
+					slug
+				</label>
+				<input
+					className="h-9 w-full rounded-md border bg-transparent px-2.5 font-mono text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/30"
+					id="new-org-slug"
+					onChange={(event) =>
+						setSlugOverride(event.target.value.toLowerCase())
+					}
+					placeholder="org-slug"
+					value={slug}
+				/>
+				{slugError ? (
+					<span className="text-[12px] text-destructive">{slugError}</span>
+				) : (
+					<span className="text-[12px] text-muted-foreground">
+						{slug ? `/${slug}/home` : "lives in the url"}
+					</span>
+				)}
+			</div>
+
+			{serverError ? (
+				<span className="text-[12px] text-destructive">{serverError}</span>
+			) : null}
+
+			<button
+				className="h-9 rounded-md bg-foreground font-medium text-[13px] text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+				disabled={!canSubmit}
+				type="submit"
+			>
+				{create.isPending ? "creating…" : "create org"}
+			</button>
+		</form>
 	);
 }
 
@@ -389,10 +604,10 @@ function PaletteRow({ item }: { item: PaletteItem }) {
 
 function repoItem(
 	repo: SwitcherRepo,
-	activeId: string | null,
-	handlers: { scope: () => void; arm: () => void; arming: boolean },
+	currentRepoName: string | null,
+	onSelect: () => void,
 ): PaletteItem {
-	const isActive = repo.id === activeId;
+	const isCurrent = repo.name === currentRepoName;
 	return {
 		id: `repo:${repo.id}`,
 		label: repo.name,
@@ -400,12 +615,11 @@ function repoItem(
 			repo.owner,
 			repo.name,
 			repo.fullName,
-			repo.armed ? "armed" : "unarmed not armed arm",
-			isActive ? "current active" : "",
+			repo.armed ? "armed" : "unarmed not armed",
+			isCurrent ? "current active" : "",
 		],
 		icon: repoIcon(),
-		// Armed ⇒ scope into it. Unarmed ⇒ arm it — never silently scope a dead repo.
-		onSelect: repo.armed ? handlers.scope : handlers.arm,
+		onSelect,
 		hint: (
 			<>
 				<span
@@ -421,15 +635,9 @@ function repoItem(
 				{repo.blocked24h > 0 ? (
 					<RowChip tone="red">{repo.blocked24h} blocked</RowChip>
 				) : null}
-				{repo.armed ? (
-					isActive ? (
-						<span className="text-muted-foreground text-xs">current</span>
-					) : null
-				) : (
-					<span className="text-muted-foreground text-xs">
-						{handlers.arming ? "arming…" : "↵ to arm"}
-					</span>
-				)}
+				{isCurrent ? (
+					<span className="text-muted-foreground text-xs">current</span>
+				) : null}
 			</>
 		),
 	};

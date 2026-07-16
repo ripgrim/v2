@@ -1,11 +1,34 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { HomePage } from "#/components/home/home-page";
-import { switcherReposQueryOptions } from "#/lib/onboarding.query";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import {
+	NoOrgsPage,
+	NoOrgsPageSkeleton,
+} from "#/components/organizations/no-orgs-page";
+import { getSessionInfo } from "#/lib/auth.functions";
+import { buildSeo, formatPageTitle } from "#/lib/seo";
 
+/**
+ * `/` → the last-visited (or personal) org's home. `defaultOrgSlug` is only
+ * this redirect's hint — the URL stays the source of truth (§8). Signed-out
+ * users were already bounced by __root; open-dev with no orgs renders the
+ * create-first-org screen.
+ */
 export const Route = createFileRoute("/")({
-	ssr: false,
-	loader: ({ context }) => {
-		void context.queryClient.prefetchQuery(switcherReposQueryOptions());
+	beforeLoad: async () => {
+		const session = await getSessionInfo();
+		if (session.defaultOrgSlug) {
+			throw redirect({
+				to: "/$org/home",
+				params: { org: session.defaultOrgSlug },
+			});
+		}
 	},
-	component: HomePage,
+	component: NoOrgsPage,
+	pendingComponent: NoOrgsPageSkeleton,
+	head: ({ match }) =>
+		buildSeo({
+			path: match.pathname,
+			title: formatPageTitle("Home"),
+			description: "the contribution gatekeeper.",
+			noindex: true,
+		}),
 });

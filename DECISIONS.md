@@ -2373,3 +2373,41 @@ The load-bearing choices, in the order they were argued:
   unclassified fn. Checkpoint 1 enforces list completeness; the checkpoint-2
   URL rewrite (`/:org/:repo/…`) adds `assertOrgRole` middlewares per fn and
   upgrades the test to assert the chain matches the class.
+
+## Org checkpoint 2 — the URL owns scope (2026-07-16, §8)
+
+The routing rewrite landed in one pass (no flat-route compatibility layer —
+v2 has no production traffic). Ledger of the consequential calls:
+
+- **Route tree**: `/$org` layout resolves slug→org+role in beforeLoad (404 for
+  non-members, never 403); `/$org/home`, `/$org/analytics` (thin aggregates),
+  `/$org/$repo/{moderation,activity,rules,workflows,analytics}` (index →
+  moderation, the daily surface), `/$org/settings/{members,settings,billing}`,
+  `/invite/$token`, `/onboarding/setup` (kept — the GitHub App Setup URL is an
+  external contract; it renders the confirm/claim screens now). `/` redirects
+  via `SessionInfo.defaultOrgSlug` (session breadcrumb → personal org).
+- **`active_repo_id` is dead** — column dropped (0007), legacy onboarding
+  service reduced to shared repo-view types, and the boundary test carries a
+  grep-proof scan so no scoped logic can quietly re-reference it.
+  `user_installations` survives ONLY as §11 migration source data.
+- **Role middlewares are live on every fn**: the classification
+  (public/authed/member/admin) is asserted against each fn's ACTUAL middleware
+  chain — a mutation cannot ship member-readable or ungated. decideModeration
+  gained a repo-ownership check (an admin of org A cannot decide org B's item
+  by id). `getAnalyticsActivity`/`listRecentRuns` were silently cross-repo
+  pre-org — now repo-scoped (a real leak, fixed in passing).
+- **SSE visibility**: /events/stream now snapshots the caller's
+  membership-visible repo set at connect (refreshed on heartbeat) and filters
+  notifications — approved-but-foreign users no longer receive other orgs'
+  live events.
+- **Install targeting**: state signs {userId, orgId}; the callback never
+  claims — a valid state renders the confirmation naming both sides, an
+  invalid/missing one renders the claim screen (admin-only org picker).
+  Install preview derives the GitHub account from webhook-synced repos, so
+  apps/web never imports forge-github (the §3 arrows hold).
+- **Avatars are derived, never stored** (except the optional hue override):
+  DitherAvatar pulled from the dither-kit registry into charts/dither-kit,
+  wrapped once as OrgAvatar; the new-org creator, no-orgs screen, and org
+  settings all regenerate live from the name input.
+- **Dev personas** mint personal orgs + org-claimed installations; the §13
+  auto-login trampoline had already been removed (signed-out ⇒ /login).

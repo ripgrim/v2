@@ -8,11 +8,12 @@ import {
 	Logout01Icon,
 	MoonIcon,
 	Queue01Icon,
+	Settings01Icon,
 	Sun01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
 import { useFeedback } from "#/components/feedback";
 import { RepoSwitcher } from "#/components/layouts/repo-switcher";
@@ -40,6 +41,11 @@ interface DashboardTopbarProps {
 }
 
 export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
+	// URL-scoped nav (§8): the org (and repo) in the URL decide the link tree.
+	const params = useParams({ strict: false });
+	const org = params.org;
+	const repo = params.repo;
+
 	return (
 		<nav className="flex min-w-0 items-center gap-3 px-3 py-2">
 			<div className="flex shrink-0 items-center gap-2 pl-1 pr-1">
@@ -49,22 +55,54 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 			</div>
 
 			<div className="hidden shrink-0 items-center gap-0.5 md:flex">
-				<NavLink to="/" label="Home" icon={Home01Icon} />
-				<NavLink
-					to="/moderation"
-					label="Queue"
-					icon={Queue01Icon}
-					value={counts.queue}
-				/>
-				<NavLink to="/activity" label="Activity" icon={ActivityIcon} />
-				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
-				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
-				<NavLink
-					to="/analytics"
-					label="Analytics"
-					icon={Analytics01Icon}
-					exact={false}
-				/>
+				{org && repo ? (
+					<>
+						<NavLink to={`/${org}/home`} label="Home" icon={Home01Icon} />
+						<NavLink
+							to={`/${org}/${repo}/moderation`}
+							label="Queue"
+							icon={Queue01Icon}
+							value={counts.queue}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/activity`}
+							label="Activity"
+							icon={ActivityIcon}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/rules`}
+							label="Rules"
+							icon={CheckListIcon}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/workflows`}
+							label="Workflows"
+							icon={FlowIcon}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/analytics`}
+							label="Analytics"
+							icon={Analytics01Icon}
+							exact={false}
+						/>
+					</>
+				) : org ? (
+					<>
+						<NavLink to={`/${org}/home`} label="Home" icon={Home01Icon} />
+						<NavLink
+							to={`/${org}/analytics`}
+							label="Analytics"
+							icon={Analytics01Icon}
+							exact={false}
+						/>
+						<NavLink
+							to={`/${org}/settings/members`}
+							label="Settings"
+							icon={Settings01Icon}
+							exact={false}
+						/>
+					</>
+				) : null}
 			</div>
 
 			<div className="ml-auto hidden items-center md:flex">

@@ -13,11 +13,11 @@ export interface SessionInfo {
 	} | null;
 	authEnabled: boolean;
 	/**
-	 * Has the user finished onboarding (an active repo, §10)? Always true in
-	 * open-dev / signed-out — the onboarding gate only applies to a real
-	 * signed-in user, the same shape as the auth gate.
+	 * Where `/` should land: the last-visited org (session breadcrumb) when
+	 * the caller is still a member there, else their personal org. NEVER an
+	 * authority for scope — the URL is (§8). Null when signed out / open-dev.
 	 */
-	onboarded: boolean;
+	defaultOrgSlug: string | null;
 	/**
 	 * Is the closed-beta gate on? Server-evaluated (Databuddy `access-gate` flag
 	 * + env fallback) — the SAME decision the API boundary enforces, so the
@@ -34,7 +34,7 @@ export const getSessionInfo = createServerFn({ method: "GET" }).handler(
 			return {
 				user: null,
 				authEnabled: false,
-				onboarded: true,
+				defaultOrgSlug: null,
 				gateEnabled: false,
 			};
 		}
@@ -45,21 +45,15 @@ export const getSessionInfo = createServerFn({ method: "GET" }).handler(
 			return {
 				user: null,
 				authEnabled: true,
-				onboarded: false,
+				defaultOrgSlug: null,
 				gateEnabled: false,
 			};
 		}
-		const { onboardingServices, user: userTable } = await import(
-			"@tripwire/db"
-		);
+		const { orgServices, user: userTable } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const { eq } = await import("drizzle-orm");
 		const { isAccessGateEnabled } = await import("@tripwire/auth/access-gate");
 		const db = getDb().db;
-		const activeRepo = await onboardingServices.getActiveRepo(
-			db,
-			session.user.id,
-		);
 		const rows = await db
 			.select({ accessStatus: userTable.accessStatus })
 			.from(userTable)
@@ -70,6 +64,17 @@ export const getSessionInfo = createServerFn({ method: "GET" }).handler(
 			userId: session.user.id,
 			email: session.user.email,
 		});
+		// `/` redirect target: the session's last-visited org while membership
+		// still holds, else the personal org (every user has one).
+		const orgs = await orgServices.listUserOrgs(db, session.user.id);
+		const lastVisited = (
+			session.session as { activeOrganizationId?: string | null }
+		).activeOrganizationId;
+		const defaultOrgSlug =
+			orgs.find((o) => o.id === lastVisited)?.slug ??
+			orgs.find((o) => o.isPersonal)?.slug ??
+			orgs[0]?.slug ??
+			null;
 		return {
 			user: {
 				id: session.user.id,
@@ -79,7 +84,7 @@ export const getSessionInfo = createServerFn({ method: "GET" }).handler(
 				accessStatus,
 			},
 			authEnabled: true,
-			onboarded: activeRepo !== null,
+			defaultOrgSlug,
 			gateEnabled,
 		};
 	},

@@ -8,7 +8,6 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { repos } from "./repos.ts";
 
 /**
  * Better Auth core tables (§10) + forge_identities. Column set follows Better
@@ -24,12 +23,6 @@ export const user = pgTable(
 		email: text("email").notNull().unique(),
 		emailVerified: boolean("email_verified").notNull().default(false),
 		image: text("image"),
-		/**
-		 * The ONE repo this user's dashboard is scoped to (§10 onboarding). Null
-		 * until they finish onboarding. All granted repos stay synced as `repos`
-		 * rows; only this one is active (MVP — no switcher).
-		 */
-		activeRepoId: text("active_repo_id").references(() => repos.id),
 		/**
 		 * Closed-beta access gate. Server-assigned only (Better Auth `input: false`
 		 * + the create hook); new signups default to "pending".
@@ -52,10 +45,10 @@ export const user = pgTable(
 );
 
 /**
- * Which App installation belongs to which user (§10 onboarding). The Setup URL
- * callback writes this from the SIGNED-IN session — an installation with no
- * owner is a bug, so `(forge, installationId)` is unique. Repos are reached
- * through this: `repos.installationId = user_installations.installationId`.
+ * LEGACY (pre-org): which App installation belonged to which USER. Superseded
+ * by `organization_installations` (§org-model) — this table remains ONLY as
+ * the §11 migration's source data (backfillOrgs re-parents it) and is dropped
+ * by a later migration once production has cut over. No product code reads it.
  */
 export const userInstallations = pgTable(
 	"user_installations",

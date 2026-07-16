@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { OrgWithRole } from "@tripwire/db";
 import type { AnalyticsEvent } from "#/lib/analytics-events";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
+import { orgMemberMiddleware, resolveOrgRepo } from "#/lib/server/org-guard";
 
 /**
  * Real activity behind a moderation metric — the list under the chart on
@@ -14,11 +16,13 @@ function subject(repoFullName: string, subjectNumber: number | null): string {
 }
 
 export const getAnalyticsActivity = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.inputValidator((input: { metric: string }) => input)
-	.handler(async ({ data }): Promise<AnalyticsEvent[]> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator(
+		(input: { org: string; repo: string; metric: string }) => input,
+	)
+	.handler(async ({ data, context }): Promise<AnalyticsEvent[]> => {
+		const org = (context as { org: OrgWithRole }).org;
+		const scoped = await resolveOrgRepo(org.id, data.repo);
 		const { insightServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const { db } = getDb();
@@ -26,6 +30,7 @@ export const getAnalyticsActivity = createServerFn({ method: "GET" })
 		if (data.metric === "blocked") {
 			const runs = await insightServices.listRecentRuns(db, {
 				verdicts: ["block"],
+				repoFullName: scoped.fullName,
 			});
 			return runs.map((r) => ({
 				id: r.runId,
@@ -43,6 +48,7 @@ export const getAnalyticsActivity = createServerFn({ method: "GET" })
 		if (data.metric === "passed") {
 			const runs = await insightServices.listRecentRuns(db, {
 				verdicts: ["pass"],
+				repoFullName: scoped.fullName,
 			});
 			return runs.map((r) => ({
 				id: r.runId,
@@ -57,6 +63,7 @@ export const getAnalyticsActivity = createServerFn({ method: "GET" })
 		// "review" (default): runs awaiting a maintainer's decision.
 		const runs = await insightServices.listRecentRuns(db, {
 			verdicts: ["needs_review"],
+			repoFullName: scoped.fullName,
 		});
 		return runs.map((r) => ({
 			id: r.runId,

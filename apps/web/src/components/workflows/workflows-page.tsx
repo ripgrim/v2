@@ -1,47 +1,51 @@
-import { FlowIcon } from "@hugeicons/core-free-icons";
 import {
 	queryOptions,
 	useMutation,
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArmCallout } from "#/components/arming/arm-callout";
-import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { WorkflowCanvas } from "#/components/workflows/editor/canvas";
-import { activeRepoQueryOptions } from "#/lib/onboarding.query";
+import { orgRepoQueryOptions } from "#/lib/org.query";
 import {
 	getWorkflowForRepo,
 	saveWorkflowForRepo,
 } from "#/lib/workflows.functions";
 
+const routeApi = getRouteApi("/$org/$repo/workflows");
+
 export const workflowsQueryKeys = {
 	all: ["workflows"] as const,
 	details: () => [...workflowsQueryKeys.all, "detail"] as const,
-	detail: (repoId: string | null) =>
-		[...workflowsQueryKeys.details(), repoId ?? "default"] as const,
+	detail: (org: string, repoId: string) =>
+		[...workflowsQueryKeys.details(), org, repoId] as const,
 };
 
-const workflowQueryOptions = (repoId: string | null) =>
+const workflowQueryOptions = (org: string, repoId: string) =>
 	queryOptions({
-		queryKey: workflowsQueryKeys.detail(repoId),
-		queryFn: ({ signal }) => getWorkflowForRepo({ data: { repoId }, signal }),
+		queryKey: workflowsQueryKeys.detail(org, repoId),
+		queryFn: ({ signal }) =>
+			getWorkflowForRepo({ data: { org, repoId }, signal }),
 		staleTime: 15_000,
+		enabled: repoId !== "",
 	});
 
 export function WorkflowsPage() {
 	const queryClient = useQueryClient();
-	// Scoped to the user's ONE active repo (§10) — no picker.
-	const { data: repo } = useQuery(activeRepoQueryOptions());
-	const repoId = repo?.id ?? null;
-	const { data: definition } = useQuery(workflowQueryOptions(repoId));
+	// Scoped to the URL's repo (§8) — the layout route already resolved it.
+	const { org, repo: repoName } = routeApi.useParams();
+	const { data: repo } = useQuery(orgRepoQueryOptions(org, repoName));
+	const repoId = repo?.id ?? "";
+	const { data: definition } = useQuery(workflowQueryOptions(org, repoId));
 
 	const save = useMutation({
 		mutationFn: saveWorkflowForRepo,
 		onSettled: () =>
 			queryClient.invalidateQueries({
-				queryKey: workflowsQueryKeys.detail(repoId),
+				queryKey: workflowsQueryKeys.detail(org, repoId),
 			}),
 	});
 
@@ -64,27 +68,22 @@ export function WorkflowsPage() {
 				{repo && !repo.armed ? (
 					<ArmCallout
 						className="mb-4"
+						org={org}
+						repo={repoName}
 						repoFullName={repo.fullName}
 						variant="banner"
 					/>
 				) : null}
-				{repo === null ? (
-					<EmptyState
-						description="link a repo to shape its workflow. until then there's nothing to wire — the DAG runs per-repo."
-						icon={FlowIcon}
-						title="no repo linked yet"
-					/>
-				) : definition ? (
+				{definition ? (
 					<WorkflowCanvas
 						definition={definition}
 						key={`${repoId}-${definition.id}`}
 						onSave={(next) => {
 							if (!repoId) {
-								toast("install the app on a repo to save workflows");
 								return;
 							}
 							save.mutate(
-								{ data: { repoId, definition: next } },
+								{ data: { org, repoId, definition: next } },
 								{
 									onSuccess: (result) => {
 										if (result && "error" in result) {

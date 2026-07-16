@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
 import { useRef } from "react";
 import { ArmCallout } from "#/components/arming/arm-callout";
 import { BackfillProgress } from "#/components/arming/backfill-progress";
@@ -10,17 +11,20 @@ import {
 } from "#/components/moderation/moderation-queue";
 import { Skeleton } from "#/components/ui/skeleton";
 import { moderationStatsQueryOptions } from "#/lib/moderation.query";
-import { activeRepoQueryOptions } from "#/lib/onboarding.query";
+import { orgRepoQueryOptions } from "#/lib/org.query";
+
+const routeApi = getRouteApi("/$org/$repo/moderation");
 
 /**
- * The SCOPED moderation queue for the active repo (§4). Home ("/") is the only
- * cross-repo page; this and every other surface stay scoped. An unarmed active
+ * The SCOPED moderation queue for the URL's repo (§8). The org home is the
+ * only cross-repo page; this and every other surface stay scoped. An unarmed
  * repo dominates with the arm CTA — the queue is silent until the gate is on.
  */
 export function ModerationPage() {
-	const repoQuery = useQuery(activeRepoQueryOptions());
-	const queueQuery = useQuery(moderationQueueOptions());
-	const statsQuery = useQuery(moderationStatsQueryOptions());
+	const { org, repo: repoName } = routeApi.useParams();
+	const repoQuery = useQuery(orgRepoQueryOptions(org, repoName));
+	const queueQuery = useQuery(moderationQueueOptions(org, repoName));
+	const statsQuery = useQuery(moderationStatsQueryOptions(org, repoName));
 
 	const fetchedStats = useRef(false);
 	if (statsQuery.isLoading) {
@@ -42,7 +46,12 @@ export function ModerationPage() {
 								the queue fills in the moment you arm this repo.
 							</p>
 						</header>
-						<ArmCallout repoFullName={repo.fullName} variant="hero" />
+						<ArmCallout
+							org={org}
+							repo={repoName}
+							repoFullName={repo.fullName}
+							variant="hero"
+						/>
 					</div>
 				</div>
 			</DashboardLayout>
@@ -72,7 +81,7 @@ export function ModerationPage() {
 						</p>
 					</header>
 
-					<BackfillProgress />
+					<BackfillProgress org={org} repo={repoName} />
 
 					{statsQuery.data ? (
 						<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -100,7 +109,7 @@ export function ModerationPage() {
 								delta={statsQuery.data.blocked.delta}
 								goodDirection="neutral"
 								label="Blocked · 24h"
-								linkSearch={{ source: "moderation", metric: "blocked" }}
+								linkTo={{ org, repo: repoName }}
 								series={statsQuery.data.blocked.series}
 								value={String(statsQuery.data.blocked.value)}
 							/>
@@ -112,7 +121,7 @@ export function ModerationPage() {
 								delta={statsQuery.data.passed.delta}
 								goodDirection="up"
 								label="Passed · 24h"
-								linkSearch={{ source: "moderation", metric: "passed" }}
+								linkTo={{ org, repo: repoName }}
 								series={statsQuery.data.passed.series}
 								value={String(statsQuery.data.passed.value)}
 							/>
@@ -124,6 +133,8 @@ export function ModerationPage() {
 					{queueQuery.data ? (
 						<div id="moderation-queue">
 							<ModerationQueue
+								org={org}
+								repo={repoName}
 								title={
 									<h2 className="font-medium text-sm">
 										pending{" "}
@@ -137,6 +148,20 @@ export function ModerationPage() {
 					) : (
 						<QueueSkeleton />
 					)}
+				</div>
+			</div>
+		</DashboardLayout>
+	);
+}
+
+export function ModerationPageSkeleton() {
+	return (
+		<DashboardLayout counts={{}}>
+			<div className="px-5 py-6 md:px-8 md:py-10">
+				<div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
+					<Skeleton className="h-8 w-40" />
+					<PanelSkeleton />
+					<QueueSkeleton />
 				</div>
 			</div>
 		</DashboardLayout>

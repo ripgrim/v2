@@ -1,5 +1,10 @@
 export { Area, type AreaProps, Line, type SeriesProps } from "./area";
 export { AreaChart, type AreaChartProps, LineChart } from "./area-chart";
+export {
+	type AvatarMirror,
+	DitherAvatar,
+	type DitherAvatarProps,
+} from "./avatar";
 export { Bar, type BarProps } from "./bar";
 export { BarChart } from "./bar-chart";
 export type { CartesianChartProps } from "./cartesian-root";

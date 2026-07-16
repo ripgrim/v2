@@ -3,16 +3,18 @@ import { getModerationStats } from "#/lib/moderation.functions";
 
 export const moderationQueryKeys = {
 	all: ["moderation"] as const,
-	stats: () => [...moderationQueryKeys.all, "stats"] as const,
+	stats: (org: string, repo: string) =>
+		[...moderationQueryKeys.all, org, repo, "stats"] as const,
 };
 
 const STALE_TIME = 30_000;
 const GC_TIME = 5 * 60_000;
 
-export const moderationStatsQueryOptions = () =>
+export const moderationStatsQueryOptions = (org: string, repo: string) =>
 	queryOptions({
-		queryKey: moderationQueryKeys.stats(),
-		queryFn: ({ signal }) => getModerationStats({ signal }),
+		queryKey: moderationQueryKeys.stats(org, repo),
+		queryFn: ({ signal }) =>
+			getModerationStats({ data: { org, repo }, signal }),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
 	});

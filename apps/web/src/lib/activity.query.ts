@@ -11,13 +11,14 @@ import {
 
 export const activityQueryKeys = {
 	all: ["activity"] as const,
-	feed: () => [...activityQueryKeys.all, "feed"] as const,
+	feed: (org: string, repo: string) =>
+		[...activityQueryKeys.all, "feed", org, repo] as const,
 };
 
-export const activityQueryOptions = () =>
+export const activityQueryOptions = (org: string, repo: string) =>
 	queryOptions({
-		queryKey: activityQueryKeys.feed(),
-		queryFn: ({ signal }) => getActivityFeed({ signal }),
+		queryKey: activityQueryKeys.feed(org, repo),
+		queryFn: ({ signal }) => getActivityFeed({ data: { org, repo }, signal }),
 		staleTime: 30_000,
 		gcTime: 5 * 60_000,
 	});
@@ -209,33 +210,51 @@ function mergeRun(
 	};
 }
 
+/** An event belongs to this feed when it targets the scoped repo (or has none). */
+function belongsTo(event: NormalizedEvent, repoFullName: string): boolean {
+	return !("repo" in event) || event.repo.fullName === repoFullName;
+}
+
 /**
  * §9 live merge over the GROUPED feed. `event` upserts a timeline entry into
  * its change-request group (bumping the group to the top, never growing the
  * list); `run` resolves that entry in place and re-derives the group's current
  * verdict. Ungrouped events (installation) are standalone rows. No polling.
+ *
+ * The stream is global; `repoFullName` filters it down to the URL's repo so
+ * only its events land in this feed's cache key.
  */
-export function useActivityStream(enabled = true): void {
+export function useActivityStream(
+	org: string,
+	repo: string,
+	repoFullName: string | undefined,
+): void {
 	const queryClient = useQueryClient();
 	useEffect(() => {
-		if (!enabled) {
+		if (!repoFullName) {
 			return;
 		}
 		const source = new EventSource("/api/events/stream");
 		source.addEventListener("event", (message) => {
 			const event = JSON.parse(message.data) as NormalizedEvent;
+			if (!belongsTo(event, repoFullName)) {
+				return;
+			}
 			queryClient.setQueryData<ActivityFeedData>(
-				activityQueryKeys.feed(),
+				activityQueryKeys.feed(org, repo),
 				(c) => mergeEvent(c, event),
 			);
 		});
 		source.addEventListener("run", (message) => {
 			const resolved = JSON.parse(message.data) as ActivityItem;
+			if (!belongsTo(resolved.event, repoFullName)) {
+				return;
+			}
 			queryClient.setQueryData<ActivityFeedData>(
-				activityQueryKeys.feed(),
+				activityQueryKeys.feed(org, repo),
 				(c) => mergeRun(c, resolved),
 			);
 		});
 		return () => source.close();
-	}, [enabled, queryClient]);
+	}, [org, repo, repoFullName, queryClient]);
 }

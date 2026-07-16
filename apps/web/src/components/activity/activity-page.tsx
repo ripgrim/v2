@@ -1,5 +1,6 @@
 import { ActivityIcon } from "@hugeicons/core-free-icons";
 import { useQuery } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ActivityRow } from "#/components/activity/activity-row";
 import { ActivityStack } from "#/components/activity/activity-stack";
@@ -10,8 +11,10 @@ import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import type { ActivityFeedItem } from "#/lib/activity.functions";
 import { activityQueryOptions, useActivityStream } from "#/lib/activity.query";
-import { activeRepoQueryOptions } from "#/lib/onboarding.query";
+import { orgRepoQueryOptions } from "#/lib/org.query";
 import { cn } from "#/lib/utils";
+
+const routeApi = getRouteApi("/$org/$repo/activity");
 
 type Filter = "all" | "block" | "needs_review" | "pass" | "no-run";
 
@@ -43,9 +46,12 @@ function itemKey(item: ActivityFeedItem): string {
 }
 
 export function ActivityPage() {
-	const { data, error, isSuccess } = useQuery(activityQueryOptions());
-	const { data: repo } = useQuery(activeRepoQueryOptions());
-	useActivityStream();
+	const { org, repo: repoName } = routeApi.useParams();
+	const { data, error, isSuccess } = useQuery(
+		activityQueryOptions(org, repoName),
+	);
+	const { data: repo } = useQuery(orgRepoQueryOptions(org, repoName));
+	useActivityStream(org, repoName, repo?.fullName);
 	const [filter, setFilter] = useState<Filter>("all");
 	const unarmed = Boolean(repo && !repo.armed);
 
@@ -71,11 +77,13 @@ export function ActivityPage() {
 				{unarmed && repo ? (
 					<ArmCallout
 						className="mb-4"
+						org={org}
+						repo={repoName}
 						repoFullName={repo.fullName}
 						variant="banner"
 					/>
 				) : (
-					<BackfillProgress className="mb-4" />
+					<BackfillProgress className="mb-4" org={org} repo={repoName} />
 				)}
 
 				<div className="mb-4 flex flex-wrap gap-1.5">

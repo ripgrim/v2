@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Verdict } from "@tripwire/contracts";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
+import { orgMemberMiddleware } from "#/lib/server/org-guard";
 
 /** Serializable JSON — evidence/output cross the server-fn boundary as JSON. */
 export type JsonValue =
@@ -66,14 +67,13 @@ export const getRun = createServerFn({ method: "GET" })
  * "latest run" jump. Null when the repo has no runs yet (nothing to jump to).
  */
 export const getLatestRunId = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<string | null> => {
-		const { getActiveRepo } = await import("#/lib/server/active-repo");
-		const active = await getActiveRepo();
-		if (!active) {
-			return null;
-		}
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator((input: { org: string; repo: string }) => input)
+	.handler(async ({ data, context }): Promise<string | null> => {
+		const { resolveOrgRepo } = await import("#/lib/server/org-guard");
+		const org = (context as { org: { id: string } }).org;
+		const repo = await resolveOrgRepo(org.id, data.repo);
 		const { runServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
-		return await runServices.latestRunIdForRepo(getDb().db, active.fullName);
+		return await runServices.latestRunIdForRepo(getDb().db, repo.fullName);
 	});

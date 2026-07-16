@@ -1,12 +1,18 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { completeInstallation } from "#/lib/onboarding.functions";
+import { createFileRoute } from "@tanstack/react-router";
+import {
+	InstallSetupPage,
+	InstallSetupPageSkeleton,
+} from "#/components/organizations/install-setup-page";
+import { buildSeo, formatPageTitle } from "#/lib/seo";
 
 /**
- * The GitHub App **Setup URL** callback (§10). GitHub redirects here after an
- * install with `?installation_id=…&setup_action=install&state=…`. We link the
- * installation to the signed-in user (the state HMAC-binds them, CSRF) and send
- * them to /onboarding to pick their active repo. This path is under /onboarding
- * so the onboarding gate lets a not-yet-onboarded user through.
+ * The GitHub App **Setup URL** callback (§10) — the path is an external
+ * contract (configured in the App settings), so it keeps its /onboarding/setup
+ * address even though user-onboarding is gone. GitHub redirects here with
+ * `?installation_id=…&setup_action=…&state=…`. NOTHING is claimed here:
+ * a valid state renders the CONFIRMATION naming both sides ("GitHub org X →
+ * Tripwire org Y") with a change option; a missing/invalid state renders the
+ * CLAIM screen with an org picker. Never auto-attach on a guess.
  */
 export const Route = createFileRoute("/onboarding/setup")({
 	validateSearch: (search: Record<string, unknown>) => ({
@@ -18,16 +24,13 @@ export const Route = createFileRoute("/onboarding/setup")({
 			typeof search.setup_action === "string" ? search.setup_action : undefined,
 		state: typeof search.state === "string" ? search.state : undefined,
 	}),
-	beforeLoad: async ({ search }) => {
-		if (search.installation_id) {
-			await completeInstallation({
-				data: {
-					installationId: search.installation_id,
-					state: search.state,
-				},
-			});
-		}
-		throw redirect({ to: "/onboarding" });
-	},
-	component: () => null,
+	component: InstallSetupPage,
+	pendingComponent: InstallSetupPageSkeleton,
+	head: ({ match }) =>
+		buildSeo({
+			path: match.pathname,
+			title: formatPageTitle("Connect installation"),
+			description: "confirm where this GitHub installation lands.",
+			noindex: true,
+		}),
 });

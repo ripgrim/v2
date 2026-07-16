@@ -687,3 +687,131 @@ export async function deleteOrganization(
 		return { deleted: true };
 	});
 }
+
+// ── org-scoped repo reads (§8: URL owns scope) ──────────────────────────
+
+import type { RepoLite, SwitcherRepo } from "./onboarding.ts";
+
+const ORG_REPO_LITE = {
+	id: repos.id,
+	owner: repos.owner,
+	name: repos.name,
+	fullName: repos.fullName,
+	private: repos.private,
+	armed: repos.armed,
+	backfillTotal: repos.backfillTotal,
+	backfillDone: repos.backfillDone,
+} as const;
+
+/** Every non-removed repo the org owns. */
+export async function listOrgRepos(db: Db, orgId: string): Promise<RepoLite[]> {
+	return await db
+		.select(ORG_REPO_LITE)
+		.from(repos)
+		.where(and(eq(repos.orgId, orgId), isNull(repos.removedAt)))
+		.orderBy(repos.fullName);
+}
+
+/**
+ * Resolve /:org/:repo — the repo NAME within the org. Ambiguity (two
+ * installations granting same-named repos under different owners) picks the
+ * most recently installed; the switcher always links canonical names so this
+ * is a fallback, not the norm. Null ⇒ the route 404s.
+ */
+export async function getOrgRepo(
+	db: Db,
+	input: { orgId: string; repoName: string },
+): Promise<RepoLite | null> {
+	const rows = await db
+		.select(ORG_REPO_LITE)
+		.from(repos)
+		.where(
+			and(
+				eq(repos.orgId, input.orgId),
+				eq(repos.name, input.repoName),
+				isNull(repos.removedAt),
+			),
+		)
+		.orderBy(sql`${repos.installedAt} DESC`)
+		.limit(1);
+	return rows[0] ?? null;
+}
+
+/** The org switcher list — repos with triage signal, org-scoped. */
+export async function listOrgSwitcherRepos(
+	db: Db,
+	orgId: string,
+): Promise<SwitcherRepo[]> {
+	const result = await db.execute(sql`
+		SELECT r.id, r.owner, r.name, r.full_name AS "fullName", r.armed,
+		       COALESCE(pend.n, 0)::int AS "pendingModeration",
+		       COALESCE(blk.n, 0)::int AS "blocked24h",
+		       act.last AS "lastActivityAt"
+		FROM repos r
+		LEFT JOIN (
+		  SELECT run.repo_full_name AS repo, count(*) AS n
+		  FROM moderation_items mi JOIN runs run ON run.id = mi.run_id
+		  WHERE mi.status = 'pending' GROUP BY run.repo_full_name
+		) pend ON pend.repo = r.full_name
+		LEFT JOIN (
+		  SELECT repo_full_name AS repo, count(*) AS n FROM runs
+		  WHERE verdict = 'block' AND created_at > now() - make_interval(hours => 24)
+		  GROUP BY repo_full_name
+		) blk ON blk.repo = r.full_name
+		LEFT JOIN (
+		  SELECT repo_full_name AS repo, max(received_at) AS last
+		  FROM events GROUP BY repo_full_name
+		) act ON act.repo = r.full_name
+		WHERE r.removed_at IS NULL AND r.org_id = ${orgId}
+		ORDER BY act.last DESC NULLS LAST, r.full_name
+	`);
+	return (result.rows as Record<string, unknown>[]).map((row) => ({
+		id: String(row.id),
+		owner: String(row.owner),
+		name: String(row.name),
+		fullName: String(row.fullName),
+		armed: Boolean(row.armed),
+		pendingModeration: Number(row.pendingModeration ?? 0),
+		blocked24h: Number(row.blocked24h ?? 0),
+		lastActivityAt: row.lastActivityAt
+			? new Date(row.lastActivityAt as string).toISOString()
+			: null,
+	}));
+}
+
+export interface OrgInstallState {
+	hasInstallation: boolean;
+	repos: RepoLite[];
+}
+
+/** What $org/home needs: does the org have an install, and its repos. */
+export async function getOrgInstallState(
+	db: Db,
+	orgId: string,
+): Promise<OrgInstallState> {
+	const installs = await db
+		.select({ id: organizationInstallations.id })
+		.from(organizationInstallations)
+		.where(eq(organizationInstallations.organizationId, orgId))
+		.limit(1);
+	return {
+		hasInstallation: installs.length > 0,
+		repos: await listOrgRepos(db, orgId),
+	};
+}
+
+/**
+ * Every repo fullName the user can see through membership — the SSE stream's
+ * visibility set (a member of org A must not receive org B's notifications).
+ */
+export async function listUserRepoFullNames(
+	db: Db,
+	userId: string,
+): Promise<string[]> {
+	const rows = await db
+		.select({ fullName: repos.fullName })
+		.from(repos)
+		.innerJoin(member, eq(member.organizationId, repos.orgId))
+		.where(and(eq(member.userId, userId), isNull(repos.removedAt)));
+	return rows.map((r) => r.fullName);
+}

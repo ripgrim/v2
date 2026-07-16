@@ -30,5 +30,10 @@ export interface ApiDeps {
 export interface ApiEnv {
 	Variables: {
 		deps: ApiDeps;
+		/**
+		 * Repo fullNames the SSE caller may see through org membership; null ⇒
+		 * unrestricted (dev open posture). Set by the stream's session gate.
+		 */
+		visibleRepos: Set<string> | null;
 	};
 }

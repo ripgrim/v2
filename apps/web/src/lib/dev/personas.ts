@@ -29,20 +29,20 @@ export const PERSONAS: Persona[] = [
 	{
 		id: "fresh",
 		label: "fresh maintainer",
-		description: "signed in, no installation — lands on onboarding.",
-		landing: "/onboarding",
+		description: "signed in, no installation — the org home's install CTA.",
+		landing: "/",
 	},
 	{
 		id: "one-repo",
 		label: "one repo",
-		description: "one granted repo, auto-selected — straight to the dashboard.",
-		landing: "/onboarding",
+		description: "one granted repo — the org home with a single row.",
+		landing: "/",
 	},
 	{
 		id: "many-repos",
 		label: "many repos",
-		description: "several granted repos — the picker path.",
-		landing: "/onboarding",
+		description: "several granted repos — the org home as a list.",
+		landing: "/",
 	},
 	{
 		id: "empty",

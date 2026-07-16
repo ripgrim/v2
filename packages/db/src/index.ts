@@ -40,12 +40,7 @@ export * as accessServices from "./services/access.ts";
 export * as eventServices from "./services/events.ts";
 export * as insightServices from "./services/insights.ts";
 export * as moderationServices from "./services/moderation.ts";
-export type {
-	OnboardingState,
-	RepoLite,
-	SwitcherRepo,
-} from "./services/onboarding.ts";
-export * as onboardingServices from "./services/onboarding.ts";
+export type { RepoLite, SwitcherRepo } from "./services/onboarding.ts";
 export type {
 	InviteLinkView,
 	OrgCascade,

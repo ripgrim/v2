@@ -7,23 +7,27 @@ import {
 export const rulesQueryKeys = {
 	all: ["rules"] as const,
 	configs: () => [...rulesQueryKeys.all, "configs"] as const,
-	config: (repoId: string) => [...rulesQueryKeys.configs(), repoId] as const,
+	config: (org: string, repoId: string) =>
+		[...rulesQueryKeys.configs(), org, repoId] as const,
 	stats: () => [...rulesQueryKeys.all, "stats"] as const,
-	stat: (repoId: string) => [...rulesQueryKeys.stats(), repoId] as const,
+	stat: (org: string, repoId: string) =>
+		[...rulesQueryKeys.stats(), org, repoId] as const,
 };
 
-export const ruleConfigsQueryOptions = (repoId: string) =>
+export const ruleConfigsQueryOptions = (org: string, repoId: string) =>
 	queryOptions({
-		queryKey: rulesQueryKeys.config(repoId),
-		queryFn: ({ signal }) => listRuleConfigViews({ data: { repoId }, signal }),
+		queryKey: rulesQueryKeys.config(org, repoId),
+		queryFn: ({ signal }) =>
+			listRuleConfigViews({ data: { org, repoId }, signal }),
 		staleTime: 15_000,
 		enabled: repoId !== "",
 	});
 
-export const rulesStatsQueryOptions = (repoId: string) =>
+export const rulesStatsQueryOptions = (org: string, repoId: string) =>
 	queryOptions({
-		queryKey: rulesQueryKeys.stat(repoId),
-		queryFn: ({ signal }) => getRulesHeaderStats({ data: { repoId }, signal }),
+		queryKey: rulesQueryKeys.stat(org, repoId),
+		queryFn: ({ signal }) =>
+			getRulesHeaderStats({ data: { org, repoId }, signal }),
 		staleTime: 15_000,
 		enabled: repoId !== "",
 	});

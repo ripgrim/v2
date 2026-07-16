@@ -54,7 +54,5 @@ export type Repo = z.infer<typeof repoSchema>;
 export const githubIntegrationSchema = z.object({
 	accounts: z.array(githubAccountSchema),
 	repos: z.array(repoSchema),
-	/** The repo tripwire is actively watching. */
-	activeRepoId: z.string(),
 });
 export type GithubIntegration = z.infer<typeof githubIntegrationSchema>;

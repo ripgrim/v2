@@ -148,7 +148,6 @@ describe("contracts parse demo shapes", () => {
 			githubIntegrationSchema.parse({
 				accounts: [],
 				repos: [],
-				activeRepoId: "r1",
 			}),
 		).not.toThrow();
 		expect(() =>

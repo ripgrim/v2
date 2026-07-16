@@ -1,148 +1,232 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { OnboardingState, RepoLite, SwitcherRepo } from "@tripwire/db";
+import type { OrgWithRole, SwitcherRepo } from "@tripwire/db";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
+import {
+	orgAdminMiddleware,
+	orgMemberMiddleware,
+} from "#/lib/server/org-guard";
 
-export type { OnboardingState, RepoLite, SwitcherRepo };
-
-/** §4 repo switcher — every repo the user can reach, with triage signal. */
-export const getSwitcherRepos = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<SwitcherRepo[]> => {
-		const { requireSession } = await import("#/lib/server/session");
-		const userId = await requireSession();
-		const { onboardingServices } = await import("@tripwire/db");
-		const { getDb } = await import("#/lib/server/db");
-		return await onboardingServices.listSwitcherRepos(getDb().db, userId);
-	});
-
-/** The active repo the dashboard is scoped to — null until onboarded. */
-export const getActiveRepoInfo = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<RepoLite | null> => {
-		const { getActiveRepo } = await import("#/lib/server/active-repo");
-		return await getActiveRepo();
-	});
+export type { SwitcherRepo };
 
 /**
- * The GitHub App install URL for THIS user, carrying a CSRF-safe state. The
- * REASON is split out so onboarding can tell distinct failures apart instead of
- * collapsing them into one misleading line (the old `string | null` made "slug
- * unset" and "no user" indistinguishable, and a thrown 401 read as "not
- * configured" too):
- *  - `ready`          → the signed install URL.
- *  - `not-configured` → GITHUB_APP_SLUG is unset (a deploy/env problem).
- *  - `no-session`     → open-dev has no user to bind the state to.
- * A missing session under real auth never returns here — requireSession throws
- * 401, which the UI renders as its own (retryable) query-error state.
+ * Install targeting + org home (§10, org-model). The old user-onboarding
+ * flow (pick ONE active repo) is gone — the URL owns scope now. What remains:
+ * getting the GitHub App installed FOR AN ORG, verifying the round-trip, and
+ * claiming installs that arrived without state. Never auto-attach on a guess.
  */
+
+export interface OrgHomeState {
+	hasInstallation: boolean;
+	repos: SwitcherRepo[];
+}
+
+/** Everything /:org/home needs: install state + repo rows with signal. */
+export const getOrgHomeState = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator((input: { org: string }) => input)
+	.handler(async ({ context }): Promise<OrgHomeState> => {
+		const org = (context as { org: OrgWithRole }).org;
+		const { orgServices } = await import("@tripwire/db");
+		const { getDb } = await import("#/lib/server/db");
+		const db = getDb().db;
+		const [state, repos] = await Promise.all([
+			orgServices.getOrgInstallState(db, org.id),
+			orgServices.listOrgSwitcherRepos(db, org.id),
+		]);
+		return { hasInstallation: state.hasInstallation, repos };
+	});
+
 export type InstallUrlState =
 	| { status: "ready"; url: string }
 	| { status: "not-configured" }
 	| { status: "no-session" };
 
-export const getInstallUrl = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<InstallUrlState> => {
-		const { requireSession } = await import("#/lib/server/session");
-		const userId = await requireSession();
+/**
+ * The GitHub App install URL FOR THIS ORG — the signed state carries
+ * {userId, orgId} so the Setup callback can verify who initiated it and
+ * where it should land (§10). Admin: installing changes what the org gates.
+ */
+export const getOrgInstallUrl = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware, orgAdminMiddleware])
+	.inputValidator((input: { org: string }) => input)
+	.handler(async ({ context }): Promise<InstallUrlState> => {
+		const org = (context as { org: OrgWithRole }).org;
 		const slug = process.env.GITHUB_APP_SLUG;
-		// Slug first: a missing slug is an env problem worth reporting even in
-		// open-dev, and it's independent of who (if anyone) is signed in.
 		if (!slug) {
 			return { status: "not-configured" };
 		}
+		const { requireSession } = await import("#/lib/server/session");
+		const userId = await requireSession();
 		if (!userId) {
 			return { status: "no-session" };
 		}
 		const { signInstallState } = await import("#/lib/server/install-state");
-		const state = signInstallState(userId);
+		const state = signInstallState({ userId, orgId: org.id });
 		return {
 			status: "ready",
 			url: `https://github.com/apps/${slug}/installations/new?state=${encodeURIComponent(state)}`,
 		};
 	});
 
-/** Where /onboarding stands for the signed-in user. */
-export const getOnboardingState = createServerFn({ method: "GET" })
+export interface InstallPreview {
+	installationId: string;
+	/** GitHub account the App was installed on, inferred from synced repos. */
+	account: string | null;
+	repoCount: number;
+	/** The org the signed state targets — null when state is absent/forged
+	 * or was initiated by a different user (§10: then it's a CLAIM, not a
+	 * confirmation). */
+	stateOrg: { id: string; slug: string; name: string } | null;
+	/** Whether this installation is already claimed (and by which slug when
+	 * the caller can see it). */
+	claimedByOrgSlug: string | null;
+}
+
+/**
+ * What the setup-callback screen shows before anything is claimed: the
+ * GitHub side (account + repo count, from repos the webhook already synced)
+ * and the Tripwire side (the state's target org, when the state verifies AND
+ * belongs to the signed-in caller). Session-gated only — the caller may not
+ * be an admin of anything yet; claiming is a separate admin-gated act.
+ */
+export const getInstallPreview = createServerFn({ method: "GET" })
 	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<OnboardingState> => {
+	.inputValidator((input: { installationId: string; state?: string }) => input)
+	.handler(async ({ data }): Promise<InstallPreview> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
-		const { onboardingServices, repoServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
-		const { db } = getDb();
-		if (userId) {
-			return await onboardingServices.getOnboardingState(db, userId);
+		const { orgServices, schema } = await import("@tripwire/db");
+		const { and, eq, isNull, sql } = await import("drizzle-orm");
+		const db = getDb().db;
+
+		const repoRows = await db
+			.select({
+				owner: schema.repos.owner,
+				n: sql<number>`count(*)::int`,
+			})
+			.from(schema.repos)
+			.where(
+				and(
+					eq(schema.repos.installationId, data.installationId),
+					isNull(schema.repos.removedAt),
+				),
+			)
+			.groupBy(schema.repos.owner);
+		const account = repoRows[0]?.owner ?? null;
+		const repoCount = repoRows.reduce((sum, r) => sum + r.n, 0);
+
+		let stateOrg: InstallPreview["stateOrg"] = null;
+		if (data.state && userId) {
+			const { verifyInstallState } = await import("#/lib/server/install-state");
+			const bound = verifyInstallState(data.state);
+			if (bound && bound.userId === userId) {
+				const orgRows = await db
+					.select({
+						id: schema.organization.id,
+						slug: schema.organization.slug,
+						name: schema.organization.name,
+					})
+					.from(schema.organization)
+					.where(eq(schema.organization.id, bound.orgId))
+					.limit(1);
+				stateOrg = orgRows[0] ?? null;
+			}
 		}
-		// open-dev: no per-user link — surface the installed repos so local dev
-		// isn't wedged behind an onboarding gate it can never pass.
-		const repos = await repoServices.listActiveRepos(db);
+
+		const ownerOrgId = await orgServices.getInstallationOrg(db, {
+			installationId: data.installationId,
+		});
+		let claimedByOrgSlug: string | null = null;
+		if (ownerOrgId) {
+			const rows = await db
+				.select({ slug: schema.organization.slug })
+				.from(schema.organization)
+				.where(eq(schema.organization.id, ownerOrgId))
+				.limit(1);
+			claimedByOrgSlug = rows[0]?.slug ?? null;
+		}
 		return {
-			hasInstallation: repos.length > 0,
-			repos: repos.map((r) => ({
-				id: r.id,
-				owner: r.owner,
-				name: r.name,
-				fullName: r.fullName,
-				private: r.private,
-				armed: r.armed,
-				backfillTotal: r.backfillTotal,
-				backfillDone: r.backfillDone,
-			})),
-			activeRepo: null,
+			installationId: data.installationId,
+			account,
+			repoCount,
+			stateOrg,
+			claimedByOrgSlug,
 		};
 	});
 
-/** Pick the active repo (the narrowing step). Rejects a repo that isn't yours. */
-export const chooseActiveRepo = createServerFn({ method: "POST" })
-	.middleware([accessGuardMiddleware])
-	.inputValidator((input: { repoId: string }) => input)
-	.handler(async ({ data }): Promise<{ ok: boolean }> => {
-		const { requireSession } = await import("#/lib/server/session");
-		const userId = await requireSession();
-		if (!userId) {
-			return { ok: false };
-		}
-		const { onboardingServices } = await import("@tripwire/db");
+/**
+ * Bind an installation to THIS org — the confirmation screen's confirm and
+ * the claim screen's pick both land here. Admin-gated; idempotent; a second
+ * org cannot steal a claim ((forge, installationId) unique).
+ */
+export const claimInstallation = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware, orgAdminMiddleware])
+	.inputValidator((input: { org: string; installationId: string }) => input)
+	.handler(async ({ data, context }): Promise<{ claimed: boolean }> => {
+		const org = (context as { org: OrgWithRole }).org;
 		const { getDb } = await import("#/lib/server/db");
-		const ok = await onboardingServices.setActiveRepo(
-			getDb().db,
-			userId,
-			data.repoId,
-		);
-		return { ok };
+		const { orgServices, schema } = await import("@tripwire/db");
+		const { and, eq, isNull } = await import("drizzle-orm");
+		const db = getDb().db;
+		const owner = await db
+			.select({ owner: schema.repos.owner })
+			.from(schema.repos)
+			.where(
+				and(
+					eq(schema.repos.installationId, data.installationId),
+					isNull(schema.repos.removedAt),
+				),
+			)
+			.limit(1);
+		return await orgServices.linkOrgInstallation(db, {
+			orgId: org.id,
+			installationId: data.installationId,
+			accountLogin: owner[0]?.owner,
+		});
 	});
 
 /**
- * Setup URL callback: link the installation to the SIGNED-IN user (the real
- * WHO). A PRESENT state must HMAC-bind that same user (CSRF); a direct install
- * from GitHub's own UI carries NO state, so we link it to the session anyway —
- * the state is hardening, not a gate on the happy path. Residual risk (tricking
- * a logged-in victim into claiming a fresh installation) is ledgered in
- * DECISIONS; the `(forge, installationId)` UNIQUE still blocks stealing a
- * claimed one.
+ * §11 move-installation: re-home an installation (and its repos + history)
+ * to another org. Requires ADMIN OF BOTH SIDES — the source (middleware) and
+ * the target (checked here).
  */
-export const completeInstallation = createServerFn({ method: "POST" })
-	.middleware([accessGuardMiddleware])
-	.inputValidator((input: { installationId: string; state?: string }) => input)
-	.handler(async ({ data }): Promise<{ linked: boolean }> => {
-		const { requireSession } = await import("#/lib/server/session");
-		const userId = await requireSession();
-		if (!userId) {
-			return { linked: false };
-		}
-		if (data.state) {
-			const { verifyInstallState } = await import("#/lib/server/install-state");
-			if (verifyInstallState(data.state) !== userId) {
-				// A state was supplied but doesn't bind this user — forged; refuse.
-				return { linked: false };
+export const moveInstallationToOrg = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware, orgAdminMiddleware])
+	.inputValidator(
+		(input: { org: string; installationId: string; toOrg: string }) => input,
+	)
+	.handler(
+		async ({ data, context }): Promise<{ moved: boolean; error?: string }> => {
+			const source = (context as { org: OrgWithRole }).org;
+			const { requireSession } = await import("#/lib/server/session");
+			const userId = await requireSession();
+			const { getDb } = await import("#/lib/server/db");
+			const { orgServices } = await import("@tripwire/db");
+			const db = getDb().db;
+			// The middleware proved source-admin; prove target-admin the same way.
+			if (userId) {
+				const { assertOrgRole } = await import("@tripwire/auth/org-gate");
+				const target = await assertOrgRole(db, {
+					userId,
+					orgSlug: data.toOrg,
+					need: "admin",
+				});
+				if (!target.ok) {
+					return { moved: false, error: "you need admin on the target org" };
+				}
+				// Source must actually own the installation being moved.
+				const ownerOrg = await orgServices.getInstallationOrg(db, {
+					installationId: data.installationId,
+				});
+				if (ownerOrg !== source.id) {
+					return { moved: false, error: "installation is not in this org" };
+				}
+				return await orgServices.moveInstallation(db, {
+					installationId: data.installationId,
+					toOrgId: target.org.id,
+				});
 			}
-		}
-		const { onboardingServices } = await import("@tripwire/db");
-		const { getDb } = await import("#/lib/server/db");
-		const { claimed } = await onboardingServices.linkUserInstallation(
-			getDb().db,
-			{ userId, installationId: data.installationId },
-		);
-		return { linked: claimed };
-	});
+			return { moved: false, error: "sign in required" };
+		},
+	);

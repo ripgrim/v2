@@ -18,6 +18,7 @@ const PUBLIC_ALLOWLIST = new Set([
 	"getSessionInfo", // session/status — feeds the gate, queue screen, unauth
 	"getCurrentUser", // caller's OWN identity (name/login/avatar); no product data
 	"getRun", // the unlisted-public run page — readable without a session by design
+	"redeemOrgInvite", // §6: redemption APPROVES pending users — gating it deadlocks
 ]);
 
 const libDir = import.meta.dir;
@@ -26,6 +27,8 @@ interface ServerFn {
 	name: string;
 	/** Whether the builder chain attaches the access-guard middleware. */
 	gated: boolean;
+	/** Which org-role middleware (if any) the chain attaches. */
+	orgRole: "admin" | "member" | null;
 	file: string;
 }
 
@@ -49,7 +52,12 @@ function discoverServerFns(): ServerFn[] {
 				handlerIdx === -1 ? src.slice(m.index) : src.slice(m.index, handlerIdx);
 			found.push({
 				name,
-				gated: chain.includes(".middleware([accessGuardMiddleware])"),
+				gated: chain.includes("accessGuardMiddleware"),
+				orgRole: chain.includes("orgAdminMiddleware")
+					? "admin"
+					: chain.includes("orgMemberMiddleware")
+						? "member"
+						: null,
 				file,
 			});
 			m = re.exec(src);
@@ -87,9 +95,9 @@ describe("server-fn access boundary (invariant 3)", () => {
 	});
 
 	// ── §4 role classification (amendment): the auditable list ─────────────
-	// Deny-by-default at the LIST level in checkpoint 1: an unclassified server
-	// function fails the build. The checkpoint-2 URL rewrite adds the org-role
-	// middlewares and upgrades this to assert the CHAIN matches the class.
+	// Deny-by-default: an unclassified server function fails the build, and a
+	// classified one whose middleware CHAIN doesn't match its class fails too —
+	// a mutation cannot silently ship member-readable or ungated.
 
 	test("every server function is classified (admin/member/public)", () => {
 		const unclassified = fns
@@ -114,10 +122,65 @@ describe("server-fn access boundary (invariant 3)", () => {
 		expect(classifiedPublic).toEqual([...PUBLIC_ALLOWLIST].sort());
 	});
 
-	test("member/admin functions all carry the access-gate middleware", () => {
-		const ungated = fns
-			.filter((f) => SERVER_FN_CLASSIFICATION[f.name] !== "public" && !f.gated)
-			.map((f) => `${f.file}:${f.name}`);
-		expect(ungated).toEqual([]);
+	test("every fn's middleware chain matches its declared class", () => {
+		const mismatches: string[] = [];
+		for (const f of fns) {
+			const cls = SERVER_FN_CLASSIFICATION[f.name];
+			const want =
+				cls === "public"
+					? { gated: false, orgRole: null }
+					: cls === "authed"
+						? { gated: true, orgRole: null }
+						: cls === "member"
+							? { gated: true, orgRole: "member" as const }
+							: { gated: true, orgRole: "admin" as const };
+			if (f.gated !== want.gated || f.orgRole !== want.orgRole) {
+				mismatches.push(
+					`${f.file}:${f.name} — class "${cls}" wants gated=${want.gated}/org=${want.orgRole}, chain has gated=${f.gated}/org=${f.orgRole}`,
+				);
+			}
+		}
+		expect(mismatches).toEqual([]);
+	});
+});
+
+/**
+ * §8 grep-proof (CP2 amendment): `active_repo_id` is DEAD. Scope comes from
+ * the URL; the one call site that quietly still reads the DB field is the
+ * failure mode this scan makes impossible. The legacy `user_installations`
+ * table (different name) survives only as migration source data.
+ */
+describe("active-repo is dead (URL owns scope)", () => {
+	const FORBIDDEN =
+		/active_repo_id|activeRepoId|getActiveRepo\(|setActiveRepo\(/;
+
+	function scan(dir: string, hits: string[]): void {
+		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+			if (entry.name === "node_modules" || entry.name.startsWith(".")) {
+				continue;
+			}
+			const full = join(dir, entry.name);
+			if (entry.isDirectory()) {
+				scan(full, hits);
+				continue;
+			}
+			if (!/\.(ts|tsx)$/.test(entry.name)) {
+				continue;
+			}
+			if (full.endsWith("server-fn-boundary.test.ts")) {
+				continue; // this file names the pattern on purpose
+			}
+			const src = readFileSync(full, "utf8");
+			if (FORBIDDEN.test(src)) {
+				hits.push(full);
+			}
+		}
+	}
+
+	test("no scoped logic references the retired active-repo field", () => {
+		const hits: string[] = [];
+		const appsWeb = join(import.meta.dir, "..");
+		scan(appsWeb, hits);
+		expect(hits).toEqual([]);
 	});
 });

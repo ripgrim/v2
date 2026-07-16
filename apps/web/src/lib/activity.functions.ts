@@ -7,7 +7,9 @@ import {
 	type ActivityTimelineEntry,
 	activityFeedSchema,
 } from "@tripwire/contracts";
+import type { OrgWithRole } from "@tripwire/db";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
+import { orgMemberMiddleware, resolveOrgRepo } from "#/lib/server/org-guard";
 
 // The wire shapes live in @tripwire/contracts (one home, validated). Re-exported
 // here under the names the /activity components already use.
@@ -17,13 +19,11 @@ export type { ActivityFeedItem, ActivityGroup };
 export type ActivityFeedData = ActivityFeed;
 
 export const getActivityFeed = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<ActivityFeedData> => {
-		const { getActiveRepo } = await import("#/lib/server/active-repo");
-		const repo = await getActiveRepo();
-		if (!repo) {
-			return { items: [] };
-		}
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator((input: { org: string; repo: string }) => input)
+	.handler(async ({ data, context }): Promise<ActivityFeedData> => {
+		const org = (context as { org: OrgWithRole }).org;
+		const repo = await resolveOrgRepo(org.id, data.repo);
 		const { eventServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const feed = await eventServices.listActivityFeed(getDb().db, {

@@ -28,7 +28,8 @@ export type DitherStatCardProps = {
 	/** Only scramble on a genuine load — skip when data was cached. */
 	animate?: boolean;
 	/** When set, the card links into the analytics view for this metric. */
-	linkSearch?: { source: "moderation" | "automod"; metric: string };
+	/** Deep link into /$org/$repo/analytics (URL-scoped, §8). */
+	linkTo?: { org: string; repo: string };
 	/** Replaces the scrambled value (e.g. a live NumberFlow on analytics). */
 	valueNode?: ReactNode;
 	/** Rings the card to mark it as the focused metric. */
@@ -53,7 +54,7 @@ export function DitherStatCard({
 	color,
 	delay = 0,
 	animate = true,
-	linkSearch,
+	linkTo,
 	valueNode,
 	focused,
 	onClick,
@@ -154,11 +155,11 @@ export function DitherStatCard({
 		);
 	}
 
-	if (linkSearch) {
+	if (linkTo) {
 		return (
 			<Link
-				to="/analytics"
-				search={linkSearch}
+				to="/$org/$repo/analytics"
+				params={{ org: linkTo.org, repo: linkTo.repo }}
 				className="block rounded-xl outline-none ring-ring/50 transition-shadow focus-visible:ring-2 hover:ring-1 hover:ring-border"
 			>
 				{body}

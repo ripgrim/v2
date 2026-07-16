@@ -1,9 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { ModStat } from "@tripwire/contracts";
 import { RULE_CATALOG } from "@tripwire/contracts";
+import type { OrgWithRole } from "@tripwire/db";
 import { ruleExecutes } from "#/lib/rule-execution";
 import type { JsonValue } from "#/lib/runs.functions";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
+import {
+	orgAdminMiddleware,
+	orgMemberMiddleware,
+	requireOrgRepoById,
+} from "#/lib/server/org-guard";
 
 export interface RuleConfigView {
 	ruleId: string;
@@ -33,11 +39,13 @@ export interface RulesHeaderStats {
 }
 
 export const listRuleConfigViews = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.inputValidator((input: { repoId: string }) => input)
-	.handler(async ({ data }): Promise<RuleConfigView[]> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator((input: { org: string; repoId: string }) => input)
+	.handler(async ({ data, context }): Promise<RuleConfigView[]> => {
+		await requireOrgRepoById(
+			(context as { org: OrgWithRole }).org.id,
+			data.repoId,
+		);
 		const { repoServices, insightServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const db = getDb().db;
@@ -72,11 +80,13 @@ export const listRuleConfigViews = createServerFn({ method: "GET" })
 	});
 
 export const getRulesHeaderStats = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.inputValidator((input: { repoId: string }) => input)
-	.handler(async ({ data }): Promise<RulesHeaderStats> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator((input: { org: string; repoId: string }) => input)
+	.handler(async ({ data, context }): Promise<RulesHeaderStats> => {
+		await requireOrgRepoById(
+			(context as { org: OrgWithRole }).org.id,
+			data.repoId,
+		);
 		const { repoServices, insightServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		const db = getDb().db;
@@ -107,33 +117,38 @@ export const getRulesHeaderStats = createServerFn({ method: "GET" })
 	});
 
 export const saveRuleConfig = createServerFn({ method: "POST" })
-	.middleware([accessGuardMiddleware])
+	.middleware([accessGuardMiddleware, orgAdminMiddleware])
 	.inputValidator(
 		(input: {
+			org: string;
 			repoId: string;
 			ruleId: string;
 			enabled: boolean;
 			config: JsonValue;
 		}) => input,
 	)
-	.handler(async ({ data }): Promise<{ ok: true } | { error: string }> => {
-		const { requireSession } = await import("#/lib/server/session");
-		await requireSession();
-		const entry = RULE_CATALOG.find((r) => r.ruleId === data.ruleId);
-		if (!entry) {
-			return { error: `unknown rule ${data.ruleId}` };
-		}
-		const parsed = entry.configSchema.safeParse(data.config);
-		if (!parsed.success) {
-			return { error: parsed.error.issues[0]?.message ?? "invalid config" };
-		}
-		const { repoServices } = await import("@tripwire/db");
-		const { getDb } = await import("#/lib/server/db");
-		await repoServices.upsertRuleConfig(getDb().db, data.repoId, {
-			ruleId: entry.ruleId,
-			version: entry.version,
-			enabled: data.enabled,
-			config: parsed.data,
-		});
-		return { ok: true };
-	});
+	.handler(
+		async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
+			await requireOrgRepoById(
+				(context as { org: OrgWithRole }).org.id,
+				data.repoId,
+			);
+			const entry = RULE_CATALOG.find((r) => r.ruleId === data.ruleId);
+			if (!entry) {
+				return { error: `unknown rule ${data.ruleId}` };
+			}
+			const parsed = entry.configSchema.safeParse(data.config);
+			if (!parsed.success) {
+				return { error: parsed.error.issues[0]?.message ?? "invalid config" };
+			}
+			const { repoServices } = await import("@tripwire/db");
+			const { getDb } = await import("#/lib/server/db");
+			await repoServices.upsertRuleConfig(getDb().db, data.repoId, {
+				ruleId: entry.ruleId,
+				version: entry.version,
+				enabled: data.enabled,
+				config: parsed.data,
+			});
+			return { ok: true };
+		},
+	);

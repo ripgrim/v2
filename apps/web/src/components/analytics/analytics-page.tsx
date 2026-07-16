@@ -2,7 +2,7 @@ import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import NumberFlow from "@number-flow/react";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsChart } from "#/components/analytics/analytics-chart";
 import { AnalyticsEvents } from "#/components/analytics/analytics-events";
@@ -19,30 +19,22 @@ import { closestEventId } from "#/lib/analytics-events";
 import { moderationStatsQueryOptions } from "#/lib/moderation.query";
 import { cn } from "#/lib/utils";
 
-// The moderation store is the only analytics source (§4) — one metric family.
-type AnalyticsSearch = { metric: string };
+const routeApi = getRouteApi("/$org/$repo/analytics");
 
-export const Route = createFileRoute("/analytics")({
-	ssr: false,
-	validateSearch: (search: Record<string, unknown>): AnalyticsSearch => ({
-		metric: typeof search.metric === "string" ? search.metric : "review",
-	}),
-	loader: ({ context }) => {
-		void context.queryClient.prefetchQuery(moderationStatsQueryOptions());
-	},
-	component: AnalyticsPage,
-});
-
-function AnalyticsPage() {
-	const { metric } = Route.useSearch();
-	const moderationStats = useQuery(moderationStatsQueryOptions());
+/**
+ * REPO-level analytics at /:org/:repo/analytics (§8). The moderation store is
+ * the only analytics source (§4) — one metric family, scoped to the URL's repo.
+ */
+export function AnalyticsPage() {
+	const { org, repo } = routeApi.useParams();
+	const moderationStats = useQuery(moderationStatsQueryOptions(org, repo));
 
 	const metrics = useMemo(
 		() => (moderationStats.data ? moderationMetrics(moderationStats.data) : []),
 		[moderationStats.data],
 	);
 
-	const [focused, setFocused] = useState(metric);
+	const [focused, setFocused] = useState("review");
 	const [committedIndex, setCommittedIndex] = useState<number | null>(null);
 	const [showMetrics, setShowMetrics] = useState(false);
 
@@ -53,7 +45,7 @@ function AnalyticsPage() {
 
 	// REAL activity — the runs + decisions behind the focused metric.
 	const activity = useQuery(
-		analyticsActivityQueryOptions(focusedMetric?.key ?? "pending"),
+		analyticsActivityQueryOptions(org, repo, focusedMetric?.key ?? "pending"),
 	);
 	const events = activity.data ?? [];
 
@@ -62,8 +54,6 @@ function AnalyticsPage() {
 	const committedAt = committedIndex ?? Math.max(0, len - 1);
 	const ago = hoursAgo(committedAt, len);
 	const focusedEventId = closestEventId(events, ago, Date.now());
-
-	const backTo = "/";
 
 	// Opening the metrics sheet rides the scroll to the bottom (page slides up);
 	// closing glides it back to wherever they opened it from.
@@ -100,7 +90,8 @@ function AnalyticsPage() {
 					<div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
 						<Button variant="link" size="sm" asChild>
 							<Link
-								to={backTo}
+								to="/$org/$repo/moderation"
+								params={{ org, repo }}
 								className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 							>
 								<HugeiconsIcon
@@ -146,7 +137,7 @@ function AnalyticsPage() {
 									}}
 								>
 									<AnalyticsChart
-										layoutId={`chart-moderation-${metric}`}
+										layoutId={`chart-moderation-${focusedMetric.key}`}
 										series={focusedMetric.series}
 										color={focusedMetric.color}
 										committedIndex={committedIndex}
@@ -212,6 +203,27 @@ function AnalyticsPage() {
 						</div>
 					</AnalyticsMetricsSheet>
 				) : null}
+			</div>
+		</DashboardLayout>
+	);
+}
+
+export function AnalyticsPageSkeleton() {
+	return (
+		<DashboardLayout counts={{}}>
+			<div className="mx-auto w-full max-w-4xl px-6 py-8 md:px-8 md:py-10">
+				<div className="mb-6 h-8 w-40 animate-pulse rounded-md bg-surface-1" />
+				<div className="mb-6 h-56 animate-pulse rounded-lg bg-surface-1" />
+				<div className="flex flex-col gap-2">
+					{Array.from({ length: 5 }, (_, i) => `analytics-skel-${i}`).map(
+						(key) => (
+							<div
+								className="h-11 animate-pulse rounded-md bg-surface-1"
+								key={key}
+							/>
+						),
+					)}
+				</div>
 			</div>
 		</DashboardLayout>
 	);

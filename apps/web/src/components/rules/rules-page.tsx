@@ -1,31 +1,27 @@
-import { CheckListIcon } from "@hugeicons/core-free-icons";
 import { useQuery } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { ArmCallout } from "#/components/arming/arm-callout";
-import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { RuleCard } from "#/components/rules/rule-card";
 import { RuleFilters, type RuleSort } from "#/components/rules/rule-filters";
 import { RuleHeaderStats } from "#/components/rules/rule-header-stats";
-import { activeRepoQueryOptions } from "#/lib/onboarding.query";
+import { orgRepoQueryOptions } from "#/lib/org.query";
 import {
 	ruleConfigsQueryOptions,
 	rulesStatsQueryOptions,
 } from "#/lib/rules.query";
 
+const routeApi = getRouteApi("/$org/$repo/rules");
+
 export function RulesPage() {
-	// Scoped to the user's ONE active repo (§10) — no picker.
-	const { data: repo } = useQuery(activeRepoQueryOptions());
+	// Scoped to the URL's repo (§8) — the layout route already resolved it.
+	const { org, repo: repoName } = routeApi.useParams();
+	const { data: repo } = useQuery(orgRepoQueryOptions(org, repoName));
 	const [sort, setSort] = useState<RuleSort>("active");
 	const repoId = repo?.id ?? "";
-	const { data: rules } = useQuery({
-		...ruleConfigsQueryOptions(repoId),
-		enabled: Boolean(repoId),
-	});
-	const statsQuery = useQuery({
-		...rulesStatsQueryOptions(repoId),
-		enabled: Boolean(repoId),
-	});
+	const { data: rules } = useQuery(ruleConfigsQueryOptions(org, repoId));
+	const statsQuery = useQuery(rulesStatsQueryOptions(org, repoId));
 
 	const fetchedStats = useRef(false);
 	if (statsQuery.isLoading) {
@@ -65,41 +61,40 @@ export function RulesPage() {
 				{repo && !repo.armed ? (
 					<ArmCallout
 						className="mb-6"
+						org={org}
+						repo={repoName}
 						repoFullName={repo.fullName}
 						variant="banner"
 					/>
 				) : null}
 
-				{repo === null ? (
-					<EmptyState
-						description="finish linking a repo and its rules — account age, rate limits, hidden links, and the rest — show up here to tune."
-						icon={CheckListIcon}
-						title="no repo linked yet"
-					/>
-				) : (
-					<div className="flex flex-col gap-6">
-						{statsQuery.data ? (
-							<RuleHeaderStats
-								animate={fetchedStats.current}
-								stats={statsQuery.data}
-							/>
-						) : null}
-						{statsQuery.data && statsQuery.data.matches24h.value === 0 ? (
-							<p className="rounded-lg border border-dashed px-4 py-3 text-center text-muted-foreground text-xs">
-								no change requests evaluated in the last 24h — these rules take
-								effect on the next one that opens.
-							</p>
-						) : null}
-						<div className="flex items-center justify-end">
-							<RuleFilters onSortChange={setSort} sort={sort} />
-						</div>
-						<div className="flex flex-col gap-3">
-							{sorted.map((rule) => (
-								<RuleCard key={rule.ruleId} repoId={repoId} rule={rule} />
-							))}
-						</div>
+				<div className="flex flex-col gap-6">
+					{statsQuery.data ? (
+						<RuleHeaderStats
+							animate={fetchedStats.current}
+							stats={statsQuery.data}
+						/>
+					) : null}
+					{statsQuery.data && statsQuery.data.matches24h.value === 0 ? (
+						<p className="rounded-lg border border-dashed px-4 py-3 text-center text-muted-foreground text-xs">
+							no change requests evaluated in the last 24h — these rules take
+							effect on the next one that opens.
+						</p>
+					) : null}
+					<div className="flex items-center justify-end">
+						<RuleFilters onSortChange={setSort} sort={sort} />
 					</div>
-				)}
+					<div className="flex flex-col gap-3">
+						{sorted.map((rule) => (
+							<RuleCard
+								key={rule.ruleId}
+								org={org}
+								repoId={repoId}
+								rule={rule}
+							/>
+						))}
+					</div>
+				</div>
 			</div>
 		</DashboardLayout>
 	);

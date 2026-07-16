@@ -13,9 +13,12 @@ import { rulesQueryKeys } from "#/lib/rules.query";
  * config editor (per-field editing is a later session).
  */
 export function RuleCard({
+	org,
 	repoId,
 	rule,
 }: {
+	/** Org slug from the URL. */
+	org: string;
 	repoId: string;
 	rule: RuleConfigView;
 }) {
@@ -33,7 +36,7 @@ export function RuleCard({
 		mutationFn: saveRuleConfig,
 		onSettled: () =>
 			queryClient.invalidateQueries({
-				queryKey: rulesQueryKeys.config(repoId),
+				queryKey: rulesQueryKeys.config(org, repoId),
 			}),
 	});
 
@@ -49,6 +52,7 @@ export function RuleCard({
 		mutation.mutate(
 			{
 				data: {
+					org,
 					repoId,
 					ruleId: rule.ruleId,
 					enabled: nextEnabled,

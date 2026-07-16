@@ -1,5 +1,5 @@
 import { assertApproved } from "@tripwire/auth/access-gate";
-import { eventServices } from "@tripwire/db";
+import { eventServices, orgServices } from "@tripwire/db";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ApiEnv } from "../env.ts";
@@ -37,6 +37,15 @@ export const stream = new Hono<ApiEnv>().get(
 			if (denial) {
 				return c.json({ error: denial.message }, 403);
 			}
+			// §org-model visibility: a member of org A must not receive org B's
+			// notifications. Snapshot the membership-visible repo set here;
+			// refreshed on each heartbeat below so new grants land mid-stream.
+			c.set(
+				"visibleRepos",
+				new Set(await orgServices.listUserRepoFullNames(db, session.user.id)),
+			);
+		} else {
+			c.set("visibleRepos", null);
 		}
 		return await next();
 	},
@@ -45,6 +54,10 @@ export const stream = new Hono<ApiEnv>().get(
 			const { db, directPool, logger } = c.get("deps");
 			const client = await directPool.connect();
 			let open = true;
+			let visibleRepos = c.get("visibleRepos");
+			const canSee = (repoFullName: string | null | undefined) =>
+				visibleRepos === null ||
+				(repoFullName != null && visibleRepos.has(repoFullName));
 
 			const onNotification = async (msg: {
 				channel?: string;
@@ -57,7 +70,10 @@ export const stream = new Hono<ApiEnv>().get(
 				// joined activity row so the feed resolves "evaluating…" in place (§9).
 				if (msg.channel === "runs") {
 					const row = await eventServices.getActivityForEvent(db, msg.payload);
-					if (row) {
+					const rowRepo = (
+						row?.event as { repo?: { fullName?: string } } | undefined
+					)?.repo?.fullName;
+					if (row && canSee(rowRepo ?? null)) {
 						await s.writeSSE({
 							event: "run",
 							id: `${msg.payload}:run`,
@@ -68,6 +84,12 @@ export const stream = new Hono<ApiEnv>().get(
 				}
 				const event = await eventServices.getEventById(db, msg.payload);
 				if (event?.normalized) {
+					const normalized = event.normalized as {
+						repo?: { fullName?: string };
+					};
+					if (!canSee(normalized.repo?.fullName ?? null)) {
+						return;
+					}
 					await s.writeSSE({
 						event: "event",
 						id: event.id,
@@ -91,8 +113,24 @@ export const stream = new Hono<ApiEnv>().get(
 				client.release();
 			});
 
+			const { auth } = c.get("deps");
+			const refreshVisibility = async () => {
+				if (visibleRepos === null || !auth) {
+					return;
+				}
+				const session = await auth.api.getSession({
+					headers: c.req.raw.headers,
+				});
+				if (session) {
+					visibleRepos = new Set(
+						await orgServices.listUserRepoFullNames(db, session.user.id),
+					);
+				}
+			};
+
 			while (open) {
 				await s.writeSSE({ event: "heartbeat", data: String(Date.now()) });
+				await refreshVisibility().catch(() => undefined);
 				await s.sleep(HEARTBEAT_MS);
 			}
 		}),

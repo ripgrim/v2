@@ -50,12 +50,16 @@ export const Route = createRootRouteWithContext<{
 		if (!session.user) {
 			return;
 		}
-		// Closed-beta access gate — a gated, not-approved user belongs on /queue,
-		// not the dashboard or onboarding. Runs in beforeLoad (before render) so
-		// the shell never flashes; /queue stays reachable. gateEnabled is the
-		// server's decision, matching what the API boundary enforces.
+		// Closed-beta access gate — a gated, not-approved user belongs on /queue.
+		// /invite/* stays reachable: redeeming an approved admin's link is HOW a
+		// pending user becomes approved (§6). Runs in beforeLoad (before render)
+		// so the shell never flashes; gateEnabled is the server's decision,
+		// matching what the API boundary enforces.
 		if (session.gateEnabled && session.user.accessStatus !== "approved") {
-			if (location.pathname === "/queue") {
+			if (
+				location.pathname === "/queue" ||
+				location.pathname.startsWith("/invite/")
+			) {
 				return;
 			}
 			throw redirect({ to: "/queue" });
@@ -78,9 +82,6 @@ export const Route = createRootRouteWithContext<{
 					state: search.state,
 				},
 			});
-		}
-		if (!session.onboarded && !location.pathname.startsWith("/onboarding")) {
-			throw redirect({ to: "/onboarding" });
 		}
 	},
 	head: () => ({

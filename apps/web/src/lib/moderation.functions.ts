@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { OrgWithRole } from "@tripwire/db";
 import type { ModStats } from "#/lib/moderation.types";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
+import { orgMemberMiddleware, resolveOrgRepo } from "#/lib/server/org-guard";
 
 const ZERO_SERIES = () => Array.from({ length: 24 }, () => 0);
 const ZERO_STAT = () => ({ value: 0, delta: 0, series: ZERO_SERIES() });
@@ -16,10 +18,11 @@ const ZERO_STATS = (): ModStats => ({
 // error state); there is NO mock fallback — fabricated numbers are worse than a
 // visible failure.
 export const getModerationStats = createServerFn({ method: "GET" })
-	.middleware([accessGuardMiddleware])
-	.handler(async (): Promise<ModStats> => {
-		const { getActiveRepo } = await import("#/lib/server/active-repo");
-		const repo = await getActiveRepo();
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator((input: { org: string; repo: string }) => input)
+	.handler(async ({ data, context }): Promise<ModStats> => {
+		const org = (context as { org: OrgWithRole }).org;
+		const repo = await resolveOrgRepo(org.id, data.repo).catch(() => null);
 		if (!repo) {
 			return ZERO_STATS();
 		}

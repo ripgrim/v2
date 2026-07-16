@@ -23,23 +23,37 @@ import {
 
 export const moderationQueueKeys = {
 	all: ["moderation-queue"] as const,
-	list: () => [...moderationQueueKeys.all, "list"] as const,
+	list: (org: string, repo: string) =>
+		[...moderationQueueKeys.all, org, repo, "list"] as const,
 };
 
-export const moderationQueueOptions = () =>
+export const moderationQueueOptions = (org: string, repo: string) =>
 	queryOptions({
-		queryKey: moderationQueueKeys.list(),
-		queryFn: ({ signal }) => listModerationQueue({ signal }),
+		queryKey: moderationQueueKeys.list(org, repo),
+		queryFn: ({ signal }) =>
+			listModerationQueue({ data: { org, repo }, signal }),
 		staleTime: 5_000,
 	});
 
-export function ModerationQueue({ title }: { title?: ReactNode }) {
+export function ModerationQueue({
+	org,
+	repo,
+	title,
+}: {
+	/** Org slug from the URL. */
+	org: string;
+	/** Repo NAME from the URL. */
+	repo: string;
+	title?: ReactNode;
+}) {
 	const queryClient = useQueryClient();
-	const { data: items } = useQuery(moderationQueueOptions());
+	const { data: items } = useQuery(moderationQueueOptions(org, repo));
 	const decide = useMutation({
 		mutationFn: decideModeration,
 		onSettled: () =>
-			queryClient.invalidateQueries({ queryKey: moderationQueueKeys.list() }),
+			queryClient.invalidateQueries({
+				queryKey: moderationQueueKeys.list(org, repo),
+			}),
 	});
 
 	return (
@@ -91,7 +105,7 @@ export function ModerationQueue({ title }: { title?: ReactNode }) {
 							disabled={decide.isPending}
 							onClick={() =>
 								decide.mutate(
-									{ data: { itemId: item.id, decision: "approve" } },
+									{ data: { org, repo, itemId: item.id, decision: "approve" } },
 									{ onSuccess: () => toast("approved — run resuming") },
 								)
 							}
@@ -104,7 +118,7 @@ export function ModerationQueue({ title }: { title?: ReactNode }) {
 							disabled={decide.isPending}
 							onClick={() =>
 								decide.mutate(
-									{ data: { itemId: item.id, decision: "deny" } },
+									{ data: { org, repo, itemId: item.id, decision: "deny" } },
 									{ onSuccess: () => toast("denied — run resuming") },
 								)
 							}

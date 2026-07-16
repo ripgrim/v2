@@ -1,20 +1,24 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
-import { armActiveRepo } from "#/lib/arm.functions";
+import { armRepo } from "#/lib/arm.functions";
 import { cn } from "#/lib/utils";
 
 interface ArmCalloutProps {
+	/** Org slug from the URL. */
+	org: string;
+	/** Repo NAME from the URL. */
+	repo: string;
 	repoFullName: string;
 	/** hero dominates the home page; banner is the inline call on scoped pages. */
 	variant?: "hero" | "banner";
 	className?: string;
 }
 
-function useArm(repoFullName: string) {
+function useArm(org: string, repo: string, repoFullName: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: () => armActiveRepo(),
+		mutationFn: () => armRepo({ data: { org, repo } }),
 		onSettled: async () => {
 			// The whole dashboard re-derives from armed state — refetch broadly.
 			await queryClient.invalidateQueries();
@@ -33,11 +37,13 @@ function useArm(repoFullName: string) {
  * the page (hero on home) or leads it (banner on scoped pages) until resolved.
  */
 export function ArmCallout({
+	org,
+	repo,
 	repoFullName,
 	variant = "banner",
 	className,
 }: ArmCalloutProps) {
-	const arm = useArm(repoFullName);
+	const arm = useArm(org, repo, repoFullName);
 
 	if (variant === "hero") {
 		return (

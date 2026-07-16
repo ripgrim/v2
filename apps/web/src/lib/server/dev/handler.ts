@@ -2,7 +2,7 @@ import {
 	type Db,
 	DEMO_EMAIL_DOMAIN,
 	ensureDemoRepo,
-	onboardingServices,
+	orgServices,
 	resetDemoData,
 	schema,
 	seedPublicRun,
@@ -71,50 +71,64 @@ async function setupPersona(
 	db: Db,
 	persona: PersonaId,
 	userId: string,
+	name: string,
 	now: Date,
 ): Promise<void> {
+	// Every persona owns a personal org (§org-model) — `/` redirects there.
+	const personalOrg = await orgServices.ensurePersonalOrg(db, {
+		userId,
+		name,
+	});
+	// Repos are created FIRST so the claim's org_id backfill catches them all;
+	// repos are reached by URL now — no active-repo pick.
 	const link = (installationId: string) =>
-		onboardingServices.linkUserInstallation(db, { userId, installationId });
+		orgServices.linkOrgInstallation(db, {
+			orgId: personalOrg.id,
+			installationId,
+		});
 
 	if (persona === "fresh") {
-		return; // no installation — lands on onboarding's install step
+		return; // no installation — the org home shows the install CTA
 	}
 	if (persona === "one-repo") {
-		await link("demo-inst-one");
-		// A year-old repo, auto-selected — the dashboard is populated on land.
+		// A year-old repo — the org home is populated on land.
 		const repo = await ensureDemoRepo(db, "solo-webapp", {
 			installationId: "demo-inst-one",
 		});
 		await seedStory(db, repo, now);
+		await link("demo-inst-one");
 		return;
 	}
 	if (persona === "many-repos") {
-		await link("demo-inst-many");
-		// Several granted repos, each with real (if lighter) history, so picking
+		// Several granted repos, each with real (if lighter) history, so opening
 		// any one lands on a populated dashboard.
-		for (const name of ["many-api", "many-web", "many-docs", "many-infra"]) {
-			const repo = await ensureDemoRepo(db, name, {
+		for (const repoName of [
+			"many-api",
+			"many-web",
+			"many-docs",
+			"many-infra",
+		]) {
+			const repo = await ensureDemoRepo(db, repoName, {
 				installationId: "demo-inst-many",
 			});
 			await seedStory(db, repo, now, { days: 120 });
 		}
+		await link("demo-inst-many");
 		return;
 	}
 	if (persona === "empty") {
-		await link("demo-inst-empty");
-		const repo = await ensureDemoRepo(db, "empty-repo", {
+		await ensureDemoRepo(db, "empty-repo", {
 			installationId: "demo-inst-empty",
 		});
-		await onboardingServices.setActiveRepo(db, userId, repo.id);
+		await link("demo-inst-empty");
 		return;
 	}
 	if (persona === "active") {
-		await link("demo-inst-active");
 		const repo = await ensureDemoRepo(db, "active-webapp", {
 			installationId: "demo-inst-active",
 		});
-		await onboardingServices.setActiveRepo(db, userId, repo.id);
 		await seedStory(db, repo, now);
+		await link("demo-inst-active");
 	}
 }
 
@@ -192,7 +206,7 @@ export async function handleDevRequest(request: Request): Promise<Response> {
 		if (!userId) {
 			return json({ error: "failed to establish dev session" }, 500);
 		}
-		await setupPersona(db, persona.id, userId, now);
+		await setupPersona(db, persona.id, userId, persona.label, now);
 		const res = json({ landing: persona.landing });
 		copySetCookies(authRes, res);
 		return res;
