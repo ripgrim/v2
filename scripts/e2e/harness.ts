@@ -7,6 +7,7 @@ import {
 	type RunOutcome,
 	runScenario,
 	unmetRequirement,
+	writeRunReport,
 } from "./lib/runner.ts";
 import type { Method, Scenario } from "./lib/types.ts";
 import { AXES, SCENARIOS, scenarioByName } from "./scenarios.ts";
@@ -138,13 +139,22 @@ async function runOne(
 ): Promise<RunOutcome> {
 	const spinner = interactive && isTty ? p.spinner() : null;
 	spinner?.start(`running ${scenario.name}`);
+	const startedAt = new Date();
 	const outcome = await runScenario(scenario, {
 		config,
 		method,
 		keep,
 		hooks: makeHooks(interactive, spinner),
 	});
-	spinner?.stop(`${scenario.name} — ${outcome.status}`);
+	const report = writeRunReport(scenario, outcome, startedAt);
+	spinner?.stop(
+		`${scenario.name} — ${outcome.status}${report ? ` (report: ${report.replace(process.cwd() + "/", "")})` : ""}`,
+	);
+	if (!spinner && report) {
+		process.stdout.write(
+			`report: ${report.replace(process.cwd() + "/", "")}\n`,
+		);
+	}
 	return outcome;
 }
 
@@ -282,6 +292,7 @@ async function main(): Promise<void> {
 			"the expected gate verdict (pass|block|needs-review|degraded)",
 		)
 		.option("--everything", "run every scriptable scenario, print a summary")
+		.option("--axis <key>", "run every scriptable scenario on one axis")
 		.option(
 			"--with-hybrid",
 			"include human-in-the-loop scenarios (needs a TTY)",
@@ -318,6 +329,29 @@ async function main(): Promise<void> {
 		process.stdout.write("\n interrupted — cleaning up in-flight run…\n");
 		process.exitCode = 130;
 	});
+
+	if (opts.axis) {
+		const chosen = scriptable().filter((s) => s.axis === opts.axis);
+		if (chosen.length === 0) {
+			process.stderr.write(`no scriptable scenarios on axis "${opts.axis}"\n`);
+			process.exit(2);
+		}
+		const outcomes: RunOutcome[] = [];
+		for (const scenario of chosen) {
+			outcomes.push(
+				await runOne(scenario, "construct", Boolean(opts.keep), false),
+			);
+		}
+		if (opts.json) {
+			process.stdout.write(`${JSON.stringify(outcomes, null, 2)}\n`);
+		} else {
+			for (const o of outcomes) {
+				renderResult(o, c);
+			}
+			renderSummary(outcomes, c);
+		}
+		process.exit(exitCode(outcomes));
+	}
 
 	if (opts.everything) {
 		const chosen = opts.withHybrid ? SCENARIOS : scriptable();

@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createDb, type Db } from "@tripwire/db";
 import { sql } from "drizzle-orm";
 import { Asserter } from "./assert.ts";
@@ -120,6 +122,61 @@ export function unmetRequirement(
  * (account/fork orchestration lives in the pushTarget/headRef closures), run,
  * then ALWAYS restore rule_configs + the gh account and clean up.
  */
+
+/**
+ * Persist a per-run markdown report to .tests/workflows/<scenario>-<stamp>.md
+ * (workflow-axis scenarios; harness artifacts, gitignored). One file per run —
+ * the audit trail for "did each block do its ideal thing?".
+ */
+export function writeRunReport(
+	scenario: Scenario,
+	outcome: RunOutcome,
+	startedAt: Date,
+): string | null {
+	if (scenario.axis !== "workflow") {
+		return null;
+	}
+	const stamp = startedAt
+		.toISOString()
+		.replace(/[:.]/g, "-")
+		.replace("T", "_")
+		.slice(0, 19);
+	const dir = join(process.cwd(), ".tests", "workflows");
+	mkdirSync(dir, { recursive: true });
+	const file = join(dir, `${scenario.name}-${stamp}.md`);
+	const durationMs = Date.now() - startedAt.getTime();
+	const lines = [
+		`# ${scenario.name}`,
+		"",
+		`- **status:** ${outcome.status}`,
+		`- **axis:** ${scenario.axis}`,
+		`- **started:** ${startedAt.toISOString()}`,
+		`- **duration:** ${(durationMs / 1000).toFixed(1)}s`,
+		`- **expects:** ${scenario.expects}`,
+		"",
+		"## plan",
+		...scenario.plan.map((step) => `- ${step}`),
+		"",
+		"## assertions",
+		...(outcome.results.length === 0
+			? ["- (none recorded)"]
+			: outcome.results.map(
+					(r) =>
+						`- ${r.ok ? "✅" : "❌"} ${r.label}${
+							r.ok ? "" : ` — expected ${r.expected}, got ${r.actual}`
+						}`,
+				)),
+	];
+	if ("reason" in outcome && outcome.reason) {
+		lines.push("", `## skipped`, String(outcome.reason));
+	}
+	if ("error" in outcome && outcome.error) {
+		lines.push("", "## error", "```", String(outcome.error), "```");
+	}
+	writeFileSync(file, `${lines.join("\n")}\n`);
+	return file;
+}
+
 export async function runScenario(
 	scenario: Scenario,
 	options: RunnerOptions,

@@ -25,7 +25,7 @@
 		"test:run": "bun run scripts/e2e/harness.ts --only gate-pass --no-input",
 		"test:lifecycle": "bun run scripts/e2e/harness.ts --only comment-lifecycle --no-input",
 		"test:lifecycle:prod": "bun --env-file=.env.e2e scripts/e2e/harness.ts --only comment-lifecycle --no-input",
-		"test:workflows": "for s in workflow-block workflow-pass workflow-disabled-inert workflow-existing; do bun run scripts/e2e/harness.ts --only $s --no-input || exit 1; done",
+		"test:workflows": "bun run scripts/e2e/harness.ts --axis workflow --no-input",
 		"test:suite": "bun test",
 		"verify:planetscale": "bun run scripts/verify-planetscale.ts",
 		"smoke:deploy": "bun run scripts/smoke-deploy.ts"

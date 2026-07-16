@@ -39,6 +39,8 @@ async function forceGate(
 		edits: Record<string, string | null>;
 		message: string;
 		expectConclusion: "success" | "failure" | "neutral" | null;
+		/** Override the PR title (english-only forcing needs a non-latin one). */
+		title?: string;
 	},
 ): Promise<void> {
 	const { gh, base, asserter } = ctx;
@@ -49,7 +51,7 @@ async function forceGate(
 		base,
 		headRef: ctx.headRef(opts.branch, opts.mode),
 		branch: opts.branch,
-		title: TITLE,
+		title: opts.title ?? TITLE,
 		body: BODY,
 	});
 	asserter.ok(
@@ -114,6 +116,205 @@ function accountAgeWorkflow(minDays: number): WorkflowDefinition {
 		],
 	};
 }
+
+/** One-rule saved graph: trigger → rule —fail→ block. */
+function ruleWorkflow(
+	ruleId: string,
+	version: number,
+	config: unknown,
+): WorkflowDefinition {
+	return {
+		id: `e2e-wfm-${ruleId}`,
+		name: `e2e rule ${ruleId}`,
+		version: 1,
+		nodes: [
+			{
+				id: "t",
+				type: "trigger",
+				kinds: ["change-request.opened", "change-request.updated"],
+				position: { x: 80, y: 160 },
+			},
+			{
+				id: "r",
+				type: "rule",
+				ref: `${ruleId}@${version}`,
+				config: config as never,
+				position: { x: 360, y: 160 },
+			},
+			{
+				id: "a",
+				type: "action",
+				action: "block",
+				position: { x: 640, y: 160 },
+			},
+		],
+		edges: [
+			{ id: "e1", from: "t", to: "r" },
+			{ id: "e2", from: "r", to: "a", when: "fail" },
+		],
+	};
+}
+
+/** Two rules feeding one gate —fail→ block. */
+function gateWorkflow(mode: "all-of" | "any-of" | "not"): WorkflowDefinition {
+	const twoRules = mode !== "not";
+	return {
+		id: `e2e-wfg-${mode}`,
+		name: `e2e gate ${mode}`,
+		version: 1,
+		nodes: [
+			{
+				id: "t",
+				type: "trigger",
+				kinds: ["change-request.opened", "change-request.updated"],
+				position: { x: 80, y: 160 },
+			},
+			{
+				id: "crypto",
+				type: "rule",
+				ref: "crypto-address@1",
+				config: {},
+				position: { x: 340, y: twoRules ? 90 : 160 },
+			},
+			...(twoRules
+				? ([
+						{
+							id: "age",
+							type: "rule",
+							ref: "account-age@1",
+							config: { minDays: 0 },
+							position: { x: 340, y: 240 },
+						},
+					] as const)
+				: []),
+			{ id: "g", type: "gate", mode, position: { x: 600, y: 160 } },
+			{
+				id: "a",
+				type: "action",
+				action: "block",
+				position: { x: 860, y: 160 },
+			},
+		],
+		edges: [
+			{ id: "e1", from: "t", to: "crypto" },
+			...(twoRules
+				? ([
+						{ id: "e2", from: "t", to: "age" },
+						{ id: "e3", from: "age", to: "g" },
+					] as const)
+				: []),
+			{ id: "e4", from: "crypto", to: "g" },
+			{ id: "e5", from: "g", to: "a", when: "fail" as const },
+		],
+	};
+}
+
+interface RuleMatrixRow {
+	ruleId: string;
+	version: number;
+	config: Record<string, unknown>;
+	/** The change that forces this rule to FAIL. */
+	edits: Record<string, string | null>;
+	title?: string;
+	why: string;
+	forcing: string;
+}
+
+const RULE_MATRIX: RuleMatrixRow[] = [
+	{
+		ruleId: "account-age",
+		version: 1,
+		config: { minDays: 36500 },
+		edits: { "E2E.md": CLEAN_DOC },
+		why: "an account younger than 100 years",
+		forcing: "push a clean change (every real account fails a 100y floor)",
+	},
+	{
+		ruleId: "crypto-address",
+		version: 1,
+		config: {},
+		edits: { "WALLET.md": `# donate\n\n${WALLET}\n` },
+		why: "a wallet address in the diff",
+		forcing: "push a file containing an eth address",
+	},
+	{
+		ruleId: "honeypot",
+		version: 1,
+		config: { paths: [".github/workflows/**"] },
+		edits: { ".github/workflows/e2e-touch.yml": "name: honeypot-trip\n" },
+		why: "a change touching a protected path",
+		forcing: "push a file under .github/workflows/",
+	},
+	{
+		ruleId: "max-files-changed",
+		version: 1,
+		config: { max: 1 },
+		edits: { "E2E.md": CLEAN_DOC, "E2E-2.md": CLEAN_DOC },
+		why: "more files than the cap allows",
+		forcing: "push two files with max set to 1",
+	},
+	{
+		ruleId: "english-only",
+		version: 1,
+		config: { maxNonLatinRatio: 0.1 },
+		edits: { "E2E.md": CLEAN_DOC },
+		title: "проверка изменений в репозитории",
+		why: "a predominantly non-latin title",
+		forcing: "open the PR with a cyrillic title",
+	},
+	{
+		ruleId: "min-merged-prs",
+		version: 2,
+		config: { min: 999999, trustedAfter: 999999 },
+		edits: { "E2E.md": CLEAN_DOC },
+		why: "fewer merges elsewhere than an absurd floor",
+		forcing: "push a clean change (nobody has 999999 merged PRs elsewhere)",
+	},
+	{
+		ruleId: "profile-readme",
+		version: 1,
+		config: { minLength: 100000 },
+		edits: { "E2E.md": CLEAN_DOC },
+		why: "a profile shorter than an absurd floor",
+		forcing: "push a clean change (no profile carries 100k chars)",
+	},
+];
+
+interface GateMatrixRow {
+	mode: "all-of" | "any-of" | "not";
+	edits: Record<string, string | null>;
+	expect: "success" | "failure";
+	summary: string;
+	forcing: string;
+	expects: string;
+}
+
+const GATE_MATRIX: GateMatrixRow[] = [
+	{
+		mode: "all-of",
+		edits: { "WALLET.md": `# donate\n\n${WALLET}\n` },
+		expect: "failure",
+		summary: "all-of gate: one failing input fails the gate → block",
+		forcing: "push a wallet address (crypto fails, account-age passes)",
+		expects: "all-of demands every input pass; one failure blocks",
+	},
+	{
+		mode: "any-of",
+		edits: { "WALLET.md": `# donate\n\n${WALLET}\n` },
+		expect: "success",
+		summary: "any-of gate: one passing input passes the gate → no block",
+		forcing: "push a wallet address (crypto fails, account-age passes)",
+		expects: "any-of is satisfied by the passing account-age; no block",
+	},
+	{
+		mode: "not",
+		edits: { "E2E.md": CLEAN_DOC },
+		expect: "failure",
+		summary: "not gate: inverts a PASSING rule into a block",
+		forcing: "push a clean change (crypto passes → not fails → block)",
+		expects: "`not` flips pass to fail; the fail edge conducts to block",
+	},
+];
 
 export const SCENARIOS: Scenario[] = [
 	// ── GATE ──────────────────────────────────────────────────────────────────
@@ -916,6 +1117,123 @@ export const SCENARIOS: Scenario[] = [
 			);
 		},
 	},
+	// ── WORKFLOW MATRIX (every rule + gate as a saved graph, block-verified) ──
+	// Generated from RULE_MATRIX/GATE_MATRIX below — a new rule needs one data
+	// row, never a new scenario body. ai-review is EXCLUDED live (it spends
+	// tokens); its definition is still seeded + enable-validated elsewhere.
+	...RULE_MATRIX.map(
+		(row): Scenario => ({
+			name: `workflow-rule-${row.ruleId}`,
+			axis: "workflow",
+			summary: `saved graph: ${row.ruleId} blocks on ${row.why}`,
+			plan: [
+				`pin ENABLED workflow: ${row.ruleId}@${row.version}(${JSON.stringify(row.config)}) —fail→ block`,
+				row.forcing,
+				"assert the check is failure (the block landed)",
+			],
+			expects: `${row.ruleId}'s fail edge conducts to block on a real PR`,
+			needs: { db: true },
+			enableRules: [
+				{
+					ruleId: row.ruleId,
+					version: row.version,
+					enabled: true,
+					config: row.config,
+				},
+			],
+			pinWorkflows: [
+				{
+					definition: ruleWorkflow(row.ruleId, row.version, row.config),
+					enabled: true,
+				},
+			],
+			run: (ctx) =>
+				forceGate(ctx, {
+					branch: `tw-e2e-wfm-${row.ruleId}`,
+					mode: ctx.defaultMode,
+					edits: row.edits,
+					message: `e2e: force ${row.ruleId} to fail`,
+					title: row.title,
+					expectConclusion: "failure",
+				}),
+		}),
+	),
+	{
+		name: "workflow-rule-pr-rate-limit",
+		axis: "workflow",
+		summary: "saved graph: pr-rate-limit blocks the SECOND PR in the window",
+		plan: [
+			"pin ENABLED workflow: pr-rate-limit(maxPerWindow 1) —fail→ block",
+			"open PR #1 (within budget → success), then PR #2 (over → failure)",
+		],
+		expects: "the second PR inside the window trips the cap and blocks",
+		needs: { db: true },
+		enableRules: [
+			{
+				ruleId: "pr-rate-limit",
+				version: 1,
+				enabled: true,
+				config: { maxPerWindow: 1, windowHours: 24 },
+			},
+		],
+		pinWorkflows: [
+			{
+				definition: ruleWorkflow("pr-rate-limit", 1, {
+					maxPerWindow: 1,
+					windowHours: 24,
+				}),
+				enabled: true,
+			},
+		],
+		run: async (ctx) => {
+			await forceGate(ctx, {
+				branch: "tw-e2e-wfm-rate-1",
+				mode: ctx.defaultMode,
+				edits: { "E2E.md": CLEAN_DOC },
+				message: "e2e: rate-limit PR one (in budget)",
+				expectConclusion: "success",
+			});
+			await forceGate(ctx, {
+				branch: "tw-e2e-wfm-rate-2",
+				mode: ctx.defaultMode,
+				edits: { "E2E-2.md": CLEAN_DOC },
+				message: "e2e: rate-limit PR two (over budget)",
+				expectConclusion: "failure",
+			});
+		},
+	},
+	...GATE_MATRIX.map(
+		(row): Scenario => ({
+			name: `workflow-gate-${row.mode}`,
+			axis: "workflow",
+			summary: row.summary,
+			plan: [
+				`pin ENABLED workflow: [account-age(0), crypto-address] → ${row.mode} —fail→ block`,
+				row.forcing,
+				`assert the check is ${row.expect}`,
+			],
+			expects: row.expects,
+			needs: { db: true },
+			enableRules: [
+				{
+					ruleId: "account-age",
+					version: 1,
+					enabled: true,
+					config: { minDays: 0 },
+				},
+				{ ruleId: "crypto-address", version: 1, enabled: true, config: {} },
+			],
+			pinWorkflows: [{ definition: gateWorkflow(row.mode), enabled: true }],
+			run: (ctx) =>
+				forceGate(ctx, {
+					branch: `tw-e2e-wfg-${row.mode}`,
+					mode: ctx.defaultMode,
+					edits: row.edits,
+					message: `e2e: gate ${row.mode}`,
+					expectConclusion: row.expect,
+				}),
+		}),
+	),
 ];
 
 export function scenarioByName(name: string): Scenario | undefined {
