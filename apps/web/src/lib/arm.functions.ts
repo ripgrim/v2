@@ -1,4 +1,5 @@
-import { gatedServerFn } from "#/lib/server/gated-server-fn";
+import { createServerFn } from "@tanstack/react-start";
+import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 
 /**
  * §4 arming — turn the gate ON and enqueue arm-time backfill so the dashboard
@@ -17,8 +18,9 @@ async function armById(repoId: string): Promise<void> {
 }
 
 /** Arm the ACTIVE repo (the home/scoped-page CTA). Open-dev arms the first repo. */
-export const armActiveRepo = gatedServerFn({ method: "POST" }).handler(
-	async (): Promise<{ armed: boolean; repoId: string | null }> => {
+export const armActiveRepo = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<{ armed: boolean; repoId: string | null }> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const active = await getActiveRepo();
 		if (!active) {
@@ -26,16 +28,16 @@ export const armActiveRepo = gatedServerFn({ method: "POST" }).handler(
 		}
 		await armById(active.id);
 		return { armed: true, repoId: active.id };
-	},
-);
+	});
 
 /**
  * Disarm the ACTIVE repo — turn the gate back OFF (the palette's disarm action).
  * Events keep ingesting; only the RUN is skipped, same as a never-armed repo. No
  * backfill on the way back on later — the stored events are still there to replay.
  */
-export const disarmActiveRepo = gatedServerFn({ method: "POST" }).handler(
-	async (): Promise<{ armed: boolean; repoId: string | null }> => {
+export const disarmActiveRepo = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<{ armed: boolean; repoId: string | null }> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const active = await getActiveRepo();
 		if (!active) {
@@ -45,11 +47,11 @@ export const disarmActiveRepo = gatedServerFn({ method: "POST" }).handler(
 		const { getDb } = await import("#/lib/server/db");
 		await repoServices.setRepoArmed(getDb().db, active.id, false);
 		return { armed: false, repoId: active.id };
-	},
-);
+	});
 
 /** Arm a SPECIFIC repo (the switcher's inline arm) — only one the user can reach. */
-export const armRepoById = gatedServerFn({ method: "POST" })
+export const armRepoById = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(
 		async ({ data }): Promise<{ armed: boolean; repoId: string | null }> => {

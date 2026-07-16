@@ -4,11 +4,12 @@ import { join } from "node:path";
 
 /**
  * Structural authz boundary (invariant 3). Server functions are HTTP endpoints;
- * every one that returns product data MUST be access-gated (`gatedServerFn`).
- * This test scans the source and fails if a server function uses bare
- * `createServerFn` without being on the explicit public allowlist — so the
- * NEXT server function someone adds can't silently ship ungated. Deny by
- * default, same posture as the CI boundary check.
+ * every one that returns product data MUST be access-gated by chaining
+ * `.middleware([accessGuardMiddleware])` on a literal `createServerFn` (see
+ * gated-server-fn.ts for WHY it must be inline, not a wrapper). This test scans
+ * the source and fails if a server function omits that middleware without being
+ * on the explicit public allowlist — so the NEXT server function someone adds
+ * can't silently ship ungated. Deny by default, same posture as the CI check.
  */
 
 // Intentionally reachable without approval. Keep this list SMALL and justified.
@@ -22,7 +23,8 @@ const libDir = import.meta.dir;
 
 interface ServerFn {
 	name: string;
-	builder: "createServerFn" | "gatedServerFn";
+	/** Whether the builder chain attaches the access-guard middleware. */
+	gated: boolean;
 	file: string;
 }
 
@@ -33,12 +35,20 @@ function discoverServerFns(): ServerFn[] {
 			continue;
 		}
 		const src = readFileSync(join(libDir, file), "utf8");
-		const re = /export const (\w+)\s*=\s*(createServerFn|gatedServerFn)\(/g;
+		const re = /export const (\w+)\s*=\s*createServerFn\(/g;
 		let m: RegExpExecArray | null = re.exec(src);
 		while (m !== null) {
+			const name = m[1] as string;
+			// Gating lives in the builder chain between this declaration and its
+			// `.handler(` — a gated fn carries `.middleware([accessGuardMiddleware])`
+			// there. (The chain can't wrap `createServerFn` in a helper or the
+			// compiler won't split it — gated-server-fn.ts explains why.)
+			const handlerIdx = src.indexOf(".handler(", m.index);
+			const chain =
+				handlerIdx === -1 ? src.slice(m.index) : src.slice(m.index, handlerIdx);
 			found.push({
-				name: m[1] as string,
-				builder: m[2] as ServerFn["builder"],
+				name,
+				gated: chain.includes(".middleware([accessGuardMiddleware])"),
 				file,
 			});
 			m = re.exec(src);
@@ -56,24 +66,22 @@ describe("server-fn access boundary (invariant 3)", () => {
 
 	test("every server function is gated or explicitly allowlisted", () => {
 		const ungated = fns
-			.filter(
-				(f) => f.builder === "createServerFn" && !PUBLIC_ALLOWLIST.has(f.name),
-			)
+			.filter((f) => !f.gated && !PUBLIC_ALLOWLIST.has(f.name))
 			.map((f) => `${f.file}:${f.name}`);
-		// A non-empty list means someone added a product endpoint with bare
-		// createServerFn — gate it (gatedServerFn) or, if truly public, add it to
-		// PUBLIC_ALLOWLIST with a justification.
+		// A non-empty list means someone added a product endpoint without the
+		// access-guard middleware — chain `.middleware([accessGuardMiddleware])`
+		// or, if truly public, add it to PUBLIC_ALLOWLIST with a justification.
 		expect(ungated).toEqual([]);
 	});
 
-	test("allowlisted functions exist and use bare createServerFn", () => {
+	test("allowlisted functions exist and are ungated (bare createServerFn)", () => {
 		for (const name of PUBLIC_ALLOWLIST) {
 			const f = fns.find((x) => x.name === name);
 			expect(
 				f,
 				`allowlisted "${name}" not found — stale allowlist?`,
 			).toBeDefined();
-			expect(f?.builder).toBe("createServerFn");
+			expect(f?.gated).toBe(false);
 		}
 	});
 });

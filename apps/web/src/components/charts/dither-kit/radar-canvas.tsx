@@ -29,7 +29,8 @@ export function RadarCanvas() {
 	const { cols, rows } = backingSize(width, height);
 
 	// The RAF loop reads the latest ctx through a ref; written in an effect
-	// (never during render) for the compiler.
+	// (never during render) — mutating a ref mid-render tears under Strict Mode /
+	// concurrent rendering.
 	const state = useRef(ctx);
 	useEffect(() => {
 		state.current = ctx;
@@ -58,6 +59,7 @@ export function RadarCanvas() {
 		let lastRevision = state.current.revision;
 		let intensity = 0;
 		let needsFill = true;
+		let lastPaintSig = "";
 		let lastSelected: string | null | undefined = Symbol() as never;
 		let lastHover: number | null | undefined = Symbol() as never;
 
@@ -186,6 +188,13 @@ export function RadarCanvas() {
 			} else intensity = itTarget;
 			if (prog !== lastProg) {
 				lastProg = prog;
+				needsFill = true;
+			}
+
+			// Live tweak repaint (variant) without replaying the scale-in.
+			const paintSig = s.configKeys.map((k) => s.variantOf(k)).join(",");
+			if (paintSig !== lastPaintSig) {
+				lastPaintSig = paintSig;
 				needsFill = true;
 			}
 

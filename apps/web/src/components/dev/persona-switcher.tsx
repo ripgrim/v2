@@ -53,7 +53,22 @@ function usePersonaActions() {
 		}
 	}
 
-	return { busy, pick, reset };
+	// Sign out and land on /login — the ONE path the §13 auto-login trampoline
+	// leaves alone (__root.tsx). Anywhere else re-mints DEFAULT_PERSONA, so a
+	// plain signOut appears not to "take". Full document load so the cleared
+	// cookie applies before the route gate re-evaluates.
+	async function logout(): Promise<void> {
+		setBusy("logout");
+		try {
+			await post("/api/dev/logout");
+			window.location.assign("/login");
+		} catch {
+			toast("logout failed");
+			setBusy(null);
+		}
+	}
+
+	return { busy, pick, reset, logout };
 }
 
 type PanelVariant = "list" | "grid";
@@ -75,11 +90,13 @@ export function DevPersonaPanel({
 function PersonaList({
 	className,
 	variant = "list",
+	showLogout = false,
 }: {
 	className?: string;
 	variant?: PanelVariant;
+	showLogout?: boolean;
 }) {
-	const { busy, pick, reset } = usePersonaActions();
+	const { busy, pick, reset, logout } = usePersonaActions();
 	const grid = variant === "grid";
 	return (
 		<div
@@ -127,6 +144,19 @@ function PersonaList({
 			>
 				reset dev data
 			</button>
+			{showLogout ? (
+				<button
+					type="button"
+					disabled={busy !== null}
+					onClick={() => logout()}
+					className={cn(
+						"rounded-md px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-surface-1 hover:text-foreground disabled:opacity-50",
+						grid ? "col-span-2 text-center" : "",
+					)}
+				>
+					{busy === "logout" ? "logging out…" : "log out → /login"}
+				</button>
+			) : null}
 		</div>
 	);
 }
@@ -153,7 +183,7 @@ export function DevPersonaSwitcher() {
 							close
 						</button>
 					</div>
-					<PersonaList />
+					<PersonaList showLogout />
 				</div>
 			) : null}
 			<button

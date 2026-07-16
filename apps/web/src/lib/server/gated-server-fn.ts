@@ -1,4 +1,4 @@
-import { createMiddleware, createServerFn } from "@tanstack/react-start";
+import { createMiddleware } from "@tanstack/react-start";
 
 /**
  * Access-gate function middleware — the real invariant-3 boundary for the web
@@ -40,11 +40,19 @@ export const accessGuardMiddleware = createMiddleware({
 });
 
 /**
- * Access-gated server function builder. Use this for EVERY server function that
- * returns product/repo data. Bare `createServerFn` is reserved for the explicit
- * public allowlist (auth/session/identity + the unlisted-public run page),
- * enforced by `server-fn-boundary.test.ts`.
+ * Access-gate EVERY server function that returns product/repo data by chaining
+ * this middleware directly on a literal `createServerFn`:
+ *
+ *   export const getThing = createServerFn({ method: "GET" })
+ *     .middleware([accessGuardMiddleware])
+ *     .handler(async () => { ... });
+ *
+ * DO NOT re-wrap `createServerFn` in a helper (the old `gatedServerFn`). The
+ * TanStack Start compiler only splits the server body out of the client bundle
+ * when it can statically see a literal `createServerFn(...).handler(...)` call;
+ * hiding it behind a wrapper defeats that, and the handler — with its
+ * server-only imports and `process.env` — ships to and runs in the BROWSER.
+ * That silently breaks every gated call client-side. `server-fn-boundary.test.ts`
+ * enforces that each product endpoint carries this middleware; bare
+ * `createServerFn` is reserved for the explicit public allowlist there.
  */
-export function gatedServerFn(options: { method: "GET" | "POST" }) {
-	return createServerFn(options).middleware([accessGuardMiddleware]);
-}

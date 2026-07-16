@@ -37,20 +37,14 @@ export const Route = createRootRouteWithContext<{
 		if (location.pathname.startsWith("/oauth")) {
 			return;
 		}
-		// The dev auto-login trampoline renders without a session (it mints one).
-		if (import.meta.env.DEV && location.pathname === "/dev/auto-login") {
-			return;
-		}
 		const session = await getSessionInfo();
 		if (session.authEnabled && !session.user) {
-			// §13 auto-login: in dev, silently establish the default persona
-			// instead of bouncing to /login. /login stays reachable directly.
-			if (import.meta.env.DEV && location.pathname !== "/login") {
-				throw redirect({
-					to: "/dev/auto-login",
-					search: { to: location.pathname },
-				});
-			}
+			// No session anywhere ⇒ the login screen, in dev exactly as in prod.
+			// The §13 auto-login trampoline that used to silently mint
+			// DEFAULT_PERSONA on any gated route (and the /dev/auto-login
+			// carve-out that fed it) is gone: signed-out means /login, never a
+			// surprise persona. Dev personas stay opt-in — the panel on /login
+			// and the floating switcher POST /api/dev/login directly.
 			throw redirect({ to: "/login" });
 		}
 		if (!session.user) {

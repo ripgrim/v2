@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useChart } from "./chart-context";
 import {
 	backingSize,
@@ -31,26 +31,30 @@ export function BarCanvas() {
 
 	const { width, height } = ctx.plot;
 	const { cols, rows } = backingSize(width, height);
+	const { ready, configKeys, bands, y } = ctx;
 
-	// Per-series target bar tops/bases (backing rows) over the data indices.
-	// React Compiler memoizes this against the exact ctx fields it reads.
-	const targets = (() => {
+	// Memoized: per-series bar tops/bases (backing rows) over the data indices.
+	// The canvas re-renders on every hover/cursor tick, so pin this map to the
+	// exact ctx fields it reads plus the backing geometry — a bar hover must not
+	// rebuild every band's geometry.
+	const targets = useMemo(() => {
 		const out: Record<string, Bars> = {};
-		if (!ctx.ready) return out;
+		if (!ready) return out;
 		const h = height || 1;
-		for (const key of ctx.configKeys) {
-			const band = ctx.bands[key];
+		for (const key of configKeys) {
+			const band = bands[key];
 			if (!band) continue;
 			out[key] = {
-				top: band.map((b) => (ctx.y(b[1]) / h) * (rows - 1)),
-				base: band.map((b) => (ctx.y(b[0]) / h) * (rows - 1)),
+				top: band.map((b) => (y(b[1]) / h) * (rows - 1)),
+				base: band.map((b) => (y(b[0]) / h) * (rows - 1)),
 			};
 		}
 		return out;
-	})();
+	}, [ready, configKeys, bands, y, height, rows]);
 
 	// The RAF loop reads these through refs so it always sees the latest values;
-	// refs are written in an effect (never during render) for the compiler.
+	// refs are written in an effect (never during render) — mutating a ref
+	// mid-render tears under Strict Mode / concurrent rendering.
 	const state = useRef(ctx);
 	const targetsRef = useRef(targets);
 	useEffect(() => {
@@ -99,7 +103,12 @@ export function BarCanvas() {
 				for (let i = 0; i < s.dataLength; i++) {
 					const bp = barProgress(i, s.dataLength, prog);
 					const base = t.base[i] ?? rows - 1;
-					const top = base + ((t.top[i] ?? base) - base) * bp;
+					const grown = base + ((t.top[i] ?? base) - base) * bp;
+					// Bars grow from the zero baseline toward the value. Positive values
+					// sit above the baseline (smaller pixel), negative ones below it —
+					// paintColumn wants the higher edge first, so order the pair.
+					const top = Math.min(grown, base);
+					const bottom = Math.max(grown, base);
 					const active = s.hoverIndex === i;
 					const hoverDim =
 						s.hoverIndex != null && !active && s.isMouseInChart ? 0.5 : 1;
@@ -107,7 +116,7 @@ export function BarCanvas() {
 					const c0 = Math.round(slot.x * fx);
 					const c1 = Math.round((slot.x + slot.width) * fx);
 					for (let x = c0; x < c1; x++) {
-						paintColumn(c, x, top, base, seed, {
+						paintColumn(c, x, top, bottom, seed, {
 							variant,
 							intensity: intensity + (active ? 0.4 : 0),
 							dim: selDim * hoverDim,
@@ -124,6 +133,7 @@ export function BarCanvas() {
 		let lastRevision = state.current.revision;
 		let intensity = 0;
 		let needsFill = true;
+		let lastPaintSig = "";
 		let lastSelected: string | null | undefined = Symbol() as never;
 		let lastHover: number | null | undefined = Symbol() as never;
 
@@ -166,6 +176,15 @@ export function BarCanvas() {
 				intensity += (itTarget - intensity) * (reduce ? 1 : 0.16);
 				needsFill = true;
 			} else intensity = itTarget;
+
+			// Live tweak repaint (variant, stacking) without replaying the wave.
+			const paintSig = `${s.stackType}|${s.configKeys
+				.map((k) => s.seriesSpecs[k]?.variant ?? "")
+				.join(",")}`;
+			if (paintSig !== lastPaintSig) {
+				lastPaintSig = paintSig;
+				needsFill = true;
+			}
 
 			if (!needsFill) return;
 			paint(prog);

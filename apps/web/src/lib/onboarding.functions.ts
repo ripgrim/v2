@@ -1,49 +1,71 @@
+import { createServerFn } from "@tanstack/react-start";
 import type { OnboardingState, RepoLite, SwitcherRepo } from "@tripwire/db";
-import { gatedServerFn } from "#/lib/server/gated-server-fn";
+import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 
 export type { OnboardingState, RepoLite, SwitcherRepo };
 
 /** §4 repo switcher — every repo the user can reach, with triage signal. */
-export const getSwitcherRepos = gatedServerFn({ method: "GET" }).handler(
-	async (): Promise<SwitcherRepo[]> => {
+export const getSwitcherRepos = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<SwitcherRepo[]> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
 		const { onboardingServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		return await onboardingServices.listSwitcherRepos(getDb().db, userId);
-	},
-);
+	});
 
 /** The active repo the dashboard is scoped to — null until onboarded. */
-export const getActiveRepoInfo = gatedServerFn({ method: "GET" }).handler(
-	async (): Promise<RepoLite | null> => {
+export const getActiveRepoInfo = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<RepoLite | null> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		return await getActiveRepo();
-	},
-);
+	});
 
 /**
- * The GitHub App install URL for THIS user, carrying a CSRF-safe state. Null in
- * open-dev (no session to bind) or when the app slug isn't configured — the
- * onboarding page shows that honestly instead of a dead link.
+ * The GitHub App install URL for THIS user, carrying a CSRF-safe state. The
+ * REASON is split out so onboarding can tell distinct failures apart instead of
+ * collapsing them into one misleading line (the old `string | null` made "slug
+ * unset" and "no user" indistinguishable, and a thrown 401 read as "not
+ * configured" too):
+ *  - `ready`          → the signed install URL.
+ *  - `not-configured` → GITHUB_APP_SLUG is unset (a deploy/env problem).
+ *  - `no-session`     → open-dev has no user to bind the state to.
+ * A missing session under real auth never returns here — requireSession throws
+ * 401, which the UI renders as its own (retryable) query-error state.
  */
-export const getInstallUrl = gatedServerFn({ method: "GET" }).handler(
-	async (): Promise<string | null> => {
+export type InstallUrlState =
+	| { status: "ready"; url: string }
+	| { status: "not-configured" }
+	| { status: "no-session" };
+
+export const getInstallUrl = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<InstallUrlState> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
 		const slug = process.env.GITHUB_APP_SLUG;
-		if (!userId || !slug) {
-			return null;
+		// Slug first: a missing slug is an env problem worth reporting even in
+		// open-dev, and it's independent of who (if anyone) is signed in.
+		if (!slug) {
+			return { status: "not-configured" };
+		}
+		if (!userId) {
+			return { status: "no-session" };
 		}
 		const { signInstallState } = await import("#/lib/server/install-state");
 		const state = signInstallState(userId);
-		return `https://github.com/apps/${slug}/installations/new?state=${encodeURIComponent(state)}`;
-	},
-);
+		return {
+			status: "ready",
+			url: `https://github.com/apps/${slug}/installations/new?state=${encodeURIComponent(state)}`,
+		};
+	});
 
 /** Where /onboarding stands for the signed-in user. */
-export const getOnboardingState = gatedServerFn({ method: "GET" }).handler(
-	async (): Promise<OnboardingState> => {
+export const getOnboardingState = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<OnboardingState> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
 		const { onboardingServices, repoServices } = await import("@tripwire/db");
@@ -69,11 +91,11 @@ export const getOnboardingState = gatedServerFn({ method: "GET" }).handler(
 			})),
 			activeRepo: null,
 		};
-	},
-);
+	});
 
 /** Pick the active repo (the narrowing step). Rejects a repo that isn't yours. */
-export const chooseActiveRepo = gatedServerFn({ method: "POST" })
+export const chooseActiveRepo = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(async ({ data }): Promise<{ ok: boolean }> => {
 		const { requireSession } = await import("#/lib/server/session");
@@ -100,7 +122,8 @@ export const chooseActiveRepo = gatedServerFn({ method: "POST" })
  * DECISIONS; the `(forge, installationId)` UNIQUE still blocks stealing a
  * claimed one.
  */
-export const completeInstallation = gatedServerFn({ method: "POST" })
+export const completeInstallation = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
 	.inputValidator((input: { installationId: string; state?: string }) => input)
 	.handler(async ({ data }): Promise<{ linked: boolean }> => {
 		const { requireSession } = await import("#/lib/server/session");

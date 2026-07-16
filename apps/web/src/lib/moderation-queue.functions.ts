@@ -1,4 +1,5 @@
-import { gatedServerFn } from "#/lib/server/gated-server-fn";
+import { createServerFn } from "@tanstack/react-start";
+import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 
 export interface ModerationQueueItem {
 	id: string;
@@ -11,8 +12,9 @@ export interface ModerationQueueItem {
 	createdAt: string;
 }
 
-export const listModerationQueue = gatedServerFn({ method: "GET" }).handler(
-	async (): Promise<ModerationQueueItem[]> => {
+export const listModerationQueue = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<ModerationQueueItem[]> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const repo = await getActiveRepo();
 		if (!repo) {
@@ -33,10 +35,10 @@ export const listModerationQueue = gatedServerFn({ method: "GET" }).handler(
 			actorLogin: item.actorLogin,
 			createdAt: item.createdAt.toISOString(),
 		}));
-	},
-);
+	});
 
-export const decideModeration = gatedServerFn({ method: "POST" })
+export const decideModeration = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
 	.inputValidator(
 		(input: { itemId: string; decision: "approve" | "deny" }) => input,
 	)

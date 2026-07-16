@@ -1,19 +1,28 @@
 import type { AccessStatus } from "@tripwire/contracts";
 import { TripwireLogo } from "#/components/common/tripwire-logo";
+import { Button } from "#/components/ui/button";
+import { Spinner } from "#/components/ui/spinner";
 import { authClient } from "#/lib/auth-client";
 
 /**
  * Minimal full-screen waitlist / access-status screen. Shared by the `/queue`
  * route and the `beforeLoad` gate. Ported from tripwire v1, v2 components.
+ *
+ * `onCheck` re-reads access status from the server (fresh DB read) so an
+ * approval lands without a re-login; the caller navigates onward when it flips.
  */
 export function AccessPendingScreen({
 	email,
 	image,
 	status,
+	onCheck,
+	checking = false,
 }: {
 	email?: string | null;
 	image?: string | null;
 	status: AccessStatus;
+	onCheck?: () => void;
+	checking?: boolean;
 }) {
 	const rejected = status === "rejected";
 
@@ -32,6 +41,19 @@ export function AccessPendingScreen({
 							: "You applied with GitHub — you're in line for the closed beta. We review requests manually and will email you the moment you're approved."}
 					</p>
 				</div>
+
+				{onCheck && !rejected ? (
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={onCheck}
+						disabled={checking}
+						iconLeft={checking ? <Spinner size={14} /> : null}
+					>
+						{checking ? "Checking…" : "Check status"}
+					</Button>
+				) : null}
 
 				<div className="flex items-center gap-2 text-[12px] text-muted-foreground">
 					{image ? (

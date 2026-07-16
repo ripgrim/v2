@@ -1,5 +1,6 @@
+import { createServerFn } from "@tanstack/react-start";
 import type { AnalyticsEvent } from "#/lib/analytics-events";
-import { gatedServerFn } from "#/lib/server/gated-server-fn";
+import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 
 /**
  * Real activity behind a moderation metric — the list under the chart on
@@ -12,7 +13,8 @@ function subject(repoFullName: string, subjectNumber: number | null): string {
 	return subjectNumber ? `${repoFullName} #${subjectNumber}` : repoFullName;
 }
 
-export const getAnalyticsActivity = gatedServerFn({ method: "GET" })
+export const getAnalyticsActivity = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
 	.inputValidator((input: { metric: string }) => input)
 	.handler(async ({ data }): Promise<AnalyticsEvent[]> => {
 		const { requireSession } = await import("#/lib/server/session");

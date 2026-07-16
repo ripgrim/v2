@@ -7,7 +7,11 @@ import { toast } from "sonner";
 import { TripwireLogo } from "#/components/common/tripwire-logo";
 import { Button } from "#/components/ui/button";
 import { authQueryKeys } from "#/lib/auth.query";
-import { chooseActiveRepo, type RepoLite } from "#/lib/onboarding.functions";
+import {
+	chooseActiveRepo,
+	type InstallUrlState,
+	type RepoLite,
+} from "#/lib/onboarding.functions";
 import {
 	installUrlQueryOptions,
 	onboardingQueryKeys,
@@ -31,8 +35,16 @@ function Shell({ children, line }: { children: ReactNode; line: string }) {
 export function OnboardingPage() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const { data: state, isLoading } = useQuery(onboardingStateQueryOptions());
-	const { data: installUrl } = useQuery(installUrlQueryOptions());
+	const {
+		data: state,
+		isLoading,
+		isError: stateError,
+	} = useQuery(onboardingStateQueryOptions());
+	const {
+		data: install,
+		isLoading: installLoading,
+		isError: installError,
+	} = useQuery(installUrlQueryOptions());
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 
 	const finish = useMutation({
@@ -68,13 +80,23 @@ export function OnboardingPage() {
 		return <OnboardingPageSkeleton />;
 	}
 
+	// The state query itself failed (not "no installation" — an actual error).
+	// Distinct from every content state so a fetch failure can't masquerade as a
+	// fresh, un-installed account.
+	if (stateError || !state) {
+		return (
+			<Shell line="couldn't load your setup — refresh to retry.">{null}</Shell>
+		);
+	}
+
 	// Already onboarded (navigated here directly) — send them home.
-	if (state?.activeRepo) {
+	if (state.activeRepo) {
 		navigate({ to: "/" });
 		return <OnboardingPageSkeleton />;
 	}
 
-	if (!state?.hasInstallation) {
+	if (!state.hasInstallation) {
+		const installUrl = install?.status === "ready" ? install.url : null;
 		return (
 			<Shell line="install the app and pick one repo to start.">
 				<Button
@@ -91,11 +113,11 @@ export function OnboardingPage() {
 				>
 					install on github
 				</Button>
-				{installUrl ? null : (
-					<p className="mt-4 text-muted-foreground text-xs">
-						the github app isn't configured yet (set GITHUB_APP_SLUG).
-					</p>
-				)}
+				<InstallNotice
+					error={installError}
+					loading={installLoading}
+					state={install}
+				/>
 			</Shell>
 		);
 	}
@@ -137,6 +159,37 @@ export function OnboardingPage() {
 			</Button>
 		</Shell>
 	);
+}
+
+/**
+ * The line under the install button. Every distinct cause gets its own copy so
+ * they can't be confused: a loading fetch says nothing (the disabled button is
+ * enough), a thrown query (e.g. a 401 with no session) is a retry prompt — NOT
+ * the "not configured" line — and only a genuinely unset slug names the env var.
+ */
+function InstallNotice({
+	error,
+	loading,
+	state,
+}: {
+	error: boolean;
+	loading: boolean;
+	state: InstallUrlState | undefined;
+}) {
+	let message: string | null = null;
+	if (loading) {
+		message = null;
+	} else if (error) {
+		message = "couldn't load the install link — refresh to retry.";
+	} else if (state?.status === "not-configured") {
+		message = "the github app isn't configured yet (set GITHUB_APP_SLUG).";
+	} else if (state?.status === "no-session") {
+		message = "sign in to install the app.";
+	}
+	if (!message) {
+		return null;
+	}
+	return <p className="mt-4 text-muted-foreground text-xs">{message}</p>;
 }
 
 function RepoRow({

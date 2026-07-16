@@ -1,4 +1,5 @@
-import { gatedServerFn } from "#/lib/server/gated-server-fn";
+import { createServerFn } from "@tanstack/react-start";
+import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 
 /**
  * Ported from ~/tripwire's `@tripwire/feedback` server handler, adapted to v2's
@@ -203,7 +204,8 @@ async function sendToDiscord(
 	return res.ok;
 }
 
-export const submitFeedback = gatedServerFn({ method: "POST" })
+export const submitFeedback = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware])
 	.inputValidator((input: FeedbackInput) => input)
 	.handler(async ({ data }): Promise<{ ok: boolean; forwarded: boolean }> => {
 		if (!data.comment.trim()) {

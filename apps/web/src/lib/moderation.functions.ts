@@ -1,5 +1,6 @@
+import { createServerFn } from "@tanstack/react-start";
 import type { ModStats } from "#/lib/moderation.types";
-import { gatedServerFn } from "#/lib/server/gated-server-fn";
+import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 
 const ZERO_SERIES = () => Array.from({ length: 24 }, () => 0);
 const ZERO_STAT = () => ({ value: 0, delta: 0, series: ZERO_SERIES() });
@@ -14,8 +15,9 @@ const ZERO_STATS = (): ModStats => ({
 // the active repo (§10). A DB error surfaces honestly (the caller renders an
 // error state); there is NO mock fallback — fabricated numbers are worse than a
 // visible failure.
-export const getModerationStats = gatedServerFn({ method: "GET" }).handler(
-	async (): Promise<ModStats> => {
+export const getModerationStats = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware])
+	.handler(async (): Promise<ModStats> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const repo = await getActiveRepo();
 		if (!repo) {
@@ -24,5 +26,4 @@ export const getModerationStats = gatedServerFn({ method: "GET" }).handler(
 		const { insightServices } = await import("@tripwire/db");
 		const { getDb } = await import("#/lib/server/db");
 		return await insightServices.getHomeStats(getDb().db, repo.fullName);
-	},
-);
+	});
