@@ -258,6 +258,7 @@ export const listClaimableInstallations = createServerFn({ method: "GET" })
 			LEFT JOIN organization_installations oi
 			  ON oi.installation_id = r.installation_id AND oi.forge = r.forge
 			WHERE r.installation_id IS NOT NULL
+			  AND r.installation_id <> ''
 			  AND r.removed_at IS NULL
 			  AND oi.id IS NULL
 			GROUP BY r.installation_id
