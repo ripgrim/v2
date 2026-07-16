@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import type { ValidationIssue } from "@tripwire/contracts";
 import { useState } from "react";
 import { toast } from "sonner";
-import { cn } from "#/lib/utils";
 
 /**
  * Slim editor header — back link, inline-editable name, enabled pill +
@@ -95,16 +94,11 @@ export function EditorHeader({
 					}}
 				/>
 			)}
-			<span
-				className={cn(
-					"shrink-0 rounded-full px-2 py-0.5 font-medium text-[11px]",
+			{enabled ? (
+				<span className="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 font-medium text-[11px] text-brand">
 					enabled
-						? "bg-brand/10 text-brand"
-						: "bg-surface-2 text-muted-foreground",
-				)}
-			>
-				{enabled ? "enabled" : "disabled"}
-			</span>
+				</span>
+			) : null}
 			<div className="ml-auto flex shrink-0 items-center gap-2">
 				{readOnly ? (
 					<span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-[11px] text-muted-foreground">

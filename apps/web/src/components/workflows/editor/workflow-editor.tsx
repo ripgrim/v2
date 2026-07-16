@@ -57,6 +57,21 @@ const NODE_TYPES = { tripwire: TripwireNode };
 const DELETE_KEYS = ["Backspace", "Delete"];
 const CANVAS_DROP_ID = "workflow-canvas";
 
+/**
+ * The droppable MUST be a child of <DndContext> — a useDroppable call in the
+ * same component that renders the provider registers into dnd-kit's DEFAULT
+ * context instead, and `event.over` stays undefined forever (the bug that
+ * made drag-in silently no-op).
+ */
+function CanvasDropzone({ children }: { children: React.ReactNode }) {
+	const { setNodeRef } = useDroppable({ id: CANVAS_DROP_ID });
+	return (
+		<div className="relative min-h-0 flex-1" ref={setNodeRef}>
+			{children}
+		</div>
+	);
+}
+
 export interface WorkflowEditorProps {
 	definition: WorkflowDefinition;
 	name: string;
@@ -261,7 +276,6 @@ function EditorBody({
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
 	);
-	const { setNodeRef: setDropRef } = useDroppable({ id: CANVAS_DROP_ID });
 
 	const onDragStart = (event: DragStartEvent) => {
 		setDragged((event.active.data.current as ToolboxItem) ?? null);
@@ -355,7 +369,7 @@ function EditorBody({
 				onDragStart={onDragStart}
 				sensors={sensors}
 			>
-				<div className="relative min-h-0 flex-1" ref={setDropRef}>
+				<CanvasDropzone>
 					<NodeIssuesContext.Provider value={issuesByNode}>
 						<ReactFlow
 							deleteKeyCode={readOnly ? null : DELETE_KEYS}
@@ -395,7 +409,7 @@ function EditorBody({
 							</p>
 						</div>
 					) : null}
-				</div>
+				</CanvasDropzone>
 				<DragOverlay dropAnimation={null}>
 					{dragged ? (
 						<div

@@ -15,6 +15,7 @@ import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
+import { TripwireWordmark } from "#/components/common/tripwire-wordmark";
 import { useFeedback } from "#/components/feedback";
 import { RepoSwitcher } from "#/components/layouts/repo-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -49,7 +50,13 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 	return (
 		<nav className="flex min-w-0 items-center gap-3 px-3 py-2">
 			<div className="flex shrink-0 items-center gap-2 pl-1 pr-1">
-				<span className="font-pixel text-sm font-medium tracking-tight">
+				<TripwireWordmark className="text-foreground" height={15} width={24} />
+				<span
+					className="text-sm font-medium tracking-tight"
+					style={{
+						fontFamily: '"Inter Variable", Inter, ui-sans-serif, sans-serif',
+					}}
+				>
 					{siteConfig.name}
 				</span>
 			</div>
