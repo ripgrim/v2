@@ -5,12 +5,17 @@
 	"type": "module",
 	"exports": {
 		"./server": "./src/server.ts",
-		"./client": "./src/client.ts"
+		"./client": "./src/client.ts",
+		"./access": "./src/access.ts",
+		"./access-gate": "./src/access-gate.ts",
+		"./databuddy": "./src/databuddy.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@databuddy/sdk": "^2.4.20",
+		"@tripwire/contracts": "workspace:*",
 		"@tripwire/db": "workspace:*",
 		"@tripwire/utils": "workspace:*",
 		"better-auth": "^1.6.23",

@@ -1,11 +1,11 @@
-import { createServerFn } from "@tanstack/react-start";
 import type { WorkflowDefinition } from "@tripwire/contracts";
 import {
 	DEFAULT_WORKFLOW,
 	workflowDefinitionSchema,
 } from "@tripwire/contracts";
+import { gatedServerFn } from "#/lib/server/gated-server-fn";
 
-export const getWorkflowForRepo = createServerFn({ method: "GET" })
+export const getWorkflowForRepo = gatedServerFn({ method: "GET" })
 	.inputValidator((input: { repoId: string | null }) => input)
 	.handler(async ({ data }): Promise<WorkflowDefinition> => {
 		const { requireSession } = await import("#/lib/server/session");
@@ -26,7 +26,7 @@ export const getWorkflowForRepo = createServerFn({ method: "GET" })
 		return workflows[0] ?? DEFAULT_WORKFLOW;
 	});
 
-export const saveWorkflowForRepo = createServerFn({ method: "POST" })
+export const saveWorkflowForRepo = gatedServerFn({ method: "POST" })
 	.inputValidator((input: { repoId: string; definition: unknown }) => input)
 	.handler(async ({ data }): Promise<{ ok: true } | { error: string }> => {
 		const { requireSession } = await import("#/lib/server/session");

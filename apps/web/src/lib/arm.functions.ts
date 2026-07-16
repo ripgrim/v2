@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { gatedServerFn } from "#/lib/server/gated-server-fn";
 
 /**
  * §4 arming — turn the gate ON and enqueue arm-time backfill so the dashboard
@@ -17,7 +17,7 @@ async function armById(repoId: string): Promise<void> {
 }
 
 /** Arm the ACTIVE repo (the home/scoped-page CTA). Open-dev arms the first repo. */
-export const armActiveRepo = createServerFn({ method: "POST" }).handler(
+export const armActiveRepo = gatedServerFn({ method: "POST" }).handler(
 	async (): Promise<{ armed: boolean; repoId: string | null }> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const active = await getActiveRepo();
@@ -34,7 +34,7 @@ export const armActiveRepo = createServerFn({ method: "POST" }).handler(
  * Events keep ingesting; only the RUN is skipped, same as a never-armed repo. No
  * backfill on the way back on later — the stored events are still there to replay.
  */
-export const disarmActiveRepo = createServerFn({ method: "POST" }).handler(
+export const disarmActiveRepo = gatedServerFn({ method: "POST" }).handler(
 	async (): Promise<{ armed: boolean; repoId: string | null }> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const active = await getActiveRepo();
@@ -49,7 +49,7 @@ export const disarmActiveRepo = createServerFn({ method: "POST" }).handler(
 );
 
 /** Arm a SPECIFIC repo (the switcher's inline arm) — only one the user can reach. */
-export const armRepoById = createServerFn({ method: "POST" })
+export const armRepoById = gatedServerFn({ method: "POST" })
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(
 		async ({ data }): Promise<{ armed: boolean; repoId: string | null }> => {

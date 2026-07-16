@@ -18,6 +18,11 @@ export type {
 	BloomLevel,
 } from "./dither-paint";
 export { ActiveDot, Dot, type DotVariant } from "./dot";
+export {
+	DitherGradient,
+	type DitherGradientProps,
+	type GradientDirection,
+} from "./gradient";
 export { Grid } from "./grid";
 export { Legend } from "./legend";
 export type { DitherColor } from "./palette";

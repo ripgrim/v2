@@ -4,6 +4,7 @@ import { generateId } from "@tripwire/utils";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { eq } from "drizzle-orm";
+import { applySignupAccessDefaults } from "./access.ts";
 
 /**
  * Better Auth (§10): GitHub OAuth only at launch. One `createAuth` shared by
@@ -55,7 +56,31 @@ export function createAuth(input: CreateAuthInput) {
 					},
 				}
 			: {},
+		user: {
+			// Closed-beta access queue. `input: false` means a client can never set
+			// these through the signup/update payload — only server code (the create
+			// hook + the promote path) writes them.
+			additionalFields: {
+				accessStatus: {
+					type: "string",
+					required: false,
+					defaultValue: "pending",
+					input: false,
+				},
+				accessReviewedAt: { type: "date", required: false, input: false },
+				accessReviewedBy: { type: "string", required: false, input: false },
+				waitlistedAt: { type: "date", required: false, input: false },
+			},
+		},
 		databaseHooks: {
+			user: {
+				create: {
+					/** New signups land in the access queue as "pending" (server-set). */
+					before: async (user) => {
+						return { data: applySignupAccessDefaults(user, null) };
+					},
+				},
+			},
 			account: {
 				create: {
 					/** §10: mirror the GitHub identity into forge_identities. */

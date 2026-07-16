@@ -1,10 +1,10 @@
-import { createServerFn } from "@tanstack/react-start";
 import type { OnboardingState, RepoLite, SwitcherRepo } from "@tripwire/db";
+import { gatedServerFn } from "#/lib/server/gated-server-fn";
 
 export type { OnboardingState, RepoLite, SwitcherRepo };
 
 /** §4 repo switcher — every repo the user can reach, with triage signal. */
-export const getSwitcherRepos = createServerFn({ method: "GET" }).handler(
+export const getSwitcherRepos = gatedServerFn({ method: "GET" }).handler(
 	async (): Promise<SwitcherRepo[]> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
@@ -15,7 +15,7 @@ export const getSwitcherRepos = createServerFn({ method: "GET" }).handler(
 );
 
 /** The active repo the dashboard is scoped to — null until onboarded. */
-export const getActiveRepoInfo = createServerFn({ method: "GET" }).handler(
+export const getActiveRepoInfo = gatedServerFn({ method: "GET" }).handler(
 	async (): Promise<RepoLite | null> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		return await getActiveRepo();
@@ -27,7 +27,7 @@ export const getActiveRepoInfo = createServerFn({ method: "GET" }).handler(
  * open-dev (no session to bind) or when the app slug isn't configured — the
  * onboarding page shows that honestly instead of a dead link.
  */
-export const getInstallUrl = createServerFn({ method: "GET" }).handler(
+export const getInstallUrl = gatedServerFn({ method: "GET" }).handler(
 	async (): Promise<string | null> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
@@ -42,7 +42,7 @@ export const getInstallUrl = createServerFn({ method: "GET" }).handler(
 );
 
 /** Where /onboarding stands for the signed-in user. */
-export const getOnboardingState = createServerFn({ method: "GET" }).handler(
+export const getOnboardingState = gatedServerFn({ method: "GET" }).handler(
 	async (): Promise<OnboardingState> => {
 		const { requireSession } = await import("#/lib/server/session");
 		const userId = await requireSession();
@@ -73,7 +73,7 @@ export const getOnboardingState = createServerFn({ method: "GET" }).handler(
 );
 
 /** Pick the active repo (the narrowing step). Rejects a repo that isn't yours. */
-export const chooseActiveRepo = createServerFn({ method: "POST" })
+export const chooseActiveRepo = gatedServerFn({ method: "POST" })
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(async ({ data }): Promise<{ ok: boolean }> => {
 		const { requireSession } = await import("#/lib/server/session");
@@ -100,7 +100,7 @@ export const chooseActiveRepo = createServerFn({ method: "POST" })
  * DECISIONS; the `(forge, installationId)` UNIQUE still blocks stealing a
  * claimed one.
  */
-export const completeInstallation = createServerFn({ method: "POST" })
+export const completeInstallation = gatedServerFn({ method: "POST" })
 	.inputValidator((input: { installationId: string; state?: string }) => input)
 	.handler(async ({ data }): Promise<{ linked: boolean }> => {
 		const { requireSession } = await import("#/lib/server/session");

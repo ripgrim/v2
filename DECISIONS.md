@@ -2189,7 +2189,27 @@ Grim wanted in v2 too.
 - Direct-open (dropdown/banner) has no pre-grabbed element; the form captures the
   viewport screenshot on submit. The dialog's "inspect" button enters the picker
   overlay for a component-scoped report (source stack + highlighted screenshot).
-- **Env:** `FEEDBACK_WEBHOOK_URL` documented in `.env.example` (web section).
+- **Env:** `FEEDBACK_WEBHOOK_URL` documented in `.env.example` (web section). The
+  live value is NOT in `~/tripwire` (repo has only a placeholder) nor its Vercel
+  project (`tripwire-new-ui` has no custom env vars) — it must be supplied by the
+  owner and set on the Railway **web** service.
+
+### Polish pass (picker prominence + dither gradient)
+
+- **The element picker is now the form's hero, not a hidden corner action.**
+  Clicking "Send feedback" still opens the plain comment form (never the picker
+  directly — that would hijack the click); but the form's first element is an
+  unmissable "Point at a component" CTA that enters selection mode, so the DOM-grab
+  is discoverable without going out of your way. Once an element is grabbed it
+  collapses to a compact source pill with a "reselect".
+- **Dither gradient vendored.** `npx dither-kit/cli add gradient` doesn't resolve
+  (no such repo/CLI; the kit installs via the shadcn registry), so `pixel.ts` +
+  `gradient.tsx` were copied from ~/tripwire's dither-kit into
+  `components/charts/dither-kit/` (v2's `palette.ts`/`lib.ts` are shape-identical,
+  so they drop in) and exported from its barrel. `DitherGradient` (a static
+  ordered-dither canvas wash) backs the inspect CTA — SSR-safe (paints in an
+  effect). Icon swapped to `CursorInWindowIcon` (reads "inspect an element"),
+  bare — no chip/box.
 
 ## The interactive live-E2E harness — `bun run test` (2026-07-13, §11)
 

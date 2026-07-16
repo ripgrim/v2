@@ -33,6 +33,7 @@
 		"@tanstack/react-router-ssr-query": "~1.166.10",
 		"@tanstack/react-start": "~1.167.23",
 		"@tanstack/start-storage-context": "~1.166.35",
+		"@databuddy/sdk": "^2.4.20",
 		"@tripwire/auth": "workspace:*",
 		"@tripwire/contracts": "workspace:*",
 		"@tripwire/db": "workspace:*",

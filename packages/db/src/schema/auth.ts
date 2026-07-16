@@ -1,5 +1,7 @@
+import type { AccessStatus } from "@tripwire/contracts";
 import {
 	boolean,
+	index,
 	jsonb,
 	pgTable,
 	text,
@@ -14,25 +16,40 @@ import { repos } from "./repos.ts";
  * FK to it and NEVER to a GitHub id. GitHub identity lives in exactly two
  * places: `account` (sign-in) and `forge_identities`.
  */
-export const user = pgTable("user", {
-	id: text("id").primaryKey(),
-	name: text("name").notNull(),
-	email: text("email").notNull().unique(),
-	emailVerified: boolean("email_verified").notNull().default(false),
-	image: text("image"),
-	/**
-	 * The ONE repo this user's dashboard is scoped to (§10 onboarding). Null
-	 * until they finish onboarding. All granted repos stay synced as `repos`
-	 * rows; only this one is active (MVP — no switcher).
-	 */
-	activeRepoId: text("active_repo_id").references(() => repos.id),
-	createdAt: timestamp("created_at", { withTimezone: true })
-		.notNull()
-		.defaultNow(),
-	updatedAt: timestamp("updated_at", { withTimezone: true })
-		.notNull()
-		.defaultNow(),
-});
+export const user = pgTable(
+	"user",
+	{
+		id: text("id").primaryKey(),
+		name: text("name").notNull(),
+		email: text("email").notNull().unique(),
+		emailVerified: boolean("email_verified").notNull().default(false),
+		image: text("image"),
+		/**
+		 * The ONE repo this user's dashboard is scoped to (§10 onboarding). Null
+		 * until they finish onboarding. All granted repos stay synced as `repos`
+		 * rows; only this one is active (MVP — no switcher).
+		 */
+		activeRepoId: text("active_repo_id").references(() => repos.id),
+		/**
+		 * Closed-beta access gate. Server-assigned only (Better Auth `input: false`
+		 * + the create hook); new signups default to "pending".
+		 */
+		accessStatus: text("access_status")
+			.$type<AccessStatus>()
+			.notNull()
+			.default("pending"),
+		accessReviewedAt: timestamp("access_reviewed_at", { withTimezone: true }),
+		accessReviewedBy: text("access_reviewed_by"),
+		waitlistedAt: timestamp("waitlisted_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [index("user_access_status_idx").on(t.accessStatus)],
+);
 
 /**
  * Which App installation belongs to which user (§10 onboarding). The Setup URL

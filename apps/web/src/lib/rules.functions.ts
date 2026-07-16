@@ -1,8 +1,8 @@
-import { createServerFn } from "@tanstack/react-start";
 import type { ModStat } from "@tripwire/contracts";
 import { RULE_CATALOG } from "@tripwire/contracts";
 import { ruleExecutes } from "#/lib/rule-execution";
 import type { JsonValue } from "#/lib/runs.functions";
+import { gatedServerFn } from "#/lib/server/gated-server-fn";
 
 export interface RuleConfigView {
 	ruleId: string;
@@ -31,7 +31,7 @@ export interface RulesHeaderStats {
 	falsePositiveRate: null;
 }
 
-export const listRuleConfigViews = createServerFn({ method: "GET" })
+export const listRuleConfigViews = gatedServerFn({ method: "GET" })
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(async ({ data }): Promise<RuleConfigView[]> => {
 		const { requireSession } = await import("#/lib/server/session");
@@ -69,7 +69,7 @@ export const listRuleConfigViews = createServerFn({ method: "GET" })
 		});
 	});
 
-export const getRulesHeaderStats = createServerFn({ method: "GET" })
+export const getRulesHeaderStats = gatedServerFn({ method: "GET" })
 	.inputValidator((input: { repoId: string }) => input)
 	.handler(async ({ data }): Promise<RulesHeaderStats> => {
 		const { requireSession } = await import("#/lib/server/session");
@@ -103,7 +103,7 @@ export const getRulesHeaderStats = createServerFn({ method: "GET" })
 		};
 	});
 
-export const saveRuleConfig = createServerFn({ method: "POST" })
+export const saveRuleConfig = gatedServerFn({ method: "POST" })
 	.inputValidator(
 		(input: {
 			repoId: string;

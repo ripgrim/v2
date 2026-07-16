@@ -1,3 +1,4 @@
+import { Databuddy } from "@databuddy/sdk/react";
 import type { QueryClient } from "@tanstack/react-query";
 import {
 	createRootRouteWithContext,
@@ -6,6 +7,7 @@ import {
 	redirect,
 	Scripts,
 } from "@tanstack/react-router";
+import { DATABUDDY_CLIENT_ID } from "@tripwire/auth/databuddy";
 import { LayoutGroup } from "motion/react";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "#/components/ui/sonner";
@@ -29,6 +31,12 @@ export const Route = createRootRouteWithContext<{
 		if (isPublicPath(location.pathname)) {
 			return;
 		}
+		// OAuth popup routes manage their own auth — the waitlist entry starts
+		// sign-in and the callback reads the resulting session — so they must
+		// never be gated (a fresh joiner has no session yet).
+		if (location.pathname.startsWith("/oauth")) {
+			return;
+		}
 		// The dev auto-login trampoline renders without a session (it mints one).
 		if (import.meta.env.DEV && location.pathname === "/dev/auto-login") {
 			return;
@@ -47,6 +55,16 @@ export const Route = createRootRouteWithContext<{
 		}
 		if (!session.user) {
 			return;
+		}
+		// Closed-beta access gate — a gated, not-approved user belongs on /queue,
+		// not the dashboard or onboarding. Runs in beforeLoad (before render) so
+		// the shell never flashes; /queue stays reachable. gateEnabled is the
+		// server's decision, matching what the API boundary enforces.
+		if (session.gateEnabled && session.user.accessStatus !== "approved") {
+			if (location.pathname === "/queue") {
+				return;
+			}
+			throw redirect({ to: "/queue" });
 		}
 		// GitHub's Setup URL redirect carries `?installation_id=…`. However it's
 		// configured (some apps land on `/setup`), funnel it into the real
@@ -113,6 +131,16 @@ function RootComponent() {
 				<Outlet />
 			</LayoutGroup>
 			<Toaster />
+			{/* Global product analytics — one mount covers every route (pageviews,
+			    interactions, outgoing links, hash changes, web vitals). */}
+			<Databuddy
+				clientId={DATABUDDY_CLIENT_ID}
+				trackHashChanges
+				trackAttributes
+				trackOutgoingLinks
+				trackInteractions
+				trackWebVitals
+			/>
 		</ThemeProvider>
 	);
 }

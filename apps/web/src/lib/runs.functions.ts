@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Verdict } from "@tripwire/contracts";
+import { gatedServerFn } from "#/lib/server/gated-server-fn";
 
 /** Serializable JSON — evidence/output cross the server-fn boundary as JSON. */
 export type JsonValue =
@@ -64,7 +65,7 @@ export const getRun = createServerFn({ method: "GET" })
  * §4 — the latest run id for the ACTIVE repo, powering the command palette's
  * "latest run" jump. Null when the repo has no runs yet (nothing to jump to).
  */
-export const getLatestRunId = createServerFn({ method: "GET" }).handler(
+export const getLatestRunId = gatedServerFn({ method: "GET" }).handler(
 	async (): Promise<string | null> => {
 		const { getActiveRepo } = await import("#/lib/server/active-repo");
 		const active = await getActiveRepo();

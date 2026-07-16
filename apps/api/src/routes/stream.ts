@@ -1,3 +1,4 @@
+import { assertApproved } from "@tripwire/auth/access-gate";
 import { eventServices } from "@tripwire/db";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -18,13 +19,23 @@ const HEARTBEAT_MS = 15_000;
 export const stream = new Hono<ApiEnv>().get(
 	"/stream",
 	async (c, next) => {
-		const { auth } = c.get("deps");
+		const { auth, db } = c.get("deps");
 		if (auth) {
 			const session = await auth.api.getSession({
 				headers: c.req.raw.headers,
 			});
 			if (!session) {
 				return c.json({ error: "session required" }, 401);
+			}
+			// Closed-beta gate: block pending/rejected users from live product
+			// data. Same server-side flag evaluation as the web route gate.
+			const denial = await assertApproved(
+				db,
+				session.user.id,
+				session.user.email,
+			);
+			if (denial) {
+				return c.json({ error: denial.message }, 403);
 			}
 		}
 		return await next();

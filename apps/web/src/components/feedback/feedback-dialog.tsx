@@ -1,7 +1,4 @@
-import {
-	Cancel01Icon,
-	CursorMagicSelection02Icon,
-} from "@hugeicons/core-free-icons";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect } from "react";
 import { useFeedback } from "./feedback-context";
@@ -9,12 +6,11 @@ import { FeedbackForm } from "./feedback-form";
 
 /**
  * The feedback modal — v2's overlay pattern (button backdrop + role=dialog
- * sibling, Esc closes), matching the command palette. Holds the form and the
- * "inspect an element" entry into selection mode ([[feedback-overlay]]).
+ * sibling, Esc closes), matching the command palette. Holds the form, whose
+ * prominent "point at a component" CTA enters the picker ([[feedback-overlay]]).
  */
 export function FeedbackDialog() {
-	const { isOpen, close, startSelection, elementContext, config } =
-		useFeedback();
+	const { isOpen, close, config } = useFeedback();
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -57,29 +53,14 @@ export function FeedbackDialog() {
 									"Tell us what's off or what could be better."}
 							</p>
 						</div>
-						<div className="flex shrink-0 items-center gap-1">
-							<button
-								className="flex h-7 items-center gap-1.5 rounded-md px-2 text-muted-foreground text-xs transition-colors hover:bg-surface-1 hover:text-foreground"
-								onClick={startSelection}
-								title="Point at a component to attach it"
-								type="button"
-							>
-								<HugeiconsIcon
-									icon={CursorMagicSelection02Icon}
-									size={14}
-									strokeWidth={2}
-								/>
-								{elementContext ? "reselect" : "inspect"}
-							</button>
-							<button
-								aria-label="Close"
-								className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-1 hover:text-foreground"
-								onClick={close}
-								type="button"
-							>
-								<HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={2} />
-							</button>
-						</div>
+						<button
+							aria-label="Close"
+							className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-1 hover:text-foreground"
+							onClick={close}
+							type="button"
+						>
+							<HugeiconsIcon icon={Cancel01Icon} size={16} strokeWidth={2} />
+						</button>
 					</div>
 					<div className="px-5 py-4">
 						<FeedbackForm />
