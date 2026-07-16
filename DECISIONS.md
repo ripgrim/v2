@@ -2411,3 +2411,31 @@ v2 has no production traffic). Ledger of the consequential calls:
   settings all regenerate live from the name input.
 - **Dev personas** mint personal orgs + org-claimed installations; the §13
   auto-login trampoline had already been removed (signed-out ⇒ /login).
+
+## Org follow-ups — dev ergonomics, invite round-trip, table drop (2026-07-16)
+
+Post-review fixes ledgered so the reasoning survives:
+
+- **Dev personas mint as approved** (`/api/dev/login` calls
+  `promoteUserAccess` on the persona user). The live Databuddy access-gate
+  flag resolves ON now, so a pending persona landed on /queue instead of the
+  product. The endpoint is dev-build + loopback only (guard.ts), so this is
+  not a production surface.
+- **/login takes a same-site `?redirect=`** (must start with `/`, never `//`)
+  and passes it as the OAuth callbackURL — /invite/:token round-trips a
+  signed-out redeemer back to the link. The invite page's sign-in link carries
+  it.
+- **Legacy flat URLs redirect to `/`** (→ default org home) instead of 404:
+  /rules /activity /moderation /workflows /analytics /onboarding. Gotcha
+  worth remembering: a flat `onboarding.tsx` route file would have become a
+  LAYOUT over `onboarding.setup.tsx` and its beforeLoad redirect would have
+  hijacked the GitHub Setup callback — it's `onboarding.index.tsx` (exact
+  match) for that reason.
+- **`user_installations` DROPPED** (migration 0008) — we're pre-prod, nothing
+  to re-parent. `backfillOrgs` is now personal-orgs + repos.org_id fill +
+  verification. Fixed in the same sweep: `removeInstallation` (uninstall) was
+  still deleting the dead user link — it now drops the
+  `organization_installations` claim.
+- **Analytics deep links**: /$org/$repo/analytics takes optional `?metric=`;
+  the dither stat cards pass it (blocked/passed) so chart focus survives the
+  jump again.
