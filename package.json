@@ -25,6 +25,7 @@
 		"test:run": "bun run scripts/e2e/harness.ts --only gate-pass --no-input",
 		"test:lifecycle": "bun run scripts/e2e/harness.ts --only comment-lifecycle --no-input",
 		"test:lifecycle:prod": "bun --env-file=.env.e2e scripts/e2e/harness.ts --only comment-lifecycle --no-input",
+		"test:workflows": "for s in workflow-block workflow-pass workflow-disabled-inert workflow-existing; do bun run scripts/e2e/harness.ts --only $s --no-input || exit 1; done",
 		"test:suite": "bun test",
 		"verify:planetscale": "bun run scripts/verify-planetscale.ts",
 		"smoke:deploy": "bun run scripts/smoke-deploy.ts"
@@ -32,9 +33,11 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.4.5",
 		"@clack/prompts": "^1.7.0",
+		"@tripwire/contracts": "workspace:*",
 		"@tripwire/core": "workspace:*",
 		"@tripwire/db": "workspace:*",
 		"@tripwire/forge-github": "workspace:*",
+		"@tripwire/utils": "workspace:*",
 		"@types/bun": "^1.2.0",
 		"commander": "^15.0.0",
 		"drizzle-orm": "^0.45.2",

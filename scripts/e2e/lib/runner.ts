@@ -11,6 +11,7 @@ import type {
 	Scenario,
 	ScenarioContext,
 } from "./types.ts";
+import { pinWorkflows, restoreWorkflows } from "./workflow-pin.ts";
 
 /** Why a scenario couldn't run — surfaced honestly, never a silent skip. */
 export type SkipReason = string;
@@ -169,6 +170,21 @@ export async function runScenario(
 			const snapshot = await pinRules(db, config.repo, scenario.enableRules);
 			restore = () => restoreRules(db as Db, snapshot);
 			hooks.log("rule_configs pinned (will restore on exit)");
+		}
+		if (scenario.pinWorkflows && db) {
+			const wfSnapshot = await pinWorkflows(
+				db,
+				config.repo,
+				scenario.pinWorkflows,
+			);
+			const prevRestore = restore;
+			restore = async () => {
+				await restoreWorkflows(db as Db, wfSnapshot);
+				if (prevRestore) {
+					await prevRestore();
+				}
+			};
+			hooks.log("workflow_definitions pinned (will restore on exit)");
 		}
 
 		const pushTarget = async (

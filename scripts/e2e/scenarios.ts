@@ -1,4 +1,8 @@
+import type { WorkflowDefinition } from "@tripwire/contracts";
+import { validateWorkflowForEnable } from "@tripwire/contracts";
+import { repoServices, schema } from "@tripwire/db";
 import { COMMENT_MARKER } from "@tripwire/forge-github";
+import { eq } from "drizzle-orm";
 import type { RuleConfigRow } from "./lib/rule-configs.ts";
 import type { ActorMode, Scenario, ScenarioContext } from "./lib/types.ts";
 
@@ -67,6 +71,48 @@ async function forceGate(
 
 	const check = await gh.waitForVerdict(pr, sha, ctx.log);
 	asserter.equals("check conclusion", opts.expectConclusion, check.conclusion);
+}
+
+// ── WORKFLOW axis helpers ────────────────────────────────────────────────
+
+const ACCOUNT_AGE_ON: RuleConfigRow[] = [
+	// The /rules toggle is a KILL SWITCH over saved workflows (§6) — the rule
+	// must be ON for the workflow's node to execute at all.
+	{ ruleId: "account-age", version: 1, enabled: true, config: { minDays: 7 } },
+];
+
+/** trigger → account-age(minDays) —fail→ block: the editor's simplest graph. */
+function accountAgeWorkflow(minDays: number): WorkflowDefinition {
+	return {
+		id: `e2e-wf-${minDays}`,
+		name: `e2e account age ${minDays}`,
+		version: 1,
+		nodes: [
+			{
+				id: "t",
+				type: "trigger",
+				kinds: ["change-request.opened", "change-request.updated"],
+				position: { x: 80, y: 160 },
+			},
+			{
+				id: "r",
+				type: "rule",
+				ref: "account-age@1",
+				config: { minDays },
+				position: { x: 360, y: 160 },
+			},
+			{
+				id: "a",
+				type: "action",
+				action: "block",
+				position: { x: 640, y: 160 },
+			},
+		],
+		edges: [
+			{ id: "e1", from: "t", to: "r" },
+			{ id: "e2", from: "r", to: "a", when: "fail" },
+		],
+	};
 }
 
 export const SCENARIOS: Scenario[] = [
@@ -733,6 +779,143 @@ export const SCENARIOS: Scenario[] = [
 			);
 		},
 	},
+	// ── WORKFLOW (saved graphs through the real pipeline) ────────────────────
+	{
+		name: "workflow-block",
+		axis: "workflow",
+		summary: "a saved workflow's fail→block edge blocks a clean PR",
+		plan: [
+			"pin a saved ENABLED workflow: account-age(minDays 36500) —fail→ block",
+			"push a clean doc change (any real account is younger than 100 years)",
+			"assert the check is failure — the SAVED graph drove the verdict",
+		],
+		expects:
+			"the workflow the editor emits (not the derived default) produces the block",
+		needs: { db: true },
+		enableRules: ACCOUNT_AGE_ON,
+		pinWorkflows: [{ definition: accountAgeWorkflow(36500), enabled: true }],
+		run: (ctx) =>
+			forceGate(ctx, {
+				branch: "tw-e2e-wf-block",
+				mode: ctx.defaultMode,
+				edits: { "E2E.md": CLEAN_DOC },
+				message: "e2e: clean change vs blocking workflow",
+				expectConclusion: "failure",
+			}),
+	},
+	{
+		name: "workflow-pass",
+		axis: "workflow",
+		summary: "the same saved workflow with a satisfiable threshold passes",
+		plan: [
+			"pin a saved ENABLED workflow: account-age(minDays 0) —fail→ block",
+			"push a clean doc change",
+			"assert the check is success",
+		],
+		expects: "a passing rule conducts the pass edge; no block action fires",
+		needs: { db: true },
+		enableRules: ACCOUNT_AGE_ON,
+		pinWorkflows: [{ definition: accountAgeWorkflow(0), enabled: true }],
+		run: (ctx) =>
+			forceGate(ctx, {
+				branch: "tw-e2e-wf-pass",
+				mode: ctx.defaultMode,
+				edits: { "E2E.md": CLEAN_DOC },
+				message: "e2e: clean change vs passing workflow",
+				expectConclusion: "success",
+			}),
+	},
+	{
+		name: "workflow-disabled-inert",
+		axis: "workflow",
+		summary: "a DISABLED saved workflow never runs (§4: enable is explicit)",
+		plan: [
+			"pin the blocking workflow but DISABLED; crypto-address is the only live rule",
+			"push a clean doc change",
+			"assert the check is success — the disabled graph stayed inert",
+		],
+		expects:
+			"saving never enables: the blocking workflow exists but the derived default (crypto only) decides",
+		needs: { db: true },
+		enableRules: CRYPTO_ONLY,
+		pinWorkflows: [{ definition: accountAgeWorkflow(36500), enabled: false }],
+		run: (ctx) =>
+			forceGate(ctx, {
+				branch: "tw-e2e-wf-inert",
+				mode: ctx.defaultMode,
+				edits: { "E2E.md": CLEAN_DOC },
+				message: "e2e: clean change vs DISABLED blocking workflow",
+				expectConclusion: "success",
+			}),
+	},
+	{
+		name: "workflow-existing",
+		axis: "workflow",
+		summary: "YOUR saved workflows: validate + drive a real PR through them",
+		plan: [
+			"no pinning — read the repo's CURRENTLY ENABLED workflows",
+			"assert each passes enable-time validation",
+			"open a clean PR and assert a verdict lands (whatever your graphs decide)",
+		],
+		expects:
+			"every enabled workflow on the repo is valid and executes to a verdict on a live PR",
+		needs: { db: true },
+		run: async (ctx) => {
+			const { gh, base, asserter, db } = ctx;
+			if (!db) {
+				throw new Error("workflow-existing needs a DB");
+			}
+			const repo = await repoServices.getRepoByFullName(db, ctx.config.repo);
+			if (!repo) {
+				throw new Error(`repo ${ctx.config.repo} not in the DB`);
+			}
+			const rows = await db
+				.select({
+					name: schema.workflowDefinitions.name,
+					enabled: schema.workflowDefinitions.enabled,
+					definition: schema.workflowDefinitions.definition,
+				})
+				.from(schema.workflowDefinitions)
+				.where(eq(schema.workflowDefinitions.repoId, repo.id));
+			const enabled = rows.filter((row) => row.enabled);
+			ctx.log(`${rows.length} saved workflows, ${enabled.length} enabled`);
+			for (const row of enabled) {
+				const result = validateWorkflowForEnable(row.definition);
+				asserter.ok(
+					`workflow "${row.name}" passes enable-time validation`,
+					result.valid,
+					result.valid
+						? ""
+						: result.issues.map((issue) => issue.message).join("; "),
+				);
+			}
+			if (enabled.length === 0) {
+				ctx.log("no enabled workflows — the derived default will decide");
+			}
+			const branch = "tw-e2e-wf-existing";
+			await gh.freshBranch(base, branch);
+			const target = await ctx.pushTarget(branch, ctx.defaultMode);
+			const sha = await gh.commit(
+				{ "E2E.md": CLEAN_DOC },
+				"e2e: clean change through YOUR workflows",
+				target,
+			);
+			const pr = await gh.openPr({
+				base,
+				headRef: ctx.headRef(branch, ctx.defaultMode),
+				branch,
+				title: TITLE,
+				body: BODY,
+			});
+			asserter.ok(`PR #${pr} opened`, Number.isInteger(pr), "no PR");
+			const check = await gh.waitForVerdict(pr, sha, ctx.log);
+			asserter.ok(
+				`a verdict landed (${check.conclusion})`,
+				["success", "failure", "neutral"].includes(check.conclusion ?? ""),
+				`unexpected conclusion ${check.conclusion}`,
+			);
+		},
+	},
 ];
 
 export function scenarioByName(name: string): Scenario | undefined {
@@ -744,5 +927,6 @@ export const AXES: { key: Scenario["axis"]; label: string }[] = [
 	{ key: "comment", label: "the comment" },
 	{ key: "contributor", label: "the contributor" },
 	{ key: "edge", label: "the edge cases" },
+	{ key: "workflow", label: "the workflows (saved graphs)" },
 	{ key: "hybrid", label: "the hybrids (need a human action)" },
 ];

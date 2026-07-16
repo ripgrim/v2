@@ -5,7 +5,13 @@ import type { GitHub, PushTarget } from "./github.ts";
 import type { RuleConfigRow } from "./rule-configs.ts";
 
 /** The five funnel axes — the answer to "what states exist?". */
-export type Axis = "gate" | "comment" | "contributor" | "edge" | "hybrid";
+export type Axis =
+	| "gate"
+	| "comment"
+	| "contributor"
+	| "edge"
+	| "workflow"
+	| "hybrid";
 
 /** The gate outcomes a scenario can force. */
 export type Outcome = "pass" | "block" | "needs-review" | "degraded";
@@ -68,6 +74,11 @@ export interface Scenario {
 	 * on exit. Requires `needs.db`.
 	 */
 	enableRules?: RuleConfigRow[];
+	/**
+	 * Saved workflow_definitions to pin for this scenario (prior rows
+	 * snapshotted + restored on exit, like enableRules). Requires `needs.db`.
+	 */
+	pinWorkflows?: import("./workflow-pin.ts").PinnedWorkflow[];
 	/** Requirements the runner checks before allowing the scenario. */
 	needs?: {
 		/** Needs the second (non-exempt) account — fork / stranger paths. */

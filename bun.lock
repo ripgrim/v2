@@ -10,9 +10,11 @@
       "devDependencies": {
         "@biomejs/biome": "2.4.5",
         "@clack/prompts": "^1.7.0",
+        "@tripwire/contracts": "workspace:*",
         "@tripwire/core": "workspace:*",
         "@tripwire/db": "workspace:*",
         "@tripwire/forge-github": "workspace:*",
+        "@tripwire/utils": "workspace:*",
         "@types/bun": "^1.2.0",
         "commander": "^15.0.0",
         "drizzle-orm": "^0.45.2",
