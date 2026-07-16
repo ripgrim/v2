@@ -191,13 +191,7 @@ export function EditorSidebar({
 								className="overflow-hidden rounded-xl border bg-card"
 								key={section.title}
 							>
-								<div className="flex items-center gap-2 bg-surface-1 px-3 py-2">
-									<span
-										className={cn(
-											"size-1.5 shrink-0 rounded-full",
-											KIND_STYLES[section.kind].dot,
-										)}
-									/>
+								<div className="bg-surface-1 px-3 py-2">
 									<p className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
 										{section.title}
 									</p>
