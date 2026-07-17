@@ -1,36 +1,57 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ruleUiSchema } from "@tripwire/contracts";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Sparkline } from "#/components/charts/dither-kit";
+import { ParamSentence } from "#/components/rules-params/param-sentence";
+import { RawConfigDisclosure } from "#/components/rules-params/raw-config-disclosure";
 import { Switch } from "#/components/ui/switch";
-import { type RuleConfigView, saveRuleConfig } from "#/lib/rules.functions";
+import {
+	type RuleConfigView,
+	saveRuleConfig,
+	upgradeRuleConfig,
+} from "#/lib/rules.functions";
 import { rulesQueryKeys } from "#/lib/rules.query";
+import { cn } from "#/lib/utils";
 
 /**
- * One rule over real data (§9): id@version chip, target chip, action summary,
- * the ACTUAL execution toggle (or the "managed by your workflow" tag when a
- * saved workflow owns evaluation), 24h match count + sparkline, and the JSON
- * config editor (per-field editing is a later session).
+ * One rule as a header/body card (§9), a sibling of the activity cards:
+ *
+ * - HEADER (surface fill) — identity + state + activity: a state dot, the rule
+ *   name, the quiet `block` verdict slot (muted text today; it earns colour when
+ *   warn/log verdicts differentiate — red stays reserved for activity), then the
+ *   24h activity (sparkline + count, the count reddening when blocks actually
+ *   fired) and the enable Switch. An opt-in-off rule shows a DISTINCT "enable"
+ *   offer instead (§8 — the COGS gate for ai-review, a considered click, not a
+ *   symmetric toggle); a workflow-managed set shows no toggle at all.
+ * - BODY (card base) — the payload: the param sentence with configured values,
+ *   or the blurb for a param-less / not-yet-enabled rule, plus the held prompt.
+ * - FOOTER — `view raw`, a quiet subordinate action, out of the data column.
+ *
+ * Scope ("change request") is uniform across rules ⇒ page-level, not a per-card
+ * chip; "managed by your workflow" is repo-level ⇒ one page banner, not N badges.
  */
 export function RuleCard({
 	org,
 	repoId,
 	rule,
+	canEdit,
 }: {
 	/** Org slug from the URL. */
 	org: string;
 	repoId: string;
 	rule: RuleConfigView;
+	/** Caller is an org admin — gates the inline config editors (§9). */
+	canEdit: boolean;
 }) {
 	const queryClient = useQueryClient();
 	const [enabled, setEnabled] = useState(rule.enabled);
-	const [configText, setConfigText] = useState(
-		JSON.stringify(rule.config, null, 2),
-	);
-	const [parseError, setParseError] = useState<string | null>(null);
 	const hasTrend = rule.trend.some((n) => n > 0);
 	/** An opt-in rule that's off is an OFFER, not a silently-disabled toggle. */
 	const offering = rule.optIn && !enabled && !rule.managedByWorkflow;
+	const paramCount = ruleUiSchema(rule.ruleId)?.params.length ?? 0;
+	/** Configurable + actually configurable now (not an unclaimed opt-in offer). */
+	const showConfig = paramCount > 0 && !offering;
 
 	const mutation = useMutation({
 		mutationFn: saveRuleConfig,
@@ -40,15 +61,23 @@ export function RuleCard({
 			}),
 	});
 
-	const save = (nextEnabled: boolean, text: string) => {
-		let config: unknown;
-		try {
-			config = JSON.parse(text);
-		} catch {
-			setParseError("invalid json");
-			return;
-		}
-		setParseError(null);
+	const upgrade = useMutation({
+		mutationFn: upgradeRuleConfig,
+		onSettled: () =>
+			queryClient.invalidateQueries({
+				queryKey: rulesQueryKeys.config(org, repoId),
+			}),
+		onSuccess: (result) => {
+			toast(
+				result && "error" in result ? result.error : `${rule.name} updated`,
+			);
+		},
+	});
+
+	// One write path (§9): a typed config object straight to the admin-gated
+	// mutation — no freeform JSON parsing. Param edits merge one key; the toggle
+	// re-sends the current config unchanged.
+	const saveConfig = (nextEnabled: boolean, config: unknown) => {
 		mutation.mutate(
 			{
 				data: {
@@ -61,56 +90,56 @@ export function RuleCard({
 			},
 			{
 				onSuccess: (result) => {
-					if (result && "error" in result) {
-						setParseError(result.error);
-					} else {
-						toast(`${rule.name} saved`);
-					}
+					toast(
+						result && "error" in result ? result.error : `${rule.name} saved`,
+					);
 				},
 			},
 		);
 	};
+	const asObject = (c: unknown): Record<string, unknown> =>
+		typeof c === "object" && c !== null ? (c as Record<string, unknown>) : {};
 
 	return (
-		<div className="rounded-lg border bg-card px-4 py-3">
-			<div className="flex items-center gap-3">
-				<div className="min-w-0 flex-1">
-					<div className="flex flex-wrap items-baseline gap-2">
-						<span className="font-medium text-sm">{rule.name}</span>
-						<span className="font-mono text-muted-foreground text-xs">
-							{rule.ruleId}@{rule.version}
-						</span>
-						<span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-							change request
-						</span>
-					</div>
-					<p className="mt-0.5 text-muted-foreground text-xs">
-						block · {rule.blurb}
-					</p>
-				</div>
+		<div className="overflow-hidden rounded-xl border bg-card">
+			{/* HEADER — identity + verdict state + activity + toggle */}
+			<div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 bg-surface-1 px-4 py-2">
+				<span className="font-medium text-sm">{rule.name}</span>
+				{/* verdict slot — muted text; earns colour when verdicts differentiate. */}
+				<span
+					className={cn(
+						"text-xs",
+						enabled ? "text-muted-foreground" : "text-muted-foreground/50",
+					)}
+				>
+					block
+				</span>
 
-				<div className="flex shrink-0 items-center gap-5">
+				<div className="ml-auto flex shrink-0 items-center gap-4">
 					{hasTrend ? (
-						<div className="hidden h-7 w-20 md:block">
+						<div className="hidden h-7 w-20 sm:block">
 							<Sparkline bloom="aura" color="blue" data={rule.trend} />
 						</div>
 					) : null}
 					<div className="w-10 text-right">
-						<p className="font-medium text-sm tabular-nums leading-none">
+						<p
+							className={cn(
+								"font-medium text-sm tabular-nums leading-none",
+								rule.matches24h > 0
+									? "text-red-600 dark:text-red-400"
+									: "text-foreground",
+							)}
+						>
 							{rule.matches24h}
 						</p>
 						<p className="mt-1 text-[11px] text-muted-foreground">24h</p>
 					</div>
-					{rule.managedByWorkflow ? (
-						<span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-							managed by your workflow
-						</span>
-					) : offering ? (
+					{rule.managedByWorkflow ? null : offering ? (
 						<button
 							className="rounded-md bg-primary px-2.5 py-1 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90"
 							onClick={() => {
 								setEnabled(true);
-								save(true, configText);
+								saveConfig(true, rule.config);
 							}}
 							type="button"
 						>
@@ -121,26 +150,58 @@ export function RuleCard({
 							checked={enabled}
 							onCheckedChange={(next) => {
 								setEnabled(next);
-								save(next, configText);
+								saveConfig(next, rule.config);
 							}}
 						/>
 					)}
 				</div>
 			</div>
 
-			{offering ? null : (
-				<textarea
-					className="mt-3 w-full rounded-md border bg-surface-1 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-ring"
-					disabled={rule.managedByWorkflow}
-					onBlur={() => save(enabled, configText)}
-					onChange={(e) => setConfigText(e.target.value)}
-					rows={Math.min(6, configText.split("\n").length)}
-					spellCheck={false}
-					value={configText}
-				/>
-			)}
-			{parseError ? (
-				<p className="mt-1 text-red-500 text-xs">{parseError}</p>
+			{/* BODY — the payload */}
+			<div className="px-4 py-3">
+				{showConfig ? (
+					<ParamSentence
+						canEdit={canEdit && !rule.managedByWorkflow}
+						config={rule.config}
+						onSaveParam={(key, value) =>
+							saveConfig(enabled, { ...asObject(rule.config), [key]: value })
+						}
+						ruleId={rule.ruleId}
+					/>
+				) : (
+					<p className="text-muted-foreground text-xs leading-relaxed">
+						{rule.blurb}
+					</p>
+				)}
+
+				{rule.held ? (
+					<div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+						<span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-400">
+							update held
+						</span>
+						<span className="text-muted-foreground">
+							{rule.changeNote ? `${rule.changeNote} — ` : ""}your saved
+							settings don't carry over; re-confirm to move to the new version.
+						</span>
+						<button
+							className="font-medium text-primary hover:underline disabled:opacity-50"
+							disabled={upgrade.isPending}
+							onClick={() =>
+								upgrade.mutate({ data: { org, repoId, ruleId: rule.ruleId } })
+							}
+							type="button"
+						>
+							re-confirm
+						</button>
+					</div>
+				) : null}
+			</div>
+
+			{/* FOOTER — subordinate action, out of the data column */}
+			{showConfig ? (
+				<div className="flex justify-end px-4 pb-2.5">
+					<RawConfigDisclosure config={rule.config} />
+				</div>
 			) : null}
 		</div>
 	);

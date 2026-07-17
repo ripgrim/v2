@@ -1,8 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { ModStat } from "@tripwire/contracts";
-import { RULE_CATALOG } from "@tripwire/contracts";
+import {
+	RULE_CATALOG,
+	resolveEffectiveRuleConfig,
+	ruleChangeNote,
+} from "@tripwire/contracts";
 import type { OrgWithRole } from "@tripwire/db";
 import { ruleExecutes } from "#/lib/rule-execution";
+import { resolveRuleUpgrade } from "#/lib/rule-upgrade";
 import type { JsonValue } from "#/lib/runs.functions";
 import { accessGuardMiddleware } from "#/lib/server/gated-server-fn";
 import {
@@ -13,7 +18,16 @@ import {
 
 export interface RuleConfigView {
 	ruleId: string;
+	/** The catalog's CURRENT version — what a repo runs once advanced. */
 	version: number;
+	/**
+	 * True ONLY when the repo is HELD on an older version: its saved config can't
+	 * carry forward under the new schema (§6 b). Lossless upgrades auto-advance
+	 * silently and never set this — it's the sole state the Rules page surfaces.
+	 */
+	held: boolean;
+	/** What the current version changed — shown with the held re-confirm prompt. */
+	changeNote: string | null;
 	name: string;
 	blurb: string;
 	/** ACTUAL execution state (derive.ts): baseline rules run unless disabled. */
@@ -63,9 +77,19 @@ export const listRuleConfigViews = createServerFn({ method: "GET" })
 			const row = stored.find((c) => c.ruleId === entry.ruleId);
 			const ref = `${entry.ruleId}@${entry.version}`;
 			const perRule = byRef.get(ref);
+			const held = row
+				? resolveEffectiveRuleConfig({
+						ruleId: row.ruleId,
+						version: row.version,
+						enabled: row.enabled,
+						config: row.config as JsonValue,
+					}).held
+				: false;
 			return {
 				ruleId: entry.ruleId,
 				version: entry.version,
+				held,
+				changeNote: held ? ruleChangeNote(ref) : null,
 				name: entry.name,
 				blurb: entry.blurb,
 				enabled: ruleExecutes(ref, row?.enabled),
@@ -148,6 +172,48 @@ export const saveRuleConfig = createServerFn({ method: "POST" })
 				version: entry.version,
 				enabled: data.enabled,
 				config: parsed.data,
+			});
+			return { ok: true };
+		},
+	);
+
+/**
+ * §6 (b) — resolve a HELD rule: re-pin it to the catalog's CURRENT version.
+ * Lossless upgrades auto-advance at evaluation time (no action needed); this is
+ * the admin-only escape hatch for the held case, where the saved config can't
+ * carry forward, so `resolveRuleUpgrade` resets it to the new default (the
+ * maintainer then re-tunes). No-ops when unconfigured or already current.
+ */
+export const upgradeRuleConfig = createServerFn({ method: "POST" })
+	.middleware([accessGuardMiddleware, orgAdminMiddleware])
+	.inputValidator(
+		(input: { org: string; repoId: string; ruleId: string }) => input,
+	)
+	.handler(
+		async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
+			await requireOrgRepoById(
+				(context as { org: OrgWithRole }).org.id,
+				data.repoId,
+			);
+			const entry = RULE_CATALOG.find((r) => r.ruleId === data.ruleId);
+			if (!entry) {
+				return { error: `unknown rule ${data.ruleId}` };
+			}
+			const { repoServices } = await import("@tripwire/db");
+			const { getDb } = await import("#/lib/server/db");
+			const db = getDb().db;
+			const existing = (
+				await repoServices.listRuleConfigs(db, data.repoId)
+			).find((c) => c.ruleId === data.ruleId);
+			const next = resolveRuleUpgrade(existing, entry);
+			if (!next) {
+				return { ok: true }; // already current, or nothing pinned to upgrade
+			}
+			await repoServices.upsertRuleConfig(db, data.repoId, {
+				ruleId: entry.ruleId,
+				version: next.version,
+				enabled: next.enabled,
+				config: next.config,
 			});
 			return { ok: true };
 		},

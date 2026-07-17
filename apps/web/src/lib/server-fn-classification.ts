@@ -70,6 +70,7 @@ export const SERVER_FN_CLASSIFICATION: Record<string, ServerFnClass> = {
 	deleteRepoWorkflow: "admin",
 	setRepoWorkflowEnabled: "admin",
 	saveRuleConfig: "admin",
+	upgradeRuleConfig: "admin", // §6 (b) — re-pin a rule to the current version
 	/**
 	 * Approving a paused run releases code through the gate — a trust-level
 	 * action, not triage (admin under the two-role model). First candidate

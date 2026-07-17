@@ -1,4 +1,8 @@
-import { type AiReviewOutput, aiReviewOutputSchema } from "@tripwire/contracts";
+import {
+	type AiReviewOutput,
+	aiReviewOutputSchema,
+	ruleIdOf,
+} from "@tripwire/contracts";
 import { AiFindings } from "#/components/runs/ai-findings";
 import {
 	CryptoMatches,
@@ -69,10 +73,10 @@ export function RuleEvidence({
 	maintainer: boolean;
 }) {
 	const inner = innerEvidence(step.evidence);
-	const ruleId = step.ruleRef ? step.ruleRef.split("@")[0] : null;
+	const ruleId = step.ruleRef ? ruleIdOf(step.ruleRef) : null;
 
 	let detail: React.ReactNode = null;
-	if (step.ruleRef?.startsWith("ai-review@")) {
+	if (ruleId === "ai-review") {
 		const output = reviewOutput(inner);
 		detail = output ? (
 			<AiFindings output={output} repo={repo} sha={sha} />

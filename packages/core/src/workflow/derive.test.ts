@@ -45,6 +45,19 @@ describe("deriveDefaultWorkflow", () => {
 		expect(node.config).toEqual({ minDays: 90 });
 	});
 
+	test("a held toggle at a different version REPLACES the baseline entry (no double-eval)", () => {
+		// §6 (b): account-age is baseline at @1. A repo HELD on another version of
+		// the SAME rule must yield exactly one account-age node — the toggle's —
+		// never the baseline @1 alongside it. (derive keys by rule id, not ref.)
+		const def = deriveDefaultWorkflow([
+			{ ref: "account-age@2", enabled: true, config: { minDays: 30 } },
+		]);
+		const accountAgeRefs = refsOf(def).filter((r) =>
+			r.startsWith("account-age@"),
+		);
+		expect(accountAgeRefs).toEqual(["account-age@2"]);
+	});
+
 	test("an enabled non-baseline rule is opted in", () => {
 		const extra = "min-merged-prs@1";
 		expect(baselineRefs).not.toContain(extra);

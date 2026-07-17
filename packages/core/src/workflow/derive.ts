@@ -1,6 +1,7 @@
 import {
 	DEFAULT_WORKFLOW,
 	type JsonValue,
+	ruleIdOf,
 	type WorkflowDefinition,
 	type WorkflowEdge,
 	type WorkflowNode,
@@ -59,20 +60,27 @@ function baselineTrigger(): WorkflowNode {
 export function deriveDefaultWorkflow(
 	toggles: RuleToggle[],
 ): WorkflowDefinition {
-	const byRef = new Map(toggles.map((t) => [t.ref, t]));
+	// Key by rule ID, not full ref (§6 b): a repo has ONE config per rule, and a
+	// toggle whose version differs from the baseline's (a repo HELD on an older
+	// version) must REPLACE the baseline entry — never run alongside it. The
+	// toggle's ref (current when auto-advanced, pinned when held) wins.
+	const byId = new Map(toggles.map((t) => [ruleIdOf(t.ref), t]));
 	const baseline = baselineRules();
-	const baselineRefs = new Set(baseline.map((r) => r.ref));
+	const baselineIds = new Set(baseline.map((r) => ruleIdOf(r.ref)));
 
 	const included: BaselineRule[] = [];
 	for (const rule of baseline) {
-		const toggle = byRef.get(rule.ref);
+		const toggle = byId.get(ruleIdOf(rule.ref));
 		if (toggle && !toggle.enabled) {
 			continue;
 		}
-		included.push({ ref: rule.ref, config: toggle?.config ?? rule.config });
+		included.push({
+			ref: toggle?.ref ?? rule.ref,
+			config: toggle?.config ?? rule.config,
+		});
 	}
 	for (const toggle of toggles) {
-		if (toggle.enabled && !baselineRefs.has(toggle.ref)) {
+		if (toggle.enabled && !baselineIds.has(ruleIdOf(toggle.ref))) {
 			included.push({ ref: toggle.ref, config: toggle.config });
 		}
 	}

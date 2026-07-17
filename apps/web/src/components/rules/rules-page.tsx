@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { ArmCallout } from "#/components/arming/arm-callout";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { RuleCard } from "#/components/rules/rule-card";
 import { RuleFilters, type RuleSort } from "#/components/rules/rule-filters";
 import { RuleHeaderStats } from "#/components/rules/rule-header-stats";
-import { orgRepoQueryOptions } from "#/lib/org.query";
+import { orgContextQueryOptions, orgRepoQueryOptions } from "#/lib/org.query";
 import {
 	ruleConfigsQueryOptions,
 	rulesStatsQueryOptions,
@@ -18,6 +18,8 @@ export function RulesPage() {
 	// Scoped to the URL's repo (§8) — the layout route already resolved it.
 	const { org, repo: repoName } = routeApi.useParams();
 	const { data: repo } = useQuery(orgRepoQueryOptions(org, repoName));
+	const { data: orgContext } = useQuery(orgContextQueryOptions(org));
+	const isAdmin = orgContext?.role === "admin";
 	const [sort, setSort] = useState<RuleSort>("active");
 	const repoId = repo?.id ?? "";
 	const { data: rules } = useQuery(ruleConfigsQueryOptions(org, repoId));
@@ -41,21 +43,19 @@ export function RulesPage() {
 		return copy;
 	}, [rules, sort]);
 
+	// `managedByWorkflow` is repo-level (a saved workflow owns evaluation for the
+	// whole repo), so it's all-or-nothing — one page banner, never per-card badges.
+	const managed = sorted.length > 0 && sorted.every((r) => r.managedByWorkflow);
+
 	return (
 		<DashboardLayout counts={{}}>
 			<div className="mx-auto w-full max-w-4xl px-6 py-8">
-				<header className="mb-6 flex items-center justify-between gap-4">
-					<div>
-						<h1 className="font-semibold text-2xl tracking-tight">Rules</h1>
-						<p className="text-muted-foreground text-sm">
-							boolean requirements every non-exempt contributor must meet.
-						</p>
-					</div>
-					{repo ? (
-						<span className="rounded-md border bg-card px-2.5 py-1.5 font-medium text-muted-foreground text-sm">
-							{repo.fullName}
-						</span>
-					) : null}
+				<header className="mb-6">
+					<h1 className="font-semibold text-2xl tracking-tight">Rules</h1>
+					<p className="text-muted-foreground text-sm">
+						boolean requirements every non-exempt contributor must meet on every
+						change request.
+					</p>
 				</header>
 
 				{repo && !repo.armed ? (
@@ -69,6 +69,20 @@ export function RulesPage() {
 				) : null}
 
 				<div className="flex flex-col gap-6">
+					{managed ? (
+						<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-surface-1 px-4 py-2.5">
+							<p className="text-muted-foreground text-xs">
+								these rules are managed by your workflow — it owns what runs.
+							</p>
+							<Link
+								className="shrink-0 font-medium text-primary text-xs hover:underline"
+								params={{ org, repo: repoName }}
+								to="/$org/$repo/workflows"
+							>
+								edit in workflow →
+							</Link>
+						</div>
+					) : null}
 					{statsQuery.data ? (
 						<RuleHeaderStats
 							animate={fetchedStats.current}
@@ -87,6 +101,7 @@ export function RulesPage() {
 					<div className="flex flex-col gap-3">
 						{sorted.map((rule) => (
 							<RuleCard
+								canEdit={isAdmin}
 								key={rule.ruleId}
 								org={org}
 								repoId={repoId}

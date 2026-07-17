@@ -2482,3 +2482,167 @@ The editor is a new face on the executor's existing contract. Ledger:
   The legacy single-workflow fns (`getWorkflowForRepo` returning
   `workflows[0]`) are gone; the worker's listEnabledWorkflows/derive fallback
   is untouched (multiple enabled workflows already JOIN into one run, §5.11).
+
+## Rule versioning — established purpose + display internalization (2026-07-16, §6)
+
+Codifies WHY rule versioning exists, so it's maintained deliberately rather than
+cargo-culted. The mechanism (append-only registry keyed `id@version`,
+`rule_configs.version` pinning, `runs.rule_id` snapshots, the wire regex,
+`DEFAULT_WORKFLOW` refs) is unchanged — this session is decision + display layer
++ one gap-fix, no schema migration.
+
+Versioning exists for exactly two reasons:
+- **(a) Verdict defensibility** — every stored run is permanently interpretable.
+  We block people's contributions, so we must always be able to state exactly
+  which logic produced a past verdict. Frozen versions (min-merged-prs@1,
+  ai-review@1) stay registered forever.
+- **(b) Explicit upgrades** — a rule behavior change never silently alters what
+  an installed repo enforces. Repos pin a version (`rule_configs.version`);
+  moving to a newer version is an explicit admin action, never automatic.
+
+Everything else about versioning is implementation serving those two sentences
+(see the §6 versioning law, `.claude/rules/rules-engine.md`).
+
+Consequences shipped this date:
+- **The `@version` tag is engine identity, not product copy.** New single source
+  of truth: `ruleDisplayName(ref)` / `ruleIdOf(ref)` / `ruleCatalogEntry(ref)` in
+  `@tripwire/contracts` (beside `RULE_CATALOG`). No user-facing surface formats or
+  splits a ref itself; `.split("@")` stays confined to the engine/validation
+  layer and this util. Swept eleven surfaces — only ONE true leak (the Rules-page
+  `id@version` chip); the run-page step label and the evidence-renderer branching
+  (a `split("@")` hiding in logic, not display) were also routed through the util.
+  PR comment / check-run / activity log / RULES.md / MCP were N/A (already
+  name-free, or not scaffolded).
+- **Operator exception:** the maintainer-mode run page keeps the full `id@version`
+  as a muted detail — that's where an admin debugs which logic ran. The public
+  (contributor) run page shows only the human name.
+- **`changeNote` is catalog-only (contracts), NOT mirrored to the core rule
+  definition.** Nothing in the engine reads a changeNote; it's display copy, so
+  it lives with the other display copy (name/blurb/description) on the catalog
+  entry. Following the dependency graph (UI can't import core) over the task's
+  "on the rule definition" wording — mirroring would create two-copies drift for
+  zero consumer benefit. Only the two bumped rules carry one.
+- **Gap-fix making purpose (b) honest:** the Rules page now shows an "update
+  available" indicator + one-line `changeNote` when a repo is pinned behind
+  (`pinnedVersion < catalog version`), with an admin-only **`upgradeRuleConfig`**
+  server fn (classified `admin`, `orgAdminMiddleware`) that re-pins to current,
+  carrying the existing enabled/config forward (falling back to the new default
+  only when the old config can't parse under the new schema). No-ops when
+  unconfigured or already current. Without this, pinning is silent staleness.
+
+Deferred / handoff:
+- **Workflow editor** node labels (`node-card`, `properties-panel`, `editor-sidebar`)
+  are a parallel effort — left untouched; `ruleCatalogEntry(ref)` gives them
+  label+description-by-ref when that work consumes the util.
+- **rule-card.tsx** is also slated for the JSON-textarea → readable-params change
+  in the workflows effort; this diff was kept to the chip/indicator/upgrade region
+  so the two compose.
+- **MCP tools do not exist in v2 yet** (v1 had repo-management / rule-config MCP
+  tools) — a conscious pre-launch defer, tracked on the cutover checklist.
+
+### Amendment — rule upgrades are automatic when lossless (2026-07-16, §6 b)
+
+Purpose (b) refined after review. Users are maintainers running a set-and-forget
+spam filter; an "update available" chore-badge on every rule × repo is exactly
+the management burden the product exists to remove, and "explicit upgrades" in
+practice means ~all repos silently run stale detection forever because nobody
+clicks. So the default inverts:
+
+- **Compatible upgrade (saved config parses under the new schema): AUTOMATIC.**
+  The repo runs the current version, config carried forward — no indicator, no
+  click. Resolved at rule-evaluation time by `resolveEffectiveRuleConfig`
+  (contracts), used identically by the worker (eval) and web (display). NO DB
+  write: `rule_configs.version` is the config's schema anchor; the effective
+  version is derived every evaluation. Covers ~all upgrades (both current @2s).
+- **Incompatible upgrade (config can't parse under the new schema): HELD.** The
+  repo stays on its pinned, still-registered version (append-only law keeps it
+  running) and the Rules page shows the ONLY indicator — "update held … your
+  saved settings don't carry over; re-confirm." `upgradeRuleConfig` is repurposed
+  as that resolver (admin-gated; re-pins to current, resets to the new default).
+  Rare, and a real decision worth attention when it fires.
+- **Purpose (a) untouched:** runs still snapshot `id@version`; verdicts stay
+  defensible forever. That half was always the non-negotiable one.
+
+The pin column survives with a better job: the HOLD anchor, not a preference.
+
+Engine consequence: `deriveDefaultWorkflow` now matches the baseline by rule id
+(not full ref), so a held old-version toggle REPLACES the baseline's current
+entry instead of running alongside it — also fixes a latent double-eval that
+would have bitten the first time a *baseline* rule bumped a version. Guarded by
+`catalog-sync.test.ts` (every RULE_CATALOG current version must be registered in
+the engine, or an auto-advanced repo would silently skip).
+
+Supersedes the "upgrades are explicit admin actions" line in the entry above.
+
+## Readable rule params — the shared display layer (2026-07-16, §9)
+
+Replaced the Rules page's raw-JSON config textarea with schema-driven readable
+params + inline editing. The reusable layer (built here, consumed by the queued
+workflows-editor rebuild):
+
+- **`contracts/rules.ts`** — `RuleParam` (number/string/boolean/enum/string-list;
+  number carries `unit`/`percent`/`int`/`min`/`max`), `RuleUiSchema`
+  (`{ sentences, params }` — one sentence line per entry, ≥1 `{key}` each;
+  empty ⇒ param-less rule renders no config region), `RULE_PARAMS` (all 9 rules,
+  `satisfies Record<string, RuleUiSchema>`), and accessors `ruleUiSchema(ref)` +
+  `formatParamValue(param, value)`. Display metadata layered BESIDE the zod
+  `configSchema` (still the validation truth); `rule-params.test.ts` welds them
+  (keys ⊆ schema, defaults == defaultConfig + pass the schema).
+- **`apps/web/src/components/rules-params/`** — `ParamSentence` (renders the
+  template with inline values; a value is a `<button>`→`ParamEditor` when
+  `canEdit`, else static), `ParamValue`, `ParamEditor` (number/string/enum inline
+  + string-list chips + boolean toggle; `coerceParamInput` rejects out-of-range
+  before the mutation), `RawConfigDisclosure` (read-only "view raw"). Props:
+  `ParamSentence({ ruleId, config, canEdit, onSaveParam })`.
+
+**Handoff to the workflows rebuild:** its Properties panel currently re-derives
+fields by zod introspection (`properties-panel.tsx` `fieldsForSchema`/`ConfigField`
+— left untouched this task). The rebuild should drop that and render from
+`ruleUiSchema(ref).params/.sentences` via `ParamEditor`/`ParamValue`, so copy +
+units + advanced-hiding live in ONE place. `ParamEditor` already takes a plain
+`onSave(value)`, so the editor feeds it node.config updates instead of the card's
+mutation. Nothing in the shared layer imports card/editor code — it's pure
+contracts + presentational components.
+
+Decisions of note:
+- **ai-review `model` is `advanced`** — excluded from the sentence + inline
+  editing (it's the COGS dial: Fable 5 vs Haiku ≈ 10× per the economics model),
+  visible only in "view raw" until pricing strategy owns model choice.
+- **honeypot copy verified against `evaluate`** (path-trap: blocks CRs touching
+  configured globs), not inferred from the param name — sentence states the why:
+  "paths no legitimate change should need."
+- **One write path** — inline edits merge a typed value into config and reuse the
+  admin-gated `saveRuleConfig` (already `configSchema.safeParse`s). Zero raw-JSON
+  editing remains; the disclosure is display-only. Member/admin gating is UI via
+  `orgContext.role` on top of the existing data-layer enforcement.
+
+## Rules page — card hierarchy, activity-sibling anatomy (2026-07-16, §9)
+
+Founder-review layout pass on the Rules page. No schema/mutation/data change —
+pure rearrangement of the just-landed param-sentence / editing / held-indicator /
+role-gating pieces.
+
+- **Scope chip dropped.** "change request" was a HARDCODED constant (the real
+  `scope`/`itemTypeSchema[]` lives only on the legacy demo `ruleSchema`, never on
+  RULE_CATALOG/RuleConfigView), identical on all 9 cards ⇒ informed nobody. Scope
+  now lives once, in the page subtitle ("…on every change request"). Comes back
+  as real per-card UI only when issue/comment scoping becomes a genuine field.
+- **"managed by your workflow" → one page banner.** `managedByWorkflow` is
+  repo-level (`hasEnabledWorkflow`), so it's all-or-nothing — N identical badges +
+  N identical links were noise. One slim banner carries the statement and the
+  single "edit in workflow →" action; cards drop the badge, the link, and the
+  `repo` prop. Mixed managed/standalone is impossible in the current model (one
+  comment marks the extension point; no speculative UI built).
+- **Card = header/body/footer, sibling to the activity cards.** `rounded-xl
+  border bg-card overflow-hidden`; HEADER `bg-surface-1` (state dot + name +
+  verdict slot + 24h activity + toggle); BODY `bg-card` (the param sentence —
+  the payload — or blurb for param-less, + held prompt); FOOTER (`view raw`,
+  quiet, right-aligned, out of the data column). Scan order: which rule + state →
+  what it enforces at what thresholds → activity → meta/actions.
+- **Verdict slot is muted text (`block`), not a red chip** — red stays reserved
+  for activity: the 24h count reddens only when blocks actually fired. The slot
+  earns colour later when warn/log verdicts differentiate (the rule model already
+  contemplates them, so the slot exists now to avoid re-finding a home).
+- **Opt-in "enable" offer preserved as a distinct state** — an opt-in-off rule
+  (ai-review) shows a primary "enable" button (not a symmetric toggle) with the
+  "costs tokens" framing in the body: the COGS gate stays a considered click.

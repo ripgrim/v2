@@ -5,6 +5,7 @@ import type {
 	Verdict,
 	WorkflowDefinition,
 } from "@tripwire/contracts";
+import { resolveEffectiveRuleConfig } from "@tripwire/contracts";
 import {
 	type AiReviewGenerate,
 	deriveDefaultWorkflow,
@@ -149,12 +150,19 @@ export async function runWorkflows(
 		custom.length > 0
 			? custom
 			: [
+					// §6 (b) — resolve each pinned config to the version it ACTUALLY runs:
+					// auto-advance to current when the config carries forward, hold on the
+					// pinned (still-registered) version when it can't. derive keys by rule
+					// id, so a held old version replaces — never doubles — the baseline.
 					deriveDefaultWorkflow(
-						ruleConfigs.map((config) => ({
-							ref: `${config.ruleId}@${config.version}`,
-							enabled: config.enabled,
-							config: config.config as JsonValue,
-						})),
+						ruleConfigs.map((config) =>
+							resolveEffectiveRuleConfig({
+								ruleId: config.ruleId,
+								version: config.version,
+								enabled: config.enabled,
+								config: config.config as JsonValue,
+							}),
+						),
 					),
 				];
 	const matching = definitions.filter((def) =>

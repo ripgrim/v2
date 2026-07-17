@@ -1,4 +1,4 @@
-import { RULE_CATALOG } from "@tripwire/contracts";
+import { RULE_CATALOG, ruleDisplayName, ruleIdOf } from "@tripwire/contracts";
 import { RuleEvidence } from "#/components/runs/rule-evidence";
 import type { RunStepView } from "#/lib/runs.functions";
 import { describeSyntheticStep } from "#/lib/synthetic-steps";
@@ -34,23 +34,18 @@ const STATUS_CHIP: Record<string, { label: string; className: string }> = {
  * what the rule CHECKS — its catalog blurb — never a blank statement, never raw
  * JSON, and never just echoing the rule id in the header. */
 function ruleFallback(ruleRef: string): string {
-	const id = ruleRef.startsWith("ai-review@")
-		? "ai-review"
-		: ruleRef.split("@")[0];
-	const cat = RULE_CATALOG.find((r) => r.ruleId === id);
-	return cat?.blurb ?? ruleRef;
+	const cat = RULE_CATALOG.find((r) => r.ruleId === ruleIdOf(ruleRef));
+	return cat?.blurb ?? ruleDisplayName(ruleRef);
 }
 
-/** The step's display label: rule ref in mono, ai-review as its friendly name,
+/** The step's display label: the rule's human name (§6 display — the `@version`
+ * tag is engine identity, shown only on the maintainer/operator detail below),
  * a non-rule node as its bare kind (never "trigger: trigger"). */
-function stepLabel(step: RunStepView): { text: string; mono: boolean } {
+function stepLabel(step: RunStepView): string {
 	if (step.ruleRef) {
-		if (step.ruleRef.startsWith("ai-review@")) {
-			return { text: "ai review", mono: false };
-		}
-		return { text: step.ruleRef, mono: true };
+		return ruleDisplayName(step.ruleRef);
 	}
-	return { text: step.nodeId.split(":").at(-1) ?? step.nodeKind, mono: false };
+	return step.nodeId.split(":").at(-1) ?? step.nodeKind;
 }
 
 /** The status badge — the only saturated element in a step; hugs its text. */
@@ -161,17 +156,18 @@ export function StepCard({
 			<StepRail color={dotColor} isFirst={isFirst} isLast={isLast} />
 			<div className="min-w-0 flex-1 py-3">
 				<div className="flex items-center gap-2">
-					<span
-						className={cn(
-							"shrink-0 truncate font-medium text-sm",
-							label.mono && "font-mono",
-						)}
-					>
-						{label.text}
-					</span>
+					<span className="shrink-0 truncate font-medium text-sm">{label}</span>
 					<span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
 						{failed ? "" : line}
 					</span>
+					{/* Operator detail (§6): the exact id@version that ran — which logic
+					    produced this verdict. Maintainers only; stripped from the public
+					    contributor view. */}
+					{maintainer && step.ruleRef ? (
+						<span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
+							{step.ruleRef}
+						</span>
+					) : null}
 					<StepStatus status={step.status} />
 					<span className="shrink-0 text-muted-foreground text-xs">
 						{step.durationMs}ms
