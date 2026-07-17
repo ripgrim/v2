@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { DevPersonaSwitcher } from "#/components/dev/persona-switcher";
@@ -9,6 +10,7 @@ import {
 } from "#/components/feedback";
 import { useMediaQuery } from "#/hooks/use-media-query";
 import { currentUserQueryOptions } from "#/lib/auth.query";
+import { cn } from "#/lib/utils";
 import { BetaBanner } from "./beta-banner";
 import {
 	SIDE_PANEL_WIDTH,
@@ -45,6 +47,12 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 	const { content, collapsed } = useSidePanel();
 	const isDesktop = useMediaQuery("(min-width: 768px)");
 	const showPanel = isDesktop && Boolean(content) && !collapsed;
+
+	// The page area is a floating inset (padding + rounded card on the muted
+	// backdrop) only once you're inside a repo. Org-level pages — Home first —
+	// push flush to the top edge; entering a repo route animates the inset in.
+	const params = useParams({ strict: false });
+	const inset = Boolean(params.repo);
 
 	// Opening the mobile sheet rides the page scroll to the bottom (content
 	// slides up); closing glides it back to wherever they opened it from.
@@ -88,8 +96,15 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 
 	return (
 		<FeedbackProvider config={feedbackConfig}>
-			<div className="isolate flex h-dvh flex-col bg-muted">
-				<DashboardTopbar user={user ?? null} counts={counts} />
+			<div
+				className={cn(
+					"isolate flex h-dvh flex-col transition-colors duration-300",
+					// Inside a repo the shell is the muted backdrop the page floats on;
+					// on org pages (Home) it matches the card so the topbar blends away.
+					inset ? "bg-muted" : "bg-card",
+				)}
+			>
+				<DashboardTopbar user={user ?? null} />
 				<RouteProgress />
 
 				<motion.div
@@ -98,11 +113,26 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 						gridTemplateColumns: showPanel
 							? `minmax(0, 1fr) ${SIDE_PANEL_WIDTH}px`
 							: "minmax(0, 1fr) 0px",
+						paddingLeft: inset ? 8 : 0,
+						paddingRight: inset ? 8 : 0,
+						paddingBottom: inset ? 8 : 0,
 					}}
-					transition={{ type: "spring", stiffness: 400, damping: 35 }}
-					className="grid flex-1 overflow-hidden p-2 pt-0"
+					transition={{
+						gridTemplateColumns: {
+							type: "spring",
+							stiffness: 400,
+							damping: 35,
+						},
+						default: SHEET_SPRING,
+					}}
+					className="grid flex-1 overflow-hidden pt-0"
 				>
-					<div className="relative flex h-full flex-col overflow-hidden rounded-xl bg-card">
+					<motion.div
+						initial={false}
+						animate={{ borderRadius: inset ? 12 : 0 }}
+						transition={SHEET_SPRING}
+						className="relative flex h-full flex-col overflow-hidden bg-card"
+					>
 						<BetaBanner />
 						{/* The shell owns page scroll: this container scrolls full-width so
 					    the whole page area (not just a centered column) is a scroll +
@@ -150,7 +180,7 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 						)}
 
 						<SidePanelToggle />
-					</div>
+					</motion.div>
 
 					<div className="hidden overflow-hidden md:block">
 						<motion.div

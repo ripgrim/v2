@@ -6,11 +6,13 @@ import {
 	GitBranchIcon,
 	Queue01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
+import { NavChip } from "#/components/layouts/nav-chip";
+import { OrgSubnav } from "#/components/organizations/org-subnav";
 import { Button } from "#/components/ui/button";
 import { Skeleton } from "#/components/ui/skeleton";
 import { formatRelativeTime } from "#/lib/format-relative-time";
@@ -50,20 +52,23 @@ export function OrgHomePage() {
 		<DashboardLayout counts={{}}>
 			<div className="px-5 py-6 md:px-8 md:py-10">
 				<div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-					<header className="flex flex-col gap-1.5">
-						<h1 className="font-semibold text-2xl tracking-tight">Home</h1>
-						<p className="text-muted-foreground text-sm">
-							across this org's repos —{" "}
-							<span className="font-medium text-foreground tabular-nums">
-								{awaiting}
-							</span>{" "}
-							awaiting your decision,{" "}
-							<span className="font-medium text-foreground tabular-nums">
-								{blocked}
-							</span>{" "}
-							blocked today.
-						</p>
-					</header>
+					<div className="flex items-start justify-between gap-4">
+						<header className="flex flex-col gap-1.5">
+							<h1 className="font-semibold text-2xl tracking-tight">Home</h1>
+							<p className="text-muted-foreground text-sm">
+								across this org's repos —{" "}
+								<span className="font-medium text-foreground tabular-nums">
+									{awaiting}
+								</span>{" "}
+								awaiting your decision,{" "}
+								<span className="font-medium text-foreground tabular-nums">
+									{blocked}
+								</span>{" "}
+								blocked today.
+							</p>
+						</header>
+						<OrgSubnav org={org} />
+					</div>
 
 					{home ? (
 						<HomeBody home={home} org={org} ranked={ranked} />
@@ -150,12 +155,12 @@ function InstallCta({ org }: { org: string }) {
 }
 
 function RepoRow({ org, repo }: { org: string; repo: SwitcherRepo }) {
-	// The row links into the repo; armed repos also get direct shortcuts to the
-	// main features (§8) so they're reachable from the org home, not only after
-	// navigating into the repo. A container div holds both — nested links are not
-	// valid, so the repo link and the feature links are siblings.
+	// The whole card links into the repo (its default page). Armed repos also get
+	// direct feature shortcuts (§8) reachable straight from org home. Nested <a>
+	// is invalid, so the card-wide link is a stretched `::after` overlay and the
+	// feature toolbar / chips sit above it (relative z-10) to stay clickable.
 	return (
-		<div className="rounded-lg px-3 py-3 transition-colors hover:bg-surface-1">
+		<div className="relative rounded-lg px-3 py-3">
 			<div className="flex items-center gap-3">
 				<HugeiconsIcon
 					className="shrink-0 text-muted-foreground"
@@ -164,7 +169,7 @@ function RepoRow({ org, repo }: { org: string; repo: SwitcherRepo }) {
 					strokeWidth={1.8}
 				/>
 				<Link
-					className="min-w-0 flex-1 text-left"
+					className="min-w-0 flex-1 text-left after:absolute after:inset-0 after:rounded-lg"
 					params={{ org, repo: repo.name }}
 					to="/$org/$repo"
 				>
@@ -177,7 +182,7 @@ function RepoRow({ org, repo }: { org: string; repo: SwitcherRepo }) {
 					</div>
 				</Link>
 				{repo.armed ? (
-					<div className="flex shrink-0 items-center gap-2">
+					<div className="relative z-10 flex shrink-0 items-center gap-2">
 						{repo.pendingModeration > 0 ? (
 							<Chip tone="amber">{repo.pendingModeration} awaiting</Chip>
 						) : null}
@@ -192,28 +197,28 @@ function RepoRow({ org, repo }: { org: string; repo: SwitcherRepo }) {
 				)}
 			</div>
 			{repo.armed ? (
-				<div className="mt-2.5 flex flex-wrap gap-1.5 pl-7">
-					<FeatureLink
+				<div className="relative z-10 mt-2.5 flex flex-wrap gap-1.5 pl-7">
+					<NavChip
 						to={`/${org}/${repo.name}/moderation`}
 						label="queue"
 						icon={Queue01Icon}
 					/>
-					<FeatureLink
+					<NavChip
 						to={`/${org}/${repo.name}/rules`}
 						label="rules"
 						icon={CheckListIcon}
 					/>
-					<FeatureLink
+					<NavChip
 						to={`/${org}/${repo.name}/workflows`}
 						label="workflows"
 						icon={FlowIcon}
 					/>
-					<FeatureLink
+					<NavChip
 						to={`/${org}/${repo.name}/activity`}
 						label="activity"
 						icon={ActivityIcon}
 					/>
-					<FeatureLink
+					<NavChip
 						to={`/${org}/${repo.name}/analytics`}
 						label="analytics"
 						icon={Analytics01Icon}
@@ -221,29 +226,6 @@ function RepoRow({ org, repo }: { org: string; repo: SwitcherRepo }) {
 				</div>
 			) : null}
 		</div>
-	);
-}
-
-/** A repo feature shortcut as an icon button — a consistent toolbar per row,
- * so the actions read as buttons and don't repeat five labels down the list. */
-function FeatureLink({
-	to,
-	label,
-	icon,
-}: {
-	to: string;
-	label: string;
-	icon: IconSvgElement;
-}) {
-	return (
-		<Link
-			aria-label={label}
-			title={label}
-			className="flex size-8 items-center justify-center rounded-md border bg-surface-1 text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-			to={to}
-		>
-			<HugeiconsIcon icon={icon} size={15} strokeWidth={1.8} />
-		</Link>
 	);
 }
 
