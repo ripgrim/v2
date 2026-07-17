@@ -43,7 +43,7 @@ export function OrgGeneralSettingsPage() {
 						<CardTitle>general</CardTitle>
 						<CardDescription>only admins can rename this org.</CardDescription>
 					</CardHeader>
-					<CardContent className="flex items-center gap-3">
+					<CardContent className="flex flex-col items-start gap-2">
 						<OrgAvatar
 							hue={orgContext.avatarHue}
 							name={orgContext.name}

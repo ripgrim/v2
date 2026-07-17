@@ -60,7 +60,13 @@ function throwingContext(): RuleContext {
 		},
 		now: "2026-01-01T00:00:00.000Z",
 		diff: [
-			{ path: "a.ts", status: "modified", additions: 1, deletions: 0, patch: "+x" },
+			{
+				path: "a.ts",
+				status: "modified",
+				additions: 1,
+				deletions: 0,
+				patch: "+x",
+			},
 		],
 		commits: null,
 		contributor: null,

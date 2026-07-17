@@ -3,10 +3,12 @@ import {
 	Analytics01Icon,
 	CheckListIcon,
 	FlowIcon,
+	Home01Icon,
 	Queue01Icon,
+	Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 
 interface MobileFooterProps {
 	counts: {
@@ -14,20 +16,70 @@ interface MobileFooterProps {
 	};
 }
 
+/**
+ * The mobile tab bar. Its links are URL-scoped exactly like the topbar (§8): the
+ * org (and repo) in the URL decide the tree. Without an org there is nothing to
+ * scope, so it renders nothing rather than a set of unprefixed links that bounce
+ * through the login redirect. `md:hidden` on the nav itself so it leaves no ghost
+ * row on desktop.
+ */
 export function MobileFooter({ counts }: MobileFooterProps) {
+	const params = useParams({ strict: false });
+	const org = params.org;
+	const repo = params.repo;
+	if (!org) {
+		return null;
+	}
 	return (
-		<nav className="flex min-w-0 items-center gap-3 px-3 pb-4 justify-between">
-			<div className="flex shrink-0 items-center justify-center gap-0.5 md:hidden w-full">
-				<NavLink to="/" label="Queue" icon={Queue01Icon} value={counts.queue} />
-				<NavLink to="/activity" label="Activity" icon={ActivityIcon} />
-				<NavLink to="/rules" label="Rules" icon={CheckListIcon} />
-				<NavLink to="/workflows" label="Workflows" icon={FlowIcon} />
-				<NavLink
-					to="/analytics"
-					label="Analytics"
-					icon={Analytics01Icon}
-					exact={false}
-				/>
+		<nav className="flex min-w-0 items-center justify-between gap-3 px-3 pb-4 md:hidden">
+			<div className="flex w-full shrink-0 items-center justify-center gap-0.5">
+				{repo ? (
+					<>
+						<NavLink
+							to={`/${org}/${repo}/moderation`}
+							label="Moderation"
+							icon={Queue01Icon}
+							value={counts.queue}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/activity`}
+							label="Activity"
+							icon={ActivityIcon}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/rules`}
+							label="Rules"
+							icon={CheckListIcon}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/workflows`}
+							label="Workflows"
+							icon={FlowIcon}
+						/>
+						<NavLink
+							to={`/${org}/${repo}/analytics`}
+							label="Analytics"
+							icon={Analytics01Icon}
+							exact={false}
+						/>
+					</>
+				) : (
+					<>
+						<NavLink to={`/${org}/home`} label="Home" icon={Home01Icon} />
+						<NavLink
+							to={`/${org}/analytics`}
+							label="Analytics"
+							icon={Analytics01Icon}
+							exact={false}
+						/>
+						<NavLink
+							to={`/${org}/settings/members`}
+							label="Settings"
+							icon={Settings01Icon}
+							exact={false}
+						/>
+					</>
+				)}
 			</div>
 		</nav>
 	);

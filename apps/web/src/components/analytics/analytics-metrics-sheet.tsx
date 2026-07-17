@@ -26,7 +26,7 @@ export function AnalyticsMetricsSheet({
 	open,
 	onOpenChange,
 	metricCount,
-	openLabel = "Show Metrics",
+	openLabel = "show metrics",
 	closeLabel = "Close Metrics",
 	children,
 }: {

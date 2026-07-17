@@ -17,7 +17,7 @@ export function moderationMetrics(stats: ModStats): AnalyticsMetric[] {
 	return [
 		{
 			key: "review",
-			label: "Sent to review",
+			label: "sent to review",
 			color: "orange",
 			series: stats.sentToReview.series,
 			delta: stats.sentToReview.delta,

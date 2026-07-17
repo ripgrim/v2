@@ -45,7 +45,10 @@ export const Route = createRootRouteWithContext<{
 			// carve-out that fed it) is gone: signed-out means /login, never a
 			// surprise persona. Dev personas stay opt-in — the panel on /login
 			// and the floating switcher POST /api/dev/login directly.
-			throw redirect({ to: "/login" });
+			// Carry the destination so OAuth returns here, not the default page —
+			// "View on Tripwire" links and every shared deep link depend on it
+			// (login validates it as a same-site path and feeds it to callbackURL).
+			throw redirect({ to: "/login", search: { redirect: location.href } });
 		}
 		if (!session.user) {
 			return;
@@ -94,7 +97,12 @@ export const Route = createRootRouteWithContext<{
 			{ title: siteConfig.defaultTitle },
 			{ name: "description", content: siteConfig.defaultDescription },
 		],
-		links: [{ rel: "stylesheet", href: appCss }],
+		links: [
+			{ rel: "stylesheet", href: appCss },
+			// Global favicon so every page (signed-out login included) shows the mark,
+			// not the browser's generic globe. SVG favicon, modern browsers only.
+			{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+		],
 	}),
 	component: RootComponent,
 	shellComponent: RootDocument,

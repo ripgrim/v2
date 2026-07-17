@@ -39,6 +39,36 @@ const authRequestMiddleware = createMiddleware({ type: "request" }).server(
 	},
 );
 
+/**
+ * Baseline security + cache headers on every response (§launch hardening). The
+ * login page was iframeable (clickjacking) — `frame-ancestors 'none'` +
+ * `X-Frame-Options: DENY` close that. HTML is served `no-cache` so a
+ * heuristically-cached shell can't reference purged asset hashes after a deploy
+ * and white-screen; hashed assets stay immutable via their own filenames.
+ */
+const securityHeadersMiddleware = createMiddleware({ type: "request" }).server(
+	async ({ next }) => {
+		const response = (await next()) as unknown as Response;
+		if (response && typeof response.headers?.set === "function") {
+			const h = response.headers;
+			h.set("X-Content-Type-Options", "nosniff");
+			h.set("X-Frame-Options", "DENY");
+			h.set("Content-Security-Policy", "frame-ancestors 'none'");
+			h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+			if (import.meta.env.PROD) {
+				h.set(
+					"Strict-Transport-Security",
+					"max-age=63072000; includeSubDomains; preload",
+				);
+			}
+			if ((h.get("content-type") ?? "").includes("text/html")) {
+				h.set("Cache-Control", "no-cache");
+			}
+		}
+		return response as never;
+	},
+);
+
 export const startInstance = createStart(() => ({
-	requestMiddleware: [authRequestMiddleware],
+	requestMiddleware: [securityHeadersMiddleware, authRequestMiddleware],
 }));

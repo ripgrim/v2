@@ -8,6 +8,7 @@
 	},
 	"types": "./src/index.ts",
 	"scripts": {
+		"dev": "bun --env-file=../../.env --watch src/index.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

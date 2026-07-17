@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { workflowDefinitionSchema } from "@tripwire/contracts";
+import { workflowDefinitionSchema, type WorkflowDefinition } from "@tripwire/contracts";
 import type {
 	OrgWithRole,
 	SetEnabledResult,
@@ -71,7 +71,7 @@ export const createRepoWorkflow = createServerFn({ method: "POST" })
 				(context as { org: OrgWithRole }).org.id,
 				data.repoId,
 			);
-			let definition;
+			let definition: WorkflowDefinition | undefined;
 			if (data.definition !== undefined) {
 				const parsed = workflowDefinitionSchema.safeParse(data.definition);
 				if (!parsed.success) {

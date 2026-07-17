@@ -16,8 +16,8 @@ export interface WorkflowTemplate {
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
 	{
 		id: "block-new-accounts",
-		name: "Block new accounts",
-		description: "Blocks change requests from accounts younger than a week.",
+		name: "block new accounts",
+		description: "blocks change requests from accounts younger than a week.",
 		definition: {
 			version: 1,
 			nodes: [

@@ -1,4 +1,4 @@
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { Analytics01Icon, ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import NumberFlow from "@number-flow/react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import {
 	DitherStatCard,
 	type GoodDirection,
 } from "#/components/charts/dither-stat-card";
+import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { Button } from "#/components/ui/button";
 import { hoursAgo, moderationMetrics } from "#/lib/analytics";
@@ -50,6 +51,13 @@ export function AnalyticsPage() {
 		analyticsActivityQueryOptions(org, repo, focusedMetric?.key ?? "pending"),
 	);
 	const events = activity.data ?? [];
+
+	// A freshly-armed repo with no evaluated change requests has metric families
+	// but all-zero series — render an empty state, not a flat "broken-looking"
+	// chart (§9). Real data ⇒ any non-zero point, or any activity behind it.
+	const loading = moderationStats.isLoading;
+	const hasData =
+		metrics.some((m) => m.series.some((v) => v > 0)) || events.length > 0;
 
 	const len = focusedMetric?.series.length ?? 0;
 	// Committed point — what the readouts settle on (defaults to "now").
@@ -101,11 +109,15 @@ export function AnalyticsPage() {
 									size={14}
 									strokeWidth={2}
 								/>
-								Back to Moderation
+								back to moderation
 							</Link>
 						</Button>
 
-						{focusedMetric ? (
+						{loading ? (
+							<p className="py-16 text-center text-muted-foreground text-sm">
+								loading analytics…
+							</p>
+						) : hasData && focusedMetric ? (
 							<>
 								<header className="flex flex-col gap-1">
 									<span className="text-xs text-muted-foreground">
@@ -152,16 +164,18 @@ export function AnalyticsPage() {
 								<AnalyticsEvents events={events} focusedId={focusedEventId} />
 							</>
 						) : (
-							<p className="py-16 text-center text-sm text-muted-foreground">
-								Loading analytics…
-							</p>
+							<EmptyState
+								icon={Analytics01Icon}
+								title="no analytics yet"
+								description="once change requests are evaluated on this repo, their outcomes and trends show up here."
+							/>
 						)}
 					</div>
 				</div>
 
 				{/* Clean gradient dissolve so content fades into the surface under
 				    the tab instead of hard-cutting. Hidden while the sheet is open. */}
-				{focusedMetric && !showMetrics ? (
+				{hasData && focusedMetric && !showMetrics ? (
 					<div
 						aria-hidden
 						className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-card via-card/90 to-transparent"
@@ -169,7 +183,7 @@ export function AnalyticsPage() {
 				) : null}
 
 				{/* Metrics — a full-width sheet that rises from the bottom. */}
-				{focusedMetric ? (
+				{hasData && focusedMetric ? (
 					<AnalyticsMetricsSheet
 						open={showMetrics}
 						onOpenChange={setShowMetrics}

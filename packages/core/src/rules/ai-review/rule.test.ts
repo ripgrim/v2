@@ -228,8 +228,6 @@ describe("ai-review@2 (version-pinned)", () => {
 			await fixtureContext({ generate: v1.generate }),
 			CONFIG,
 		);
-		expect(v1.calls[0]?.instructions).not.toContain(
-			"wrap code identifiers",
-		);
+		expect(v1.calls[0]?.instructions).not.toContain("wrap code identifiers");
 	});
 });

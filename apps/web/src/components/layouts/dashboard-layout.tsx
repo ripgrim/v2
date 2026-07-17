@@ -18,6 +18,7 @@ import {
 } from "./dashboard-side-panel";
 import { DashboardTopbar } from "./dashboard-topbar";
 import { MobileFooter } from "./mobile-footer";
+import { RouteProgress } from "./route-progress";
 
 interface DashboardLayoutProps {
 	counts: { queue?: number };
@@ -89,6 +90,7 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 		<FeedbackProvider config={feedbackConfig}>
 			<div className="isolate flex h-dvh flex-col bg-muted">
 				<DashboardTopbar user={user ?? null} counts={counts} />
+				<RouteProgress />
 
 				<motion.div
 					initial={false}

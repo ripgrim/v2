@@ -28,9 +28,19 @@ dev-only (compile-time excluded from production, refused for non-local hosts).
 ```
 bun run db:up          # postgres in docker
 bun run db:migrate     # apply migrations
-bun run dev:api        # api head  (:8787)
-bun run dev:worker     # worker (queue consumer)
-bun run dev            # web head  (:3000)
+bun run dev            # turbo: web (:3000) + api (:8787) + worker + cloudflared tunnel
+```
+
+`bun run dev` fans out through turbo — one interactive TUI, arrow keys switch
+between the web/api/worker/tunnel panes. The `tunnel` pane prints a
+`https://<random>.trycloudflare.com` URL routed to the api (:8787); point the
+GitHub App webhook at `<that-url>/webhooks/github` to receive local deliveries.
+
+```
+bun run dev:local      # same, minus the cloudflared tunnel (offline)
+bun run dev:web        # web head only (:3000)
+bun run dev:api        # api head only (:8787)
+bun run dev:worker     # worker only (queue consumer)
 ```
 
 Set `BETTER_AUTH_SECRET` to enable real GitHub sign-in and the auth gates; leave

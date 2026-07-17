@@ -49,7 +49,12 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 
 	return (
 		<nav className="flex min-w-0 items-center gap-3 px-3 py-2">
-			<div className="flex shrink-0 items-center gap-2 pl-1 pr-1">
+			{/* The logo goes home — expected behaviour even with a Home tab beside it. */}
+			<Link
+				to={org ? "/$org/home" : "/"}
+				params={org ? { org } : {}}
+				className="flex shrink-0 items-center gap-2 rounded-md pr-1 pl-1 transition-colors hover:bg-surface-0"
+			>
 				<TripwireWordmark className="text-foreground" height={15} width={24} />
 				<span
 					className="text-sm font-medium tracking-tight"
@@ -59,7 +64,7 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 				>
 					{siteConfig.name}
 				</span>
-			</div>
+			</Link>
 
 			<div className="hidden shrink-0 items-center gap-0.5 md:flex">
 				{org && repo ? (
@@ -67,7 +72,7 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 						<NavLink to={`/${org}/home`} label="Home" icon={Home01Icon} />
 						<NavLink
 							to={`/${org}/${repo}/moderation`}
-							label="Queue"
+							label="Moderation"
 							icon={Queue01Icon}
 							value={counts.queue}
 						/>
@@ -103,7 +108,7 @@ export function DashboardTopbar({ user, counts }: DashboardTopbarProps) {
 							exact={false}
 						/>
 						<NavLink
-							to={`/${org}/settings/members`}
+							to={`/${org}/settings`}
 							label="Settings"
 							icon={Settings01Icon}
 							exact={false}

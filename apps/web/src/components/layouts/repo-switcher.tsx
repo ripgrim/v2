@@ -301,7 +301,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 	if (currentOrg) {
 		navItems.push({
 			id: "nav:home",
-			label: "Home",
+			label: "home",
 			searchTags: ["home", "overview", "dashboard", "repos"],
 			icon: hugeicon(Home01Icon),
 			onSelect: () => go(`/${currentOrg}/home`),
@@ -310,35 +310,35 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			navItems.push(
 				{
 					id: "nav:moderation",
-					label: "Moderation",
+					label: "moderation",
 					searchTags: ["moderation", "queue", "review", "pending", "triage"],
 					icon: hugeicon(Queue01Icon),
 					onSelect: () => go(`/${currentOrg}/${currentRepo}/moderation`),
 				},
 				{
 					id: "nav:activity",
-					label: "Activity",
+					label: "activity",
 					searchTags: ["activity", "events", "runs", "feed", "stream"],
 					icon: hugeicon(ActivityIcon),
 					onSelect: () => go(`/${currentOrg}/${currentRepo}/activity`),
 				},
 				{
 					id: "nav:rules",
-					label: "Rules",
+					label: "rules",
 					searchTags: ["rules", "gate", "block", "checks", "gatekeeper"],
 					icon: hugeicon(CheckListIcon),
 					onSelect: () => go(`/${currentOrg}/${currentRepo}/rules`),
 				},
 				{
 					id: "nav:workflows",
-					label: "Workflows",
+					label: "workflows",
 					searchTags: ["workflows", "automation", "pipeline", "dag"],
 					icon: hugeicon(FlowIcon),
 					onSelect: () => go(`/${currentOrg}/${currentRepo}/workflows`),
 				},
 				{
 					id: "nav:analytics",
-					label: "Analytics",
+					label: "analytics",
 					searchTags: ["analytics", "stats", "charts", "trends"],
 					icon: hugeicon(Analytics01Icon),
 					onSelect: () => go(`/${currentOrg}/${currentRepo}/analytics`),
@@ -347,7 +347,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 		}
 		navItems.push({
 			id: "nav:settings",
-			label: "Settings",
+			label: "settings",
 			searchTags: ["settings", "members", "invites", "org", "admin"],
 			icon: hugeicon(Settings01Icon),
 			onSelect: () => go(`/${currentOrg}/settings/members`),

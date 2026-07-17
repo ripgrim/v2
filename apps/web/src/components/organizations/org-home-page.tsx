@@ -1,5 +1,12 @@
-import { GitBranchIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import {
+	ActivityIcon,
+	Analytics01Icon,
+	CheckListIcon,
+	FlowIcon,
+	GitBranchIcon,
+	Queue01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
@@ -143,41 +150,99 @@ function InstallCta({ org }: { org: string }) {
 }
 
 function RepoRow({ org, repo }: { org: string; repo: SwitcherRepo }) {
+	// The row links into the repo; armed repos also get direct shortcuts to the
+	// main features (§8) so they're reachable from the org home, not only after
+	// navigating into the repo. A container div holds both — nested links are not
+	// valid, so the repo link and the feature links are siblings.
 	return (
-		<Link
-			className="flex items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-surface-1"
-			params={{ org, repo: repo.name }}
-			to="/$org/$repo"
-		>
-			<HugeiconsIcon
-				className="shrink-0 text-muted-foreground"
-				icon={GitBranchIcon}
-				size={16}
-				strokeWidth={1.8}
-			/>
-			<div className="min-w-0 flex-1">
-				<div className="truncate font-medium text-sm">{repo.fullName}</div>
-				<div className="text-muted-foreground text-xs">
-					{repo.armed ? attentionLine(repo) : "available — not armed"}
-					{repo.lastActivityAt
-						? ` · ${formatRelativeTime(repo.lastActivityAt)}`
-						: null}
-				</div>
+		<div className="rounded-lg px-3 py-3 transition-colors hover:bg-surface-1">
+			<div className="flex items-center gap-3">
+				<HugeiconsIcon
+					className="shrink-0 text-muted-foreground"
+					icon={GitBranchIcon}
+					size={16}
+					strokeWidth={1.8}
+				/>
+				<Link
+					className="min-w-0 flex-1 text-left"
+					params={{ org, repo: repo.name }}
+					to="/$org/$repo"
+				>
+					<div className="truncate font-medium text-sm">{repo.fullName}</div>
+					<div className="text-muted-foreground text-xs">
+						{repo.armed ? attentionLine(repo) : "available — not armed"}
+						{repo.lastActivityAt
+							? ` · ${formatRelativeTime(repo.lastActivityAt)}`
+							: null}
+					</div>
+				</Link>
+				{repo.armed ? (
+					<div className="flex shrink-0 items-center gap-2">
+						{repo.pendingModeration > 0 ? (
+							<Chip tone="amber">{repo.pendingModeration} awaiting</Chip>
+						) : null}
+						{repo.blocked24h > 0 ? (
+							<Chip tone="red">{repo.blocked24h} blocked</Chip>
+						) : null}
+					</div>
+				) : (
+					<span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-muted-foreground text-xs">
+						not armed
+					</span>
+				)}
 			</div>
 			{repo.armed ? (
-				<div className="flex shrink-0 items-center gap-2">
-					{repo.pendingModeration > 0 ? (
-						<Chip tone="amber">{repo.pendingModeration} awaiting</Chip>
-					) : null}
-					{repo.blocked24h > 0 ? (
-						<Chip tone="red">{repo.blocked24h} blocked</Chip>
-					) : null}
+				<div className="mt-2.5 flex flex-wrap gap-1.5 pl-7">
+					<FeatureLink
+						to={`/${org}/${repo.name}/moderation`}
+						label="queue"
+						icon={Queue01Icon}
+					/>
+					<FeatureLink
+						to={`/${org}/${repo.name}/rules`}
+						label="rules"
+						icon={CheckListIcon}
+					/>
+					<FeatureLink
+						to={`/${org}/${repo.name}/workflows`}
+						label="workflows"
+						icon={FlowIcon}
+					/>
+					<FeatureLink
+						to={`/${org}/${repo.name}/activity`}
+						label="activity"
+						icon={ActivityIcon}
+					/>
+					<FeatureLink
+						to={`/${org}/${repo.name}/analytics`}
+						label="analytics"
+						icon={Analytics01Icon}
+					/>
 				</div>
-			) : (
-				<span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-muted-foreground text-xs">
-					not armed
-				</span>
-			)}
+			) : null}
+		</div>
+	);
+}
+
+/** A repo feature shortcut as an icon button — a consistent toolbar per row,
+ * so the actions read as buttons and don't repeat five labels down the list. */
+function FeatureLink({
+	to,
+	label,
+	icon,
+}: {
+	to: string;
+	label: string;
+	icon: IconSvgElement;
+}) {
+	return (
+		<Link
+			aria-label={label}
+			title={label}
+			className="flex size-8 items-center justify-center rounded-md border bg-surface-1 text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+			to={to}
+		>
+			<HugeiconsIcon icon={icon} size={15} strokeWidth={1.8} />
 		</Link>
 	);
 }

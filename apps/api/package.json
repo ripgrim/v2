@@ -8,6 +8,8 @@
 	},
 	"types": "./src/index.ts",
 	"scripts": {
+		"dev": "bun --env-file=../../.env --watch src/index.ts",
+		"tunnel": "cloudflared tunnel --url http://localhost:${API_PORT:-8787}",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

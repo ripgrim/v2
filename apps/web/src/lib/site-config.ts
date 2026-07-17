@@ -9,7 +9,7 @@ type SiteConfig = {
 
 export const siteConfig: SiteConfig = {
 	name: "tripwire",
-	tagline: "a firewall for your repo.",
+	tagline: "The firewall for your OSS projects",
 	themeColor: "#00C943",
 	githubRepositoryUrl: "https://github.com/normal-software-inc/tripwire",
 	defaultTitle: "tripwire | the open source firewall for git",

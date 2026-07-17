@@ -32,7 +32,6 @@ export function AiTraceDisclosure({ trace }: { trace: AiReviewTrace }) {
 				<ol className="flex flex-col gap-1.5">
 					{trace.steps.map((step, i) => (
 						<li
-							// biome-ignore lint/suspicious/noArrayIndexKey: fixed ordered trace
 							className="border-border/60 border-l-2 pl-2"
 							key={i}
 						>
@@ -41,7 +40,7 @@ export function AiTraceDisclosure({ trace }: { trace: AiReviewTrace }) {
 									? `tool: ${step.toolName ?? ""}`
 									: "reasoning"}
 							</span>
-							<pre className="mt-0.5 whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground/80">
+							<pre className="mt-0.5 whitespace-pre-wrap wrap-break-word font-mono text-[11px] text-muted-foreground/80">
 								{step.excerpt}
 								{step.truncated ? " …[truncated]" : ""}
 							</pre>

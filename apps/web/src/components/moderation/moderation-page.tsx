@@ -92,7 +92,7 @@ export function ModerationPage() {
 								delta={statsQuery.data.sentToReview.delta}
 								focused
 								goodDirection="down"
-								label="Sent to review"
+								label="sent to review"
 								onClick={() =>
 									document
 										.getElementById("moderation-queue")
