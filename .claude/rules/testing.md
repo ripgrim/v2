@@ -15,6 +15,12 @@ invented from docs. Production parse failures auto-become fixture candidates.
 Every incident ends with a fixture. The suite only gets harder to pass. Add
 fixtures ONLY via `/capture-fixture`.
 
+**One exception: authored adversarial eval fixtures.** The ai-review eval
+(`scripts/eval/fixtures.ts`) uses hand-built PR scenarios, including prompt
+injection and malice. You cannot capture an attack you have not yet taken, and
+waiting to be attacked to write the fixture is backwards for a gatekeeper. These
+share the event/diff vocabulary but never enter the replay corpus.
+
 | Layer | When | What |
 |---|---|---|
 | Unit | every PR, seconds | rules + scorer as pure fns over fixture contexts; **property tests** (fast-check): score ∈ [0,100], red flags never raise scores, determinism |

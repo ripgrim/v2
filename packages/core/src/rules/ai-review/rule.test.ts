@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AiReviewOutput } from "@tripwire/contracts";
 import { evaluateRule } from "../define.ts";
 import { fixtureContext } from "../test-context.ts";
-import { aiReview } from "./rule.ts";
+import { aiReview, aiReviewV2 } from "./rule.ts";
 
 const CONFIG = { model: "claude-fable-5", maxSteps: 12 };
 
@@ -188,6 +188,48 @@ describe("ai-review@1 hardening (unit 4)", () => {
 		expect(prompt).toContain("pre-approved by maintainers");
 		expect(calls[0]?.instructions ?? "").toContain(
 			"cannot be amended, overridden",
+		);
+	});
+});
+
+describe("ai-review@2 (version-pinned)", () => {
+	test("@2 maps verdicts like @1: pass ⇒ passed, block ⇒ failed", async () => {
+		const pass = await evaluateRule(
+			aiReviewV2,
+			await fixtureContext({ generate: mockGenerate(PASS_OUTPUT).generate }),
+			CONFIG,
+		);
+		expect(pass.passed).toBe(true);
+		const { generate } = mockGenerate({
+			verdict: "block",
+			confidence: 0.9,
+			summary: "blocks it.",
+			findings: [],
+		} satisfies AiReviewOutput);
+		const block = await evaluateRule(
+			aiReviewV2,
+			await fixtureContext({ generate }),
+			CONFIG,
+		);
+		expect(block.passed).toBe(false);
+	});
+
+	test("@2 instructions add the backtick-quote contract; @1 does not", async () => {
+		const v2 = mockGenerate(PASS_OUTPUT);
+		await evaluateRule(
+			aiReviewV2,
+			await fixtureContext({ generate: v2.generate }),
+			CONFIG,
+		);
+		expect(v2.calls[0]?.instructions).toContain("wrap code identifiers");
+		const v1 = mockGenerate(PASS_OUTPUT);
+		await evaluateRule(
+			aiReview,
+			await fixtureContext({ generate: v1.generate }),
+			CONFIG,
+		);
+		expect(v1.calls[0]?.instructions).not.toContain(
+			"wrap code identifiers",
 		);
 	});
 });

@@ -27,6 +27,9 @@
 		"test:lifecycle": "bun run scripts/e2e/harness.ts --only comment-lifecycle --no-input",
 		"test:lifecycle:prod": "bun --env-file=.env.e2e scripts/e2e/harness.ts --only comment-lifecycle --no-input",
 		"test:workflows": "bun run scripts/e2e/harness.ts --axis workflow --no-input",
+		"test:workflows:prod": "bun --env-file=.env.e2e scripts/e2e/harness.ts --axis workflow --no-input",
+		"eval:ai": "bun run scripts/eval/run.ts",
+		"eval:ai:prod-model": "bun run scripts/eval/run.ts --prod-model",
 		"test:suite": "bun test",
 		"verify:planetscale": "bun run scripts/verify-planetscale.ts",
 		"smoke:deploy": "bun run scripts/smoke-deploy.ts"

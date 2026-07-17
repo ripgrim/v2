@@ -2646,3 +2646,29 @@ role-gating pieces.
 - **Opt-in "enable" offer preserved as a distinct state** — an opt-in-off rule
   (ai-review) shows a primary "enable" button (not a symmetric toggle) with the
   "costs tokens" framing in the body: the COGS gate stays a considered click.
+
+## ai-review reasoning trace bounded + displayed (2026-07-17, §8)
+
+The ai-review trace (model steps, tool calls, token usage) was ALREADY persisted
+to `run_steps` evidence, gated maintainer-only (publicEvidence strips it). It was
+also UNBOUNDED: a looping or hostile model could write 100 KB+ of attacker-
+influenced text per review. This bounds it at the source and adds the display.
+
+- **Bounded at the source.** `boundAiReviewTrace` (contracts) caps each step
+  excerpt at 2000 chars and the display list at 15 steps, marking `truncated`
+  and `trimmed` (never silent). `generate.ts` emits the bounded shape. Verdict,
+  findings schema, and bot copy are unchanged (additive evidence only).
+- **Caps.** 2000 chars/step, 15 steps ~= 31 KB/review worst case. At ~4,000
+  PRs/mo (expected launch, AI on all) ~= 125 MB/mo, ~80 months on PlanetScale's
+  10 GB tier. Trivial; no retention window. The bound's value is capping the
+  unbounded worst case, not saving routine bytes.
+- **Display.** `AiTraceDisclosure`, maintainer-only, inside `rule-evidence.tsx`
+  behind the existing public/maintainer gate. Excerpts render as escaped plain
+  text (attacker-influenced) in the operator-ref mono register. Version pin comes
+  from the run step's ruleId (`ai-review@2`), not duplicated in the trace.
+
+WAS-UNBOUNDED HISTORY: runs written before 2026-07-17 may carry large ai-review
+trace blobs in `run_steps` evidence (old shape fails `aiReviewTraceSchema`, so the
+new display renders nothing for them). If a storage audit finds fat jsonb rows,
+that is the cause. A one-off cleanup query to null out pre-cutover oversized
+traces is available if needed; not required at current volumes.

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { Asserter } from "./assert.ts";
 import type { HarnessConfig } from "./config.ts";
 import { GitHub, type PushTarget } from "./github.ts";
+import { setActiveCleanup } from "./interrupt.ts";
 import { pinRules, restoreRules } from "./rule-configs.ts";
 import type {
 	ActorMode,
@@ -199,6 +200,32 @@ export async function runScenario(
 	let restore: (() => Promise<void>) | null = null;
 	let startAccount: string | null = null;
 
+	// Single teardown, run once, shared by the normal `finally` and a Ctrl-C
+	// (via the interrupt registry) so an interrupted run still closes its PR and
+	// restores the pinned config rather than leaking them on the sacrificial repo.
+	let torn = false;
+	const teardown = async (): Promise<void> => {
+		if (torn) {
+			return;
+		}
+		torn = true;
+		if (restore) {
+			await restore().catch((error) =>
+				hooks.log(`failed to restore rule_configs: ${String(error)}`),
+			);
+		}
+		if (!options.keep) {
+			await gh.cleanup().catch(() => undefined);
+		}
+		if (startAccount) {
+			await gh.as(startAccount).catch(() => undefined);
+		}
+		if (pool) {
+			await pool.end().catch(() => undefined);
+		}
+	};
+	setActiveCleanup(teardown);
+
 	try {
 		if (scenario.needs?.db && config.databaseUrl) {
 			({ db, pool } = createDb(config.databaseUrl));
@@ -293,19 +320,7 @@ export async function runScenario(
 			error: error instanceof Error ? error.message : String(error),
 		};
 	} finally {
-		if (restore) {
-			await restore().catch((error) =>
-				hooks.log(`failed to restore rule_configs: ${String(error)}`),
-			);
-		}
-		if (!options.keep) {
-			await gh.cleanup().catch(() => undefined);
-		}
-		if (startAccount) {
-			await gh.as(startAccount).catch(() => undefined);
-		}
-		if (pool) {
-			await pool.end().catch(() => undefined);
-		}
+		await teardown();
+		setActiveCleanup(null);
 	}
 }

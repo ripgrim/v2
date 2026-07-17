@@ -19,11 +19,12 @@ import type { Logger } from "pino";
  * rows FIRST (§5.12) and marked executed after.
  */
 
-const VERDICT_TO_CONCLUSION: Record<Verdict, CheckState["conclusion"]> = {
-	pass: "success",
-	block: "failure",
-	needs_review: "neutral",
-};
+export const VERDICT_TO_CONCLUSION: Record<Verdict, CheckState["conclusion"]> =
+	{
+		pass: "success",
+		block: "failure",
+		needs_review: "neutral",
+	};
 
 export interface PrSurfaceDeps {
 	db: Db;

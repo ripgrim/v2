@@ -49,6 +49,23 @@ export function worstVerdict(verdicts: Verdict[]): Verdict {
 	);
 }
 
+/**
+ * The fail-closed floor predicate (§6): a would-be PASS whose evaluation is
+ * mostly guesswork must not silently wave through. One skipped rule still passes
+ * (a flaky read can't block a human), but skipped rules at OR above 50% of the
+ * active rule nodes routes the run to moderation instead. Pure so both sides of
+ * the 50% line are unit-testable without a live run. Only escalates a `pass`.
+ */
+export function isRunDegraded(
+	ruleNodeCount: number,
+	skippedCount: number,
+	verdict: Verdict,
+): boolean {
+	return (
+		ruleNodeCount > 0 && skippedCount * 2 >= ruleNodeCount && verdict === "pass"
+	);
+}
+
 function skippedResult(ref: string, reason: string, now: string): RuleResult {
 	const [id, version] = ref.split("@");
 	return {
@@ -246,10 +263,7 @@ export async function runWorkflows(
 	const skippedCount = ruleSteps0.filter(
 		(step) => step.status === "skipped",
 	).length;
-	const degraded =
-		ruleSteps0.length > 0 &&
-		skippedCount * 2 >= ruleSteps0.length &&
-		verdict === "pass";
+	const degraded = isRunDegraded(ruleSteps0.length, skippedCount, verdict);
 	if (degraded) {
 		verdict = "needs_review";
 		paused = true;

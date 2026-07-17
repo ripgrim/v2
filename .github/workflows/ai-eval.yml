@@ -1,0 +1,64 @@
+name: ai-review eval
+
+# On-demand only. Evals cost money (live model calls); the prod smoke opens a
+# real PR on the sacrificial repo. NEVER on push/PR. Layer-1 plumbing tests run
+# in ci.yml with the normal suite.
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: which lane to run
+        type: choice
+        default: eval-cheap
+        options:
+          - eval-cheap
+          - eval-prod-model
+          - prod-smoke
+  # Nightly runs the cheap eval only (~$0.30). The prod smoke is never scheduled.
+  schedule:
+    - cron: "0 7 * * *"
+
+jobs:
+  eval:
+    if: github.event_name == 'schedule' || startsWith(github.event.inputs.lane, 'eval')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Run eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.lane }}" = "eval-prod-model" ]; then
+            bun run eval:ai:prod-model || true
+          else
+            bun run eval:ai || true
+          fi
+      - name: Scorecard to job summary
+        run: |
+          latest=$(ls -t scripts/eval/scorecards/*.json | head -1)
+          echo "## ai-review eval scorecard" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "$latest" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-eval-scorecard
+          path: scripts/eval/scorecards/*.json
+
+  prod-smoke:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'prod-smoke'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Prod smoke (one PR on scratch, auto-cleaned)
+        env:
+          GH_TOKEN: ${{ secrets.SMOKE_GH_TOKEN }}
+        run: bun run scripts/eval/prod-smoke.ts

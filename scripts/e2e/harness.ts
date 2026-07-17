@@ -3,6 +3,7 @@ import * as p from "@clack/prompts";
 import { Command } from "commander";
 import { createColors } from "picocolors";
 import { describeConfig, loadConfig } from "./lib/config.ts";
+import { runActiveCleanup } from "./lib/interrupt.ts";
 import {
 	type RunOutcome,
 	runScenario,
@@ -308,6 +309,7 @@ async function main(): Promise<void> {
 		only?: string;
 		expect?: string;
 		everything?: boolean;
+		axis?: string;
 		withHybrid?: boolean;
 		input: boolean;
 		json?: boolean;
@@ -323,11 +325,22 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	// Ctrl-C: clean exit. runScenario's own finally handles per-run cleanup; here
-	// we just acknowledge and leave (a mid-flight run's finally still fires).
+	// Ctrl-C: run the in-flight scenario's teardown (close its PR, restore pinned
+	// config) BEFORE exiting. A stuck poll won't unwind on its own, so we can't
+	// rely on the scenario's finally firing — we run its registered cleanup here.
+	// A second Ctrl-C gives up waiting and exits now.
+	let interrupting = false;
 	process.on("SIGINT", () => {
-		process.stdout.write("\n interrupted — cleaning up in-flight run…\n");
-		process.exitCode = 130;
+		if (interrupting) {
+			process.exit(130);
+		}
+		interrupting = true;
+		process.stdout.write(
+			"\n interrupted. closing the open PR and restoring config…\n",
+		);
+		void runActiveCleanup()
+			.catch(() => undefined)
+			.finally(() => process.exit(130));
 	});
 
 	if (opts.axis) {

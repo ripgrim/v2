@@ -1,9 +1,12 @@
 import {
 	type AiReviewOutput,
+	type AiReviewTrace,
 	aiReviewOutputSchema,
+	aiReviewTraceSchema,
 	ruleIdOf,
 } from "@tripwire/contracts";
 import { AiFindings } from "#/components/runs/ai-findings";
+import { AiTraceDisclosure } from "#/components/runs/ai-trace";
 import {
 	CryptoMatches,
 	FileRows,
@@ -37,6 +40,15 @@ function reviewOutput(inner: JsonValue): AiReviewOutput | null {
 		return null;
 	}
 	const parsed = aiReviewOutputSchema.safeParse(inner.output);
+	return parsed.success ? parsed.data : null;
+}
+
+/** The bounded trace, if present. Old unbounded traces fail the schema ⇒ null. */
+function reviewTrace(inner: JsonValue): AiReviewTrace | null {
+	if (!isRecord(inner) || !("trace" in inner)) {
+		return null;
+	}
+	const parsed = aiReviewTraceSchema.safeParse(inner.trace);
 	return parsed.success ? parsed.data : null;
 }
 
@@ -74,6 +86,10 @@ export function RuleEvidence({
 }) {
 	const inner = innerEvidence(step.evidence);
 	const ruleId = step.ruleRef ? ruleIdOf(step.ruleRef) : null;
+	// Maintainer-only: the bounded reasoning trace (§8). Public view has no trace
+	// (publicEvidence strips it), so this is null there and renders nothing.
+	const trace =
+		ruleId === "ai-review" && maintainer ? reviewTrace(inner) : null;
 
 	let detail: React.ReactNode = null;
 	if (ruleId === "ai-review") {
@@ -95,6 +111,7 @@ export function RuleEvidence({
 	return (
 		<>
 			{detail}
+			{trace ? <AiTraceDisclosure trace={trace} /> : null}
 			{maintainer ? <RawDisclosure evidence={inner} /> : null}
 		</>
 	);

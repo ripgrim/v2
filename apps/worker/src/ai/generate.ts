@@ -1,6 +1,6 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { RepoScopedEvent } from "@tripwire/contracts";
-import { aiReviewOutputSchema } from "@tripwire/contracts";
+import { aiReviewOutputSchema, boundAiReviewTrace } from "@tripwire/contracts";
 import type { AiReviewGenerate } from "@tripwire/core";
 import { generateText, hasToolCall, stepCountIs, tool } from "ai";
 import { z } from "zod";
@@ -78,11 +78,14 @@ export function createGenerate(options: {
 			},
 		});
 
+		// Bounded at the source (§8): the trace persists as gated evidence, so its
+		// size can't be dictated by attacker-influenced model output. Was unbounded.
 		return {
 			output: review,
-			trace: {
+			trace: boundAiReviewTrace({
 				model: resolvedModel,
-				steps: result.steps.map((step) => ({
+				maxSteps,
+				rawSteps: result.steps.map((step) => ({
 					text: step.text,
 					toolCalls: step.toolCalls.map((call) => ({
 						toolName: call.toolName,
@@ -90,8 +93,7 @@ export function createGenerate(options: {
 					})),
 				})),
 				usage: result.usage,
-				finishReason: result.finishReason,
-			},
+			}),
 		};
 	};
 }
