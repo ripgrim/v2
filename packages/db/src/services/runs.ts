@@ -85,7 +85,28 @@ export async function finalizeRun(
 		.where(eq(runs.id, runId));
 }
 
-/** Mark a queued re-run as actively evaluating (worker claimed it). */
+/**
+ * Claim a pre-materialized re-run: set status running and pin the real
+ * snapshot (planned rule list) so the run page can show the queue while
+ * steps stream in.
+ */
+export async function beginRunEvaluation(
+	db: Db,
+	runId: string,
+	input: { snapshot: WorkflowDefinition[]; headSha: string | null },
+): Promise<void> {
+	const snapshot = snapshotSchema.parse(input.snapshot);
+	await db
+		.update(runs)
+		.set({
+			status: "running",
+			workflowSnapshot: snapshot,
+			headSha: input.headSha,
+		})
+		.where(eq(runs.id, runId));
+}
+
+/** @deprecated Prefer beginRunEvaluation (writes snapshot + head). */
 export async function markRunRunning(db: Db, runId: string): Promise<void> {
 	await db
 		.update(runs)
