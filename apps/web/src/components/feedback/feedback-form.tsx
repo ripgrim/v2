@@ -5,6 +5,7 @@ import { DitherGradient } from "#/components/charts/dither-kit";
 import { Button } from "#/components/ui/button";
 import { submitFeedback } from "#/lib/feedback.functions";
 import { cn } from "#/lib/utils";
+import { captureViewport } from "./capture";
 import { toFeedbackElement, useFeedback } from "./feedback-context";
 
 type Status = "idle" | "sending" | "success" | "error";
@@ -16,34 +17,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 		reader.onerror = () => reject(new Error("failed to read screenshot"));
 		reader.readAsDataURL(blob);
 	});
-}
-
-/** Capture the current viewport (best-effort; a failure just drops the shot). */
-async function captureViewport(): Promise<Blob | null> {
-	try {
-		const html2canvas = (await import("html2canvas-pro")).default;
-		const canvas = await html2canvas(document.body, {
-			logging: false,
-			width: window.innerWidth,
-			height: window.innerHeight,
-			scrollX: -window.scrollX,
-			scrollY: -window.scrollY,
-			windowWidth: window.innerWidth,
-			windowHeight: window.innerHeight,
-			onclone: (doc) => {
-				for (const el of doc.querySelectorAll<HTMLElement>(
-					'[data-privacy="masked"]',
-				)) {
-					el.style.filter = "blur(10px)";
-				}
-			},
-		});
-		return await new Promise<Blob | null>((resolve) =>
-			canvas.toBlob((b) => resolve(b), "image/png"),
-		);
-	} catch {
-		return null;
-	}
 }
 
 export function FeedbackForm({ onSuccess }: { onSuccess?: () => void }) {

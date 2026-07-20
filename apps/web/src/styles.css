@@ -78,6 +78,7 @@
 	--surface-1: oklch(0.967 0.001 286.375);
 	--surface-0: oklch(0.945 0.002 286.375);
 	--surface-2: oklch(0.925 0.003 286.375);
+	--surface-skeleton: oklch(0.905 0.003 286.375);
 	--brand: oklch(63.7% 0.167 254deg);
 	--brand-dev: oklch(0.75 0.17 85);
 }
@@ -119,6 +120,7 @@
 	--surface-0: oklch(0.21 0.006 286.033);
 	--surface-1: oklch(0.245 0.006 286.033);
 	--surface-2: oklch(0.28 0.006 286.033);
+	--surface-skeleton: oklch(0.3 0.006 286.033);
 	--brand: oklch(63.7% 0.167 254deg);
 	--brand-dev: oklch(0.8 0.17 85);
 }
@@ -164,6 +166,7 @@
 	--color-surface-0: var(--surface-0);
 	--color-surface-1: var(--surface-1);
 	--color-surface-2: var(--surface-2);
+	--color-surface-skeleton: var(--surface-skeleton);
 	--color-brand: var(--brand);
 	--color-brand-dev: var(--brand-dev);
 }

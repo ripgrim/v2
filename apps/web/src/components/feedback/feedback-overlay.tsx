@@ -2,6 +2,7 @@ import { getDisplayName, getFiberFromHostInstance, traverseFiber } from "bippy";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { freeze, getElementContext, unfreeze } from "react-grab/primitives";
+import { captureViewport } from "./capture";
 import type { ReactGrabElementContext } from "./feedback-context";
 import { useFeedback } from "./feedback-context";
 
@@ -41,76 +42,14 @@ function getComponentName(element: Element): string | null {
 	return name;
 }
 
-async function captureScreenshot(
+function captureSelection(
 	target: Element,
 	componentName: string | null,
 ): Promise<Blob | null> {
-	const overlayEl = document.getElementById("feedback-overlay-layer");
-	if (overlayEl) {
-		overlayEl.style.display = "none";
-	}
-	try {
-		const selectedRect = target.getBoundingClientRect();
-		const highlightLabel = componentName ?? target.tagName.toLowerCase();
-		const html2canvas = (await import("html2canvas-pro")).default;
-		const canvas = await html2canvas(document.body, {
-			logging: false,
-			width: window.innerWidth,
-			height: window.innerHeight,
-			scrollX: -window.scrollX,
-			scrollY: -window.scrollY,
-			windowWidth: window.innerWidth,
-			windowHeight: window.innerHeight,
-			onclone: (clonedDoc) => {
-				for (const el of clonedDoc.querySelectorAll<HTMLElement>(
-					'[data-privacy="masked"]',
-				)) {
-					el.style.filter = "blur(10px)";
-				}
-				const highlight = clonedDoc.createElement("div");
-				Object.assign(highlight.style, {
-					position: "fixed",
-					top: `${selectedRect.top}px`,
-					left: `${selectedRect.left}px`,
-					width: `${selectedRect.width}px`,
-					height: `${selectedRect.height}px`,
-					border: `2px solid ${ACCENT}`,
-					backgroundColor: "rgba(52, 166, 255, 0.08)",
-					borderRadius: "3px",
-					zIndex: "999999",
-					pointerEvents: "none",
-				});
-				clonedDoc.body.appendChild(highlight);
-				const label = clonedDoc.createElement("div");
-				Object.assign(label.style, {
-					position: "fixed",
-					top: `${Math.max(selectedRect.top - 24, 4)}px`,
-					left: `${selectedRect.left}px`,
-					backgroundColor: ACCENT,
-					color: "#ffffff",
-					fontSize: "11px",
-					fontFamily: "ui-monospace, monospace",
-					fontWeight: "500",
-					padding: "2px 6px",
-					borderRadius: "3px",
-					zIndex: "999999",
-					pointerEvents: "none",
-					whiteSpace: "nowrap",
-				});
-				label.textContent = highlightLabel;
-				clonedDoc.body.appendChild(label);
-			},
-		});
-		return await new Promise<Blob | null>((resolve) =>
-			canvas.toBlob((b) => resolve(b), "image/png"),
-		);
-	} catch {
-		return null;
-	} finally {
-		if (overlayEl) {
-			overlayEl.style.display = "";
-		}
-	}
+	return captureViewport({
+		rect: target.getBoundingClientRect(),
+		label: componentName ?? target.tagName.toLowerCase(),
+	});
 }
 
 export function FeedbackOverlay() {
@@ -200,7 +139,7 @@ export function FeedbackOverlay() {
 				unfreeze();
 				selectElementRef.current(context, null);
 				setIsResolving(false);
-				captureScreenshot(target, componentName).then((blob) => {
+				captureSelection(target, componentName).then((blob) => {
 					if (blob && !cancelledRef.current) {
 						setScreenshotRef.current(blob);
 					}
@@ -243,6 +182,7 @@ export function FeedbackOverlay() {
 		<div
 			className="fixed inset-0 z-[9998] cursor-crosshair bg-black/10"
 			data-feedback-ignore
+			data-screenshot-ignore
 			id="feedback-overlay-layer"
 		>
 			<div className="-translate-x-1/2 absolute top-4 left-1/2 rounded-full border bg-popover px-4 py-2 font-medium text-foreground text-sm shadow-lg">

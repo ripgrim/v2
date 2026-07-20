@@ -90,6 +90,7 @@ three. Blank cells = the service does not read the var.
 | `GITHUB_WEBHOOK_SECRET`      |     | ✅  | ✅     | S      | `openssl rand -hex 32`; same value in the App's webhook settings. api verifies; worker parses. |
 | `GITHUB_APP_SLUG`            | ✅  |     |        |        | `github.com/apps/<slug>` — builds the install URL on /onboarding.     |
 | `OPENROUTER_API_KEY`         |     |     | ✅     | S      | ai-review. Unset ⇒ ai-review skips (counts toward degradation floor). |
+| `FEEDBACK_WEBHOOK_URL`       | ✅  |     |        | S      | Discord webhook for in-app feedback. Unset ⇒ feedback is DROPPED (server logs a warn). |
 | `AI_REVIEW_MODEL`            |     |     | ✅     |        | Default OpenRouter slug; explicit rule config wins.                   |
 | `PORT`                       | ✅  | ✅  | ✅     |        | **Injected by Railway.** Do not set it yourself.                      |
 
@@ -152,7 +153,7 @@ do not deploy.** The polling fallback is a spec decision, not a default.
 #    - pooled  → DATABASE_URL
 #    - direct  → DATABASE_URL_DIRECT
 # 2. Run migrations against the pooled URL from the repo root:
-DATABASE_URL='<planetscale-pooled-url>' bun run db:migrate
+bun run db:migrate:prod   # reads .env.production (never auto-loaded by the dev stack)
 #    → "migrations applied". This installs the drizzle schema. pg-boss installs
 #      its own schema on first boss.start() (api/worker boot, or verify below).
 ```

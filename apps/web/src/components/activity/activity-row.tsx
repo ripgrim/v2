@@ -115,6 +115,7 @@ export function ActivityRow({
 			<img
 				alt={event.actor.login}
 				className="size-5 shrink-0 rounded-full"
+				crossOrigin="anonymous"
 				src={
 					event.actor.avatarUrl ?? `https://github.com/${event.actor.login}.png`
 				}

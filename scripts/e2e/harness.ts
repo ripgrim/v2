@@ -149,11 +149,11 @@ async function runOne(
 	});
 	const report = writeRunReport(scenario, outcome, startedAt);
 	spinner?.stop(
-		`${scenario.name} — ${outcome.status}${report ? ` (report: ${report.replace(process.cwd() + "/", "")})` : ""}`,
+		`${scenario.name} — ${outcome.status}${report ? ` (report: ${report.replace(`${process.cwd()}/`, "")})` : ""}`,
 	);
 	if (!spinner && report) {
 		process.stdout.write(
-			`report: ${report.replace(process.cwd() + "/", "")}\n`,
+			`report: ${report.replace(`${process.cwd()}/`, "")}\n`,
 		);
 	}
 	return outcome;

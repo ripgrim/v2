@@ -1,5 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import { workflowDefinitionSchema, type WorkflowDefinition } from "@tripwire/contracts";
+import {
+	type WorkflowDefinition,
+	workflowDefinitionSchema,
+} from "@tripwire/contracts";
 import type {
 	OrgWithRole,
 	SetEnabledResult,

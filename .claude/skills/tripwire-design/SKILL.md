@@ -16,6 +16,9 @@ Semantic surface + text tokens, resolved per theme via CSS variables:
   `ring`, `container`.
 - Elevation ladder: `surface-0` < `surface-1` < `surface-2` (subtle stepped
   greys; `surface-0` is the lowest card, `surface-2` the raised one).
+  `surface-skeleton` sits one step past `surface-2` — the ONLY fill for
+  loading-skeleton blocks (the `Skeleton` primitive uses it; never hand-pick a
+  skeleton grey).
 - Intent: `primary` / `primary-foreground`, `secondary`, `muted` /
   `muted-foreground` (the workhorse for de-emphasized text), `accent`,
   `destructive`.
@@ -30,9 +33,10 @@ Semantic surface + text tokens, resolved per theme via CSS variables:
   pink, orange, red, grey) — pick from it, don't add hues.
 
 ## Typography
-- Families: `--font-sans` = Geist Variable → Inter → system; `--font-mono` =
-  Geist Mono Variable; `--font-pixel` = Silkscreen; `--font-pixel-geist` = Geist
-  Pixel (display face, dither-kit docs only).
+- Families: `--font-sans` = Geist Variable → system; `--font-mono` = Geist
+  Mono Variable; `--font-pixel-geist` = Geist Pixel (display face, dither-kit
+  docs only). Inter and Silkscreen were dropped in the 2026-07-19 perf pass —
+  do not reintroduce font families.
 - **Base body is small and calm:** `body` is `13px`, `font-weight: 450`. Mono/
   code get `letter-spacing: -0.02em`, weight `450`.
 - Type scale (`--text-*`, rem + tuned line-heights): `sm .875/1.45`,

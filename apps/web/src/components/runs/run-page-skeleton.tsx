@@ -1,33 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
+import { Skeleton } from "#/components/ui/skeleton";
 import { currentUserQueryOptions } from "#/lib/auth.query";
 
+const STEP_SLOTS = [
+	{ key: "a", line: "w-40" },
+	{ key: "b", line: "w-56" },
+	{ key: "c", line: "w-32" },
+	{ key: "d", line: "w-48" },
+	{ key: "e", line: "w-36" },
+	{ key: "f", line: "w-52" },
+];
+
 function RunSkeletonBody() {
-	// Mirrors RunBody: a header + a "steps" list, on the surface the shell owns.
 	return (
 		<div className="mx-auto w-full max-w-3xl px-6 py-8">
 			<header className="mb-6">
-				<div className="h-8 w-40 animate-pulse rounded-md bg-surface-1" />
-				<div className="mt-2 h-4 w-64 animate-pulse rounded-md bg-surface-1" />
+				<div className="flex items-center gap-3">
+					<Skeleton className="h-6 w-16" />
+					<Skeleton className="h-5 w-16 rounded-full" />
+				</div>
+				<Skeleton className="mt-2 h-4 w-64" />
 			</header>
-			<div className="overflow-hidden rounded-xl border bg-card">
-				<div className="h-9 animate-pulse bg-surface-1" />
-				{Array.from({ length: 6 }, (_, i) => `run-skel-${i}`).map((key) => (
-					<div className="px-4 py-3.5" key={key}>
-						<div className="h-4 w-1/2 animate-pulse rounded bg-surface-1" />
+			<section className="overflow-hidden rounded-xl border bg-card">
+				<div className="bg-surface-1 px-4 py-2.5">
+					<Skeleton className="h-3 w-10" />
+				</div>
+				{STEP_SLOTS.map((slot) => (
+					<div className="flex items-center gap-3 px-4 py-3" key={slot.key}>
+						<Skeleton className="size-2 shrink-0 rounded-full" />
+						<span className="flex min-w-0 flex-1 items-center">
+							<Skeleton className={`h-4 ${slot.line}`} />
+						</span>
+						<Skeleton className="h-5 w-14 shrink-0 rounded-full" />
 					</div>
 				))}
-			</div>
+			</section>
 		</div>
 	);
 }
 
 export function RunPageSkeleton() {
-	// The run page is dual-mode (§10): maintainers get the dashboard shell, public
-	// viewers get a chromeless page. Branch the skeleton on session so neither
-	// flashes the wrong frame — a signed-in maintainer's currentUser query is
-	// already cached (chrome up front), a logged-out visitor resolves to null
-	// (bare page, no chrome to flash away).
 	const { data: user } = useQuery(currentUserQueryOptions());
 	if (user) {
 		return (

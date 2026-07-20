@@ -57,7 +57,12 @@ export function AccessPendingScreen({
 
 				<div className="flex items-center gap-2 text-[12px] text-muted-foreground">
 					{image ? (
-						<img src={image} alt="" className="size-5 rounded-full" />
+						<img
+							alt=""
+							className="size-5 rounded-full"
+							crossOrigin="anonymous"
+							src={image}
+						/>
 					) : null}
 					{email ? <span>{email}</span> : null}
 					<span className="text-muted-foreground/60">·</span>

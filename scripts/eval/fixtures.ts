@@ -103,6 +103,7 @@ export const FIXTURES: EvalFixture[] = [
 				"export * from './db';\nexport * from './http';\nexport * from './cache';\n",
 			"src/config/cache.ts": "export const cache = { ttl: 60 };\n",
 			"src/server.ts":
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: fixture source content — the ${} belongs to the fixture's own template literal
 				"import { db, http } from './config';\n\nexport function start() {\n  console.log(`serving ${db.url} on ${http.port}`);\n}\n",
 		},
 		commits: [

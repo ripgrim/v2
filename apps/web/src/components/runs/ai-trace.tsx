@@ -31,10 +31,8 @@ export function AiTraceDisclosure({ trace }: { trace: AiReviewTrace }) {
 				) : null}
 				<ol className="flex flex-col gap-1.5">
 					{trace.steps.map((step, i) => (
-						<li
-							className="border-border/60 border-l-2 pl-2"
-							key={i}
-						>
+						// biome-ignore lint/suspicious/noArrayIndexKey: trace steps are a static, ordered, never-reordered snapshot
+						<li className="border-border/60 border-l-2 pl-2" key={i}>
 							<span className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
 								{step.type === "tool_call"
 									? `tool: ${step.toolName ?? ""}`

@@ -174,6 +174,7 @@ export function DitherAvatar({
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const bloomRef = useRef<HTMLCanvasElement>(null);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: replayToken/bloom intentionally re-trigger the paint without being read inside
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;

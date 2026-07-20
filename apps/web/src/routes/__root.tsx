@@ -106,7 +106,13 @@ export const Route = createRootRouteWithContext<{
 			{ rel: "stylesheet", href: appCss },
 			// Global favicon so every page (signed-out login included) shows the mark,
 			// not the browser's generic globe. SVG favicon, modern browsers only.
-			{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+			// White mark in prod; the green variant marks a dev tab at a glance
+			// (import.meta.env.DEV is compile-time, so prod builds bake the white one).
+			{
+				rel: "icon",
+				href: import.meta.env.DEV ? "/favicon.dev.svg" : "/favicon.svg",
+				type: "image/svg+xml",
+			},
 		],
 	}),
 	component: RootComponent,

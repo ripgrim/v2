@@ -1,5 +1,5 @@
-import type { RuleContext } from "@tripwire/core";
 import { describe, expect, test } from "bun:test";
+import type { RuleContext } from "@tripwire/core";
 import pino from "pino";
 import { isRunDegraded, makeEvaluator } from "./run-workflows.ts";
 

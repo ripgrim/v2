@@ -30,7 +30,11 @@ export function FeedbackDialog() {
 	}
 
 	return (
-		<div className="fixed inset-0 z-50" data-feedback-ignore>
+		<div
+			className="fixed inset-0 z-50"
+			data-feedback-ignore
+			data-screenshot-ignore
+		>
 			<button
 				aria-label="close feedback"
 				className="absolute inset-0 bg-background/60"
