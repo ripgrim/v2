@@ -47,6 +47,12 @@ export function createAuth(input: CreateAuthInput) {
 		}),
 		secret: input.secret,
 		baseURL: input.baseUrl,
+		session: {
+			cookieCache: {
+				enabled: true,
+				maxAge: 5 * 60,
+			},
+		},
 		// Dev persona switcher only — off unless the web head is a dev build.
 		emailAndPassword: { enabled: input.devLogin ?? false },
 		advanced: {

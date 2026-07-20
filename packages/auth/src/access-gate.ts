@@ -17,6 +17,10 @@ import { DATABUDDY_CLIENT_ID, FLAGS } from "./databuddy.ts";
  */
 const flags = createServerFlagsManager({ clientId: DATABUDDY_CLIENT_ID });
 
+const GATE_CACHE_TTL_MS = 60_000;
+const GATE_CACHE_MAX_ENTRIES = 10_000;
+const gateCache = new Map<string, { value: boolean; expiresAt: number }>();
+
 function isTruthy(value: string | undefined): boolean {
 	return value === "true" || value === "1";
 }
@@ -25,13 +29,24 @@ export async function isAccessGateEnabled(user?: {
 	userId?: string;
 	email?: string;
 }): Promise<boolean> {
+	const cacheKey = user?.userId ?? user?.email ?? "anonymous";
+	const cached = gateCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) {
+		return cached.value;
+	}
 	const envFallback = isTruthy(process.env.ACCESS_GATE_ENABLED);
+	let value: boolean;
 	try {
 		const flag = await flags.getFlag(FLAGS.accessGate, user);
-		return gateFromFlag(flag, envFallback);
+		value = gateFromFlag(flag, envFallback);
 	} catch {
-		return gateFromFlag(null, envFallback);
+		value = gateFromFlag(null, envFallback);
 	}
+	if (gateCache.size >= GATE_CACHE_MAX_ENTRIES) {
+		gateCache.clear();
+	}
+	gateCache.set(cacheKey, { value, expiresAt: Date.now() + GATE_CACHE_TTL_MS });
+	return value;
 }
 
 /**

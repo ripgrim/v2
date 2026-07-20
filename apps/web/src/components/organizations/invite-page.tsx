@@ -5,7 +5,7 @@ import { TripwireLogo } from "#/components/common/tripwire-logo";
 import { Button } from "#/components/ui/button";
 import { Skeleton } from "#/components/ui/skeleton";
 import { Spinner } from "#/components/ui/spinner";
-import { getSessionInfo } from "#/lib/auth.functions";
+import { sessionInfoQueryOptions } from "#/lib/auth.query";
 import { redeemOrgInvite } from "#/lib/org.functions";
 
 const route = getRouteApi("/invite/$token");
@@ -21,8 +21,7 @@ export function InvitePage() {
 	const navigate = useNavigate();
 
 	const { data: session } = useQuery({
-		queryKey: ["auth", "session-info"],
-		queryFn: ({ signal }) => getSessionInfo({ signal }),
+		...sessionInfoQueryOptions(),
 		staleTime: 0,
 	});
 

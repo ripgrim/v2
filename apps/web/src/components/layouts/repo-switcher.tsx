@@ -13,7 +13,7 @@ import {
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { orgSlugSchema, slugifyOrgName } from "@tripwire/contracts";
 import { Command as CommandPrimitive } from "cmdk";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -124,9 +124,25 @@ function repoIcon(): ReactNode {
 function CommandPalette({ onClose }: { onClose: () => void }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
+	const location = useLocation();
 	const params = useParams({ strict: false });
 	const currentOrg = params.org;
 	const currentRepo = params.repo;
+
+	// Swapping repos keeps the feature page: /org/a/workflows → /org/b/workflows.
+	// Only the FIRST segment after the repo carries over — deeper ids (a workflow,
+	// a run) belong to the old repo and would 404 in the new one.
+	const featurePath = (() => {
+		if (!currentOrg || !currentRepo) {
+			return "";
+		}
+		const prefix = `/${currentOrg}/${currentRepo}/`;
+		if (!location.pathname.startsWith(prefix)) {
+			return "";
+		}
+		const segment = location.pathname.slice(prefix.length).split("/")[0];
+		return segment ? `/${segment}` : "";
+	})();
 
 	// Mounted only while open ⇒ these fetch on open, not on app mount.
 	const { data: orgs } = useQuery(myOrgsQueryOptions());
@@ -238,7 +254,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 		const byOwner = new Map<string, PaletteItem[]>();
 		for (const repo of sorted) {
 			const item = repoItem(repo, currentRepo ?? null, () =>
-				go(`/${currentOrg}/${repo.name}`),
+				go(`/${currentOrg}/${repo.name}${featurePath}`),
 			);
 			if (!matches(item, terms)) {
 				continue;

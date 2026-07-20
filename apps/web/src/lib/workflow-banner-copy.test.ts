@@ -4,13 +4,13 @@ import { workflowBannerCopy } from "./workflow-banner-copy";
 describe("workflowBannerCopy", () => {
 	test("names a single owned rule", () => {
 		expect(workflowBannerCopy(["account age"])).toBe(
-			"Your workflow runs account age. Rules outside it stay off until you add them.",
+			"Your workflow runs account age. Every other rule runs on its own toggle.",
 		);
 	});
 
 	test("names two with 'and'", () => {
 		expect(workflowBannerCopy(["account age", "crypto address"])).toBe(
-			"Your workflow runs account age and crypto address. Rules outside it stay off until you add them.",
+			"Your workflow runs account age and crypto address. Every other rule runs on its own toggle.",
 		);
 	});
 
@@ -18,7 +18,7 @@ describe("workflowBannerCopy", () => {
 		expect(
 			workflowBannerCopy(["account age", "crypto address", "honeypot paths"]),
 		).toBe(
-			"Your workflow runs account age, crypto address, and honeypot paths. Rules outside it stay off until you add them.",
+			"Your workflow runs account age, crypto address, and honeypot paths. Every other rule runs on its own toggle.",
 		);
 	});
 
@@ -32,13 +32,13 @@ describe("workflowBannerCopy", () => {
 				"english only",
 			]),
 		).toBe(
-			"Your workflow runs account age, crypto address, honeypot paths, and 2 more. Rules outside it stay off until you add them.",
+			"Your workflow runs account age, crypto address, honeypot paths, and 2 more. Every other rule runs on its own toggle.",
 		);
 	});
 
 	test("a workflow that owns no catalog rules", () => {
 		expect(workflowBannerCopy([])).toBe(
-			"Your workflow decides what runs. Add rules to it to turn them on.",
+			"Your workflow doesn't run any rules yet. Every rule below runs on its own toggle.",
 		);
 	});
 

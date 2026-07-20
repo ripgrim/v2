@@ -1,14 +1,15 @@
 /**
- * The Rules-page explainer copy for workflow-only execution (§6). Names the
- * rules the workflow owns (up to three, then "and N more" so at least the first
- * names stay visible at any count), and states plainly that everything else is
- * off. No em dashes, short declarative sentences, concrete nouns.
+ * The Rules-page explainer copy for workflow composition (§6). Names the rules
+ * the workflow owns (up to three, then "and N more" so at least the first
+ * names stay visible at any count), and states plainly that every other rule
+ * keeps running on its own toggle. No em dashes, short declarative sentences,
+ * concrete nouns.
  */
 export function workflowBannerCopy(ownedRuleNames: string[]): string {
 	if (ownedRuleNames.length === 0) {
-		return "Your workflow decides what runs. Add rules to it to turn them on.";
+		return "Your workflow doesn't run any rules yet. Every rule below runs on its own toggle.";
 	}
-	return `Your workflow runs ${joinNames(ownedRuleNames)}. Rules outside it stay off until you add them.`;
+	return `Your workflow runs ${joinNames(ownedRuleNames)}. Every other rule runs on its own toggle.`;
 }
 
 function joinNames(names: string[]): string {

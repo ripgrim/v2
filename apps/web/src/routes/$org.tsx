@@ -1,8 +1,7 @@
 import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
 import { OrgNotFound } from "#/components/organizations/org-not-found";
 import { parseOrgSettingsTab } from "#/components/organizations/org-settings-dialog";
-import { getOrgContext } from "#/lib/org.functions";
-import { orgQueryKeys } from "#/lib/org.query";
+import { orgContextQueryOptions } from "#/lib/org.query";
 
 /**
  * §8 — the URL is the source of truth for org scope. This layout resolves
@@ -18,8 +17,9 @@ export const Route = createFileRoute("/$org")({
 	},
 	beforeLoad: async ({ params, context }) => {
 		try {
-			const org = await getOrgContext({ data: { org: params.org } });
-			context.queryClient.setQueryData(orgQueryKeys.detail(params.org), org);
+			const org = await context.queryClient.ensureQueryData(
+				orgContextQueryOptions(params.org),
+			);
 			return { org };
 		} catch {
 			throw notFound();

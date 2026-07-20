@@ -44,9 +44,9 @@ export function RulesPage() {
 		return copy;
 	}, [rules, sort]);
 
-	// Management is per-rule (§6, workflow-only): if any rule is managed/dormant, a
-	// workflow is enabled. The banner explains the model; per-card affordances act.
-	const hasEnabledWorkflow = sorted.some((r) => r.management !== "standalone");
+	// Management is per-rule (§6 — workflows compose with standalone rules). The
+	// banner explains the split; per-card affordances act.
+	const hasEnabledWorkflow = sorted.some((r) => r.management === "managed");
 	const ownedRuleNames = sorted
 		.filter((r) => r.management === "managed")
 		.map((r) => r.name);

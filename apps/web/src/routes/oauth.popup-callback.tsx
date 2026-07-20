@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { TripwireLogo } from "#/components/common/tripwire-logo";
 import { Button } from "#/components/ui/button";
 import { Spinner } from "#/components/ui/spinner";
-import { getSessionInfo } from "#/lib/auth.functions";
+import { sessionInfoQueryOptions } from "#/lib/auth.query";
 import { buildSeo, formatPageTitle } from "#/lib/seo";
 
 /**
@@ -87,8 +87,7 @@ function PopupCallbackPage() {
 	const router = useRouter();
 	const { opener, error, mode } = Route.useSearch();
 	const { data, isLoading } = useQuery({
-		queryKey: ["session-info"],
-		queryFn: () => getSessionInfo(),
+		...sessionInfoQueryOptions(),
 		staleTime: 0,
 	});
 	const done = useRef(false);

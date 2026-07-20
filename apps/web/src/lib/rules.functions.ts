@@ -34,17 +34,17 @@ export interface RuleConfigView {
 	/** ACTUAL execution state (derive.ts): baseline rules run unless disabled. */
 	enabled: boolean;
 	/** For a MANAGED rule this is the workflow NODE's config (what runs); for
-	 * standalone/dormant it's the rule's own config. Never a config that isn't
-	 * what the executor walks. */
+	 * standalone it's the rule's own config. Never a config that isn't what the
+	 * executor walks. */
 	config: JsonValue;
 	defaultConfig: JsonValue;
 	/**
-	 * Per-rule management (§6, workflow-only): `managed` (a node in an enabled
-	 * workflow), `dormant` (a workflow is enabled but doesn't include this rule,
-	 * so it isn't evaluated), or `standalone` (no workflow; edit it here).
+	 * Per-rule management (§6 — workflows compose, they don't disable): `managed`
+	 * (a node in an enabled workflow; edit it there) or `standalone` (not owned
+	 * by any workflow; its own toggle + config run, edit it here).
 	 */
 	management: RuleManagement;
-	/** Deep-link target for edit/add-to-workflow; null when standalone. */
+	/** Deep-link target for edit-in-workflow; null when standalone. */
 	workflowId: string | null;
 	/** Opt-in rule (§8): off until enabled, rendered as an offer not a toggle. */
 	optIn: boolean;

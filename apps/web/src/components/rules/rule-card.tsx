@@ -17,16 +17,13 @@ import { cn } from "#/lib/utils";
 
 /**
  * One rule as a header/body/footer card (§9), with per-rule management state
- * (§6, workflow-only execution):
+ * (§6 — workflows compose with standalone rules, they never disable them):
  *
- * - standalone — no workflow enabled: the normal card. Toggle, inline editing,
- *   view raw. Its own config runs.
+ * - standalone — not owned by any enabled workflow: the normal card. Toggle,
+ *   inline editing, view raw. Its own config runs, workflow or not.
  * - managed — a node in an enabled workflow: no toggle, values read-only (the
  *   NODE's config, what actually runs), footer "edit in workflow". Held prompt
  *   is suppressed (the workflow node, not the rule_config, drives it).
- * - dormant — a workflow is enabled but doesn't include this rule: values dimmed,
- *   not editable, a plain line that it isn't protecting the repo, and the primary
- *   affordance "add to workflow".
  */
 export function RuleCard({
 	org,
@@ -134,10 +131,6 @@ export function RuleCard({
 					<span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] text-muted-foreground ring-1 ring-border">
 						in workflow
 					</span>
-				) : rule.management === "dormant" ? (
-					<span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] text-muted-foreground/70 ring-1 ring-border">
-						off
-					</span>
 				) : null}
 
 				<div className="ml-auto flex shrink-0 items-center gap-4">
@@ -186,26 +179,7 @@ export function RuleCard({
 
 			{/* BODY — the payload */}
 			<div className="px-4 py-3">
-				{rule.management === "dormant" ? (
-					<div className="flex flex-col gap-2">
-						<div className="opacity-50">{body}</div>
-						<p className="text-muted-foreground text-xs">
-							This rule isn't in your workflow, so it isn't protecting this
-							repo.
-						</p>
-						{rule.workflowId ? (
-							<Link
-								className="font-medium text-primary text-xs hover:underline"
-								params={{ org, repo, workflowId: rule.workflowId }}
-								to="/$org/$repo/workflows/$workflowId"
-							>
-								add to workflow →
-							</Link>
-						) : null}
-					</div>
-				) : (
-					body
-				)}
+				{body}
 
 				{rule.held && standalone ? (
 					<div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
