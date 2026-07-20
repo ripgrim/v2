@@ -79,6 +79,7 @@ three. Blank cells = the service does not read the var.
 | `DATABASE_URL_DIRECT`        |     | ✅  | ✅     | S      | PlanetScale **direct/session** URL — LISTEN/NOTIFY only (Unit 3).     |
 | `APP_URL`                    |     |     | ✅     |        | **THE FIX.** Real public **web** URL → run deep links + badge in PR comments. |
 | `VITE_SITE_URL`              | 🔨  |     |        |        | **Build-time** (build arg). Real public web URL → SEO/OG canonical.   |
+| `VITE_WAITLIST_OPENER_ORIGINS` | 🔨 |    |        |        | **Build-time** (build arg). Comma-sep landing origins allowed to receive the waitlist popup postMessage. Empty ⇒ landing always shows "didn't finish". |
 | `VITE_API_URL`              | ✅  |     |        |        | Runtime. The public **api** URL (web SSR proxies SSE to it).          |
 | `WEB_ORIGIN`                 |     | ✅  |        |        | The public **web** URL — CORS origin the api allows for SSE.          |
 | `BETTER_AUTH_SECRET`         | ✅  | ✅  |        | S      | `openssl rand -hex 32`. Missing in prod ⇒ **refuses to boot**.        |

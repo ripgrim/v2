@@ -12,6 +12,8 @@ FROM oven/bun:1.3 AS build
 WORKDIR /app
 ARG VITE_SITE_URL=http://localhost:3000
 ENV VITE_SITE_URL=$VITE_SITE_URL
+ARG VITE_WAITLIST_OPENER_ORIGINS=""
+ENV VITE_WAITLIST_OPENER_ORIGINS=$VITE_WAITLIST_OPENER_ORIGINS
 # Build runs under Bun, but the SSR RUNTIME is Node — force nitro's node-server
 # preset so the bundle uses node http, not Bun.serve (the portability lesson).
 ENV NITRO_PRESET=node-server
