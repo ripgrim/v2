@@ -11,7 +11,8 @@ paths:
 No exported function components, no JSX beyond wiring. A route binds three
 things and nothing else:
 - `component` → the page component (client), from `#/components/<feature>/`.
-- `pendingComponent` → the page's sibling `*Skeleton`.
+- `pendingComponent` → the page's `*Skeleton`, from its own sibling
+  `<page>-skeleton.tsx` module — NEVER from the page module.
 - `head()` → `buildSeo({ path, title, description, type })`.
 
 ```tsx
@@ -30,9 +31,22 @@ export const Route = createFileRoute("/_app/users/$username")({
 
 Layering: **route.tsx → page component (client) → abstracted UI/layout
 components → tailwind + logic per component.** Every page component ships a
-sibling `*Skeleton` used as `pendingComponent`. Every route calls `buildSeo` in
-`head()`. Private/dashboard routes use `PRIVATE_ROUTE_HEADERS` (noindex).
-New routes are scaffolded ONLY via `/add-route`.
+sibling `<page>-skeleton.tsx` file used as `pendingComponent`. Every route
+calls `buildSeo` in `head()`. Private/dashboard routes use
+`PRIVATE_ROUTE_HEADERS` (noindex). New routes are scaffolded ONLY via
+`/add-route`.
+
+**Why the skeleton file is load-bearing (2026-07-19 perf pass):** TanStack's
+code splitter splits `component` but NOT `pendingComponent`. Any static import
+from a route file into the page's module graph (a skeleton, a search-param
+parser, a helper) keeps that whole graph in the entry chunk and silently
+defeats route code splitting — this once collapsed the entire app (xyflow
+included) into one 1.3MB chunk. A route file may statically import ONLY the
+page component (split away), the `-skeleton` module, and `#/lib` wiring.
+Shared helpers a route needs (e.g. `parseOrgSettingsTab` in
+`org-settings-tab.ts`) get their own small module. If the page also renders
+skeleton bits, the page imports them FROM the skeleton file, never the
+reverse.
 
 ## Component organization — `components/<feature>/<part>`
 `home/`, `events/`, `runs/`, `rules/`, `workflows/editor/`, `moderation/`,

@@ -11,9 +11,14 @@ Steps:
    binds `component`, `pendingComponent`, and `head: () => buildSeo(...)` only.
    **Never export a component from a route file.** No JSX beyond wiring.
    Private/dashboard routes use `PRIVATE_ROUTE_HEADERS` (noindex).
-2. Create the page component + its sibling `*Skeleton` under
-   `apps/web/src/components/<feature>/`, named PascalCase, file kebab-case. The
-   Skeleton is the `pendingComponent`.
+2. Create the page component under `apps/web/src/components/<feature>/` and its
+   `*Skeleton` in a SEPARATE sibling file `<page>-skeleton.tsx`, named
+   PascalCase, files kebab-case. The Skeleton is the `pendingComponent`. The
+   route imports the skeleton from the `-skeleton` module, never from the page
+   module — TanStack's splitter splits `component` only, and a static route →
+   page-module import defeats route code splitting (§9, DECISIONS 2026-07-19).
+   If the page renders skeleton bits, the page imports FROM the skeleton file,
+   never the reverse.
 3. If the page needs server data, add query hooks with a hierarchical key factory
    (`all → lists() → list(x) → details() → detail(id)`), explicit `staleTime`,
    forwarded `signal`, fed by a server function calling `@tripwire/db` services.

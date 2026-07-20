@@ -2737,3 +2737,17 @@ dashboards — nothing in the repo pins it).
   entry was shipping uncompressed.
 - **`repos(org_id)` index** (drizzle 0009) — org-scoped repo queries were
   table scans.
+
+## CLI beta approval (2026-07-19, §6)
+
+`bun run beta <email>` (scripts/beta-approve.ts) — grants closed-beta access
+from the terminal until an admin queue UI exists. Funnels through
+`accessServices.promoteUserAccess` (THE promotion path), so audit fields land
+exactly like an invite redemption; `accessReviewedBy` records `cli:<operator>`.
+Unknown email exits 1 with "sign in once first" (signup creates the pending
+row); already-approved is a no-op. Reads `DATABASE_URL` from the root `.env`
+(bun loads it for root scripts — note `db:migrate`'s `${DATABASE_URL:-…}`
+shell default expands BEFORE bun injects `.env`, so migrate needs the URL
+exported explicitly). Approval only bites while the access gate
+(Databuddy flag / `ACCESS_GATE_ENABLED`) is on; the flag is cached in-process
+for 60s.
