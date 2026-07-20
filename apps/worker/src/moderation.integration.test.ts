@@ -337,6 +337,10 @@ describe("deny floor — deny with no deny edge never fails open", () => {
 	});
 
 	test("degraded-floor resume (run:degraded) unchanged: deny ⇒ block via resumeDegradedRun", async () => {
+		// Fail-closed floor needs skipped ≥ 50% of active rule nodes. A single
+		// broken contributor read only skips account-age; leftover derived rules
+		// (crypto/honeypot/…) still pass under the composition model. Break every
+		// injectable read so the floor trips regardless of which graph runs.
 		const raw = await Bun.file(
 			new URL(
 				"../../../packages/forge-github/fixtures/pull_request.opened.json",
@@ -352,7 +356,8 @@ describe("deny floor — deny with no deny edge never fails open", () => {
 			throw new Error("insert failed");
 		}
 		const brokenReads = {
-			...freshReads,
+			getDiff: () => Promise.reject(new Error("creds down")),
+			getCommits: () => Promise.reject(new Error("creds down")),
 			getContributorProfile: () => Promise.reject(new Error("creds down")),
 		};
 		await processEvent({ ...deps(), reads: brokenReads }, { eventId });

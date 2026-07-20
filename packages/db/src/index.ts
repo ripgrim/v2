@@ -19,6 +19,8 @@ export {
 	BACKFILL_REPO_QUEUE,
 	type BackfillRepoJob,
 	createBoss,
+	DEFAULT_RERUN_COOLDOWN_SECONDS,
+	getRerunCooldownSeconds,
 	PROCESS_EVENT_QUEUE,
 	type ProcessEventJob,
 	RERUN_COOLDOWN_SECONDS,
