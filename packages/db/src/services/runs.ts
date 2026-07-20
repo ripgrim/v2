@@ -114,6 +114,26 @@ export async function getRunById(db: Db, runId: string) {
 	return rows[0] ?? null;
 }
 
+/**
+ * Pre-materialized re-runs still `queued` past a cutoff — the web created the
+ * row but no worker claimed it (undeployed consumer, boss lag). The minute
+ * sweeper fails them so the activity card never says "evaluating" forever.
+ */
+export async function listStuckQueuedRuns(
+	db: Db,
+	createdBefore: Date,
+): Promise<{ id: string; eventId: string; repoFullName: string }[]> {
+	const rows = await db
+		.select({
+			id: runs.id,
+			eventId: runs.eventId,
+			repoFullName: runs.repoFullName,
+		})
+		.from(runs)
+		.where(and(eq(runs.status, "queued"), lt(runs.createdAt, createdBefore)));
+	return rows;
+}
+
 export interface RecordStepInput {
 	nodeId: string;
 	nodeKind: string;
