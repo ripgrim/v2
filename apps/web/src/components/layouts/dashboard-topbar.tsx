@@ -4,10 +4,10 @@ import {
 	CheckListIcon,
 	Comment01Icon,
 	FlowIcon,
-	Home01Icon,
 	Logout01Icon,
 	MoonIcon,
 	Queue01Icon,
+	Settings01Icon,
 	Sun01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
@@ -45,7 +45,7 @@ export function DashboardTopbar({ user }: DashboardTopbarProps) {
 
 	return (
 		<nav className="flex min-w-0 items-center gap-3 px-3 py-2">
-			{/* The logo goes home — expected behaviour even with a Home tab beside it. */}
+			{/* The logo goes home — the only route back to the org level from a repo. */}
 			<Link
 				to={org ? "/$org/home" : "/"}
 				params={org ? { org } : {}}
@@ -66,7 +66,6 @@ export function DashboardTopbar({ user }: DashboardTopbarProps) {
 			    keep their nav in the page body, so the topbar stays bare there. */}
 			{org && repo ? (
 				<div className="hidden shrink-0 items-center gap-0.5 md:flex">
-					<NavLink to={`/${org}/home`} label="Home" icon={Home01Icon} />
 					<NavLink
 						to={`/${org}/${repo}/moderation`}
 						label="Moderation"
@@ -102,7 +101,7 @@ export function DashboardTopbar({ user }: DashboardTopbarProps) {
 
 			<div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">
 				<ThemeToggle />
-				<UserMenu user={user} />
+				<UserMenu org={org} user={user} />
 			</div>
 		</nav>
 	);
@@ -115,7 +114,7 @@ const PLACEHOLDER_USER: CurrentUser = {
 	image: "",
 };
 
-function UserMenu({ user }: { user: CurrentUser | null }) {
+function UserMenu({ org, user }: { org?: string; user: CurrentUser | null }) {
 	const moderator = user ?? PLACEHOLDER_USER;
 	const { open: openFeedback } = useFeedback();
 	return (
@@ -150,6 +149,18 @@ function UserMenu({ user }: { user: CurrentUser | null }) {
 					</span>
 				</DropdownMenuLabel>
 				<DropdownMenuSeparator />
+				{org ? (
+					<DropdownMenuItem asChild>
+						{/* `to="."` — the dialog opens over whatever page you're on. */}
+						<Link
+							search={(prev) => ({ ...prev, settings: "members" })}
+							to="."
+						>
+							<HugeiconsIcon icon={Settings01Icon} size={14} strokeWidth={2} />
+							Settings
+						</Link>
+					</DropdownMenuItem>
+				) : null}
 				<DropdownMenuItem onClick={openFeedback}>
 					<HugeiconsIcon icon={Comment01Icon} size={14} strokeWidth={2} />
 					Send feedback

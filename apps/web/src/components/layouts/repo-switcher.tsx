@@ -350,7 +350,14 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 			label: "settings",
 			searchTags: ["settings", "members", "invites", "org", "admin"],
 			icon: hugeicon(Settings01Icon),
-			onSelect: () => go(`/${currentOrg}/settings/members`),
+			onSelect: () => {
+				// Opens the settings dialog over whatever page is showing.
+				navigate({
+					to: ".",
+					search: (prev) => ({ ...prev, settings: "members" }),
+				});
+				onClose();
+			},
 		});
 	}
 

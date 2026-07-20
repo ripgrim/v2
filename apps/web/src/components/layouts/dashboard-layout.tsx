@@ -8,6 +8,11 @@ import {
 	FeedbackOverlay,
 	FeedbackProvider,
 } from "#/components/feedback";
+import { OrgSettingsDialog } from "#/components/organizations/org-settings-dialog";
+import {
+	InsetDialogProvider,
+	useInsetDialogPresence,
+} from "#/components/ui/inset-dialog";
 import { useMediaQuery } from "#/hooks/use-media-query";
 import { currentUserQueryOptions } from "#/lib/auth.query";
 import { cn } from "#/lib/utils";
@@ -37,7 +42,9 @@ const FILLET_RIGHT =
 export function DashboardLayout(props: DashboardLayoutProps) {
 	return (
 		<SidePanelProvider>
-			<DashboardShell {...props} />
+			<InsetDialogProvider>
+				<DashboardShell {...props} />
+			</InsetDialogProvider>
 		</SidePanelProvider>
 	);
 }
@@ -94,9 +101,17 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 		[user?.login],
 	);
 
+	// An open inset dialog pushes the whole shell down-and-away (scale + drop)
+	// so the sheet reads as the foreground surface. The dialog itself is fixed
+	// and rendered OUTSIDE this wrapper — a transformed ancestor would break
+	// its viewport positioning.
+	const receded = useInsetDialogPresence();
+
 	return (
 		<FeedbackProvider config={feedbackConfig}>
-			<div
+			<motion.div
+				animate={{ scale: receded ? 0.98 : 1, y: receded ? 12 : 0 }}
+				transition={SHEET_SPRING}
 				className={cn(
 					"isolate flex h-dvh flex-col transition-colors duration-300",
 					// Inside a repo the shell is the muted backdrop the page floats on;
@@ -198,7 +213,8 @@ function DashboardShell({ counts, children }: DashboardLayoutProps) {
 
 				<MobileFooter counts={counts} />
 				<DevPersonaSwitcher />
-			</div>
+			</motion.div>
+			<OrgSettingsDialog />
 			<FeedbackOverlay />
 			<FeedbackDialog />
 		</FeedbackProvider>

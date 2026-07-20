@@ -3,12 +3,11 @@ import {
 	Analytics01Icon,
 	CheckListIcon,
 	FlowIcon,
-	Home01Icon,
 	Queue01Icon,
 	Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useMatchRoute, useParams } from "@tanstack/react-router";
 
 interface MobileFooterProps {
 	counts: {
@@ -25,9 +24,15 @@ interface MobileFooterProps {
  */
 export function MobileFooter({ counts }: MobileFooterProps) {
 	const params = useParams({ strict: false });
+	const matchRoute = useMatchRoute();
 	const org = params.org;
 	const repo = params.repo;
 	if (!org) {
+		return null;
+	}
+	// Org home already surfaces every link this bar would offer (subnav + per-repo
+	// chips), so the bar would only duplicate the page.
+	if (matchRoute({ to: "/$org/home" })) {
 		return null;
 	}
 	return (
@@ -65,7 +70,6 @@ export function MobileFooter({ counts }: MobileFooterProps) {
 					</>
 				) : (
 					<>
-						<NavLink to={`/${org}/home`} label="Home" icon={Home01Icon} />
 						<NavLink
 							to={`/${org}/analytics`}
 							label="Analytics"
@@ -73,10 +77,10 @@ export function MobileFooter({ counts }: MobileFooterProps) {
 							exact={false}
 						/>
 						<NavLink
-							to={`/${org}/settings/members`}
+							to="."
+							search={{ settings: "members" }}
 							label="Settings"
 							icon={Settings01Icon}
-							exact={false}
 						/>
 					</>
 				)}
@@ -90,18 +94,23 @@ function NavLink({
 	label,
 	value,
 	icon,
+	search,
 	exact = true,
 }: {
 	to: string;
 	label: string;
 	value?: number;
 	icon: IconSvgElement;
+	search?: Record<string, string>;
 	exact?: boolean;
 }) {
 	return (
 		<Link
 			to={to}
-			activeOptions={{ exact }}
+			search={search}
+			// Search-carrying links (the settings dialog) only read active while
+			// their search matches, not whenever the path does.
+			activeOptions={{ exact, includeSearch: Boolean(search) }}
 			className="flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-0 hover:text-foreground [&.active]:bg-surface-0 [&.active]:text-foreground"
 			activeProps={{ className: "active" }}
 		>

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { orgSlugSchema } from "@tripwire/contracts";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,10 +21,7 @@ import {
 	orgQueryKeys,
 } from "#/lib/org.query";
 
-const route = getRouteApi("/$org/settings/settings");
-
-export function OrgGeneralSettingsPage() {
-	const { org } = route.useParams();
+export function OrgGeneralSettingsPage({ org }: { org: string }) {
 	const { data: orgContext } = useQuery(orgContextQueryOptions(org));
 
 	if (!orgContext) {
@@ -101,8 +98,9 @@ function RenameCard({
 			toast("org saved");
 			if (result.slug !== org) {
 				navigate({
-					to: "/$org/settings/settings",
+					to: "/$org/home",
 					params: { org: result.slug },
+					search: { settings: "settings" },
 				});
 			}
 		},

@@ -1,11 +1,12 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-/** /:org/settings → members (the page you usually came for). */
+/** Settings is a dialog now — the tab lives in `?settings=`, not a page. */
 export const Route = createFileRoute("/$org/settings/")({
 	beforeLoad: ({ params }) => {
 		throw redirect({
-			to: "/$org/settings/members",
+			to: "/$org/home",
 			params: { org: params.org },
+			search: { settings: "members" },
 		});
 	},
 });

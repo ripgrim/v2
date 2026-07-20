@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
 import type { OrgRole } from "@tripwire/contracts";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -31,13 +30,10 @@ import {
 	orgQueryKeys,
 } from "#/lib/org.query";
 
-const route = getRouteApi("/$org/settings/members");
-
 const ROLE_SELECT_CLASS =
 	"h-7 rounded-md border bg-card px-2 text-foreground text-xs disabled:cursor-not-allowed disabled:opacity-50";
 
-export function OrgMembersPage() {
-	const { org } = route.useParams();
+export function OrgMembersPage({ org }: { org: string }) {
 	const { data: orgContext } = useQuery(orgContextQueryOptions(org));
 	const { data: members } = useQuery(orgMembersQueryOptions(org));
 	const { data: session } = useQuery({

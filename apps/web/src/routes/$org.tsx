@@ -1,5 +1,6 @@
 import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
 import { OrgNotFound } from "#/components/organizations/org-not-found";
+import { parseOrgSettingsTab } from "#/components/organizations/org-settings-dialog";
 import { getOrgContext } from "#/lib/org.functions";
 import { orgQueryKeys } from "#/lib/org.query";
 
@@ -9,6 +10,12 @@ import { orgQueryKeys } from "#/lib/org.query";
  * missing org) is a 404, never a 403 — org existence is not disclosed.
  */
 export const Route = createFileRoute("/$org")({
+	// The org settings dialog is URL-driven (`?settings=members|settings|billing`)
+	// and can open over any org page, so the param validates at the org root.
+	validateSearch: (search: Record<string, unknown>) => {
+		const settings = parseOrgSettingsTab(search.settings);
+		return settings ? { settings } : {};
+	},
 	beforeLoad: async ({ params, context }) => {
 		try {
 			const org = await getOrgContext({ data: { org: params.org } });

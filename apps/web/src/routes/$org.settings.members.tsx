@@ -1,18 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-import {
-	OrgMembersPage,
-	OrgMembersPageSkeleton,
-} from "#/components/organizations/org-members-page";
-import { buildSeo, formatPageTitle } from "#/lib/seo";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+/** Settings is a dialog now — the tab lives in `?settings=`, not a page. */
 export const Route = createFileRoute("/$org/settings/members")({
-	component: OrgMembersPage,
-	pendingComponent: OrgMembersPageSkeleton,
-	head: ({ params, match }) =>
-		buildSeo({
-			path: match.pathname,
-			title: formatPageTitle(`${params.org} · members`),
-			description: "org members, roles, and invite links.",
-			noindex: true,
-		}),
+	beforeLoad: ({ params }) => {
+		throw redirect({
+			to: "/$org/home",
+			params: { org: params.org },
+			search: { settings: "members" },
+		});
+	},
 });
