@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { RunPageSkeleton } from "#/components/runs/run-page-skeleton";
 import { StepCard } from "#/components/runs/step-card";
+import { toast } from "#/components/ui/toast";
 import { formatRelativeTime } from "#/lib/format-relative-time";
 import { mergeLiveSteps } from "#/lib/run-live-steps";
 import { runToMarkdown } from "#/lib/run-markdown";
@@ -238,6 +239,12 @@ function CopyRunButton({ run }: { run: RunView }) {
 	const onCopy = () => {
 		const md = runToMarkdown(run, formatRelativeTime(run.createdAt));
 		navigator.clipboard?.writeText(md);
+		toast({
+			title: "copied to clipboard",
+			body: "The run has been copied to your clipboard.",
+			status: "success",
+			action: { label: "close", onClick: () => {} },
+		});
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
 	};

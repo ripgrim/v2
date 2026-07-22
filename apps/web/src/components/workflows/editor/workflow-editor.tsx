@@ -30,7 +30,7 @@ import {
 	useReactFlow,
 } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "#/components/ui/toast";
 import { EditorHeader } from "#/components/workflows/editor/editor-header";
 import {
 	buildNodeFromItem,
