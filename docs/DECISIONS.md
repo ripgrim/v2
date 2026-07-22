@@ -2806,3 +2806,29 @@ contributor label per failed rule, no plus-N collapse (collapsing hides which
 rules fired — the confusion the mode exists to kill); the hidden marker is
 appended in EVERY mode, custom included — the §7 upsert lifecycle depends on
 it.
+
+## Signal SDK Phase 1: registry + defineForge + new @tripwire/sdk (2026-07-21)
+
+The rule SDK build (spike approved 2026-07-21) needs a home the closed §3
+layout does not have: a package importable by BOTH forge adapters and, later,
+external rule authors. `core` is worker-only and `forge` is interface-only by
+law, so neither fits. New package `packages/sdk` (@tripwire/sdk): the neutral
+signal registry (`defineSignal`, runtime `type`/`scope`/`describe`, 15
+signals), `defineForge` (credential-free producers over `ctx.forge`, memoized
+`ctx.load`), and in Phase 2 the `Tripwire` client. It is pure like core: no
+I/O, no octokit, imports contracts only. Boundary edges added:
+`sdk -> contracts`; `forge-github -> sdk`; `worker -> sdk`.
+
+Producer maps are keyed `[signal.id]` (literal-typed string on the signal
+object), not the signal object itself — TS2464 rejects object computed keys
+and object keys collide at runtime as "[object Object]". The `.id` key keeps
+the locked intent: key derived from the signal, producer return type enforced
+against the signal's declared value type via the registry mapped type.
+
+The GitHub forge (`forge-github/src/signals.ts`) is the first defineForge
+consumer. Fetch URLs mirror client/reads.ts verbatim; shared loader keys make
+a full-signal evaluation cost 7 calls, the same 6 profile calls + 1 diff call
+the §5.8 pre-fetch spends today (the commits call is not needed by any signal
+rule). Degradation semantics preserved per signal: mergedElsewhere fails ->
+unavailable (rule skips), mergedInRepo fails -> 0, recent CRs fail -> [],
+permission fails -> "none", profile readme fails -> bio fallback.

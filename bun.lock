@@ -190,11 +190,19 @@
       "dependencies": {
         "@tripwire/contracts": "workspace:*",
         "@tripwire/forge": "workspace:*",
+        "@tripwire/sdk": "workspace:*",
         "@tripwire/utils": "workspace:*",
         "zod": "^4.0.0",
       },
       "devDependencies": {
         "@octokit/webhooks-examples": "^7.6.1",
+      },
+    },
+    "packages/sdk": {
+      "name": "@tripwire/sdk",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tripwire/contracts": "workspace:*",
       },
     },
     "packages/ui": {
@@ -715,6 +723,8 @@
     "@tripwire/forge": ["@tripwire/forge@workspace:packages/forge"],
 
     "@tripwire/forge-github": ["@tripwire/forge-github@workspace:packages/forge-github"],
+
+    "@tripwire/sdk": ["@tripwire/sdk@workspace:packages/sdk"],
 
     "@tripwire/ui": ["@tripwire/ui@workspace:packages/ui"],
 
