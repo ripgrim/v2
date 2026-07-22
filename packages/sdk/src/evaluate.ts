@@ -2,7 +2,9 @@ import type { SignalRef, SignalRule } from "./client.ts";
 import type { SerializedComparison } from "./comparison.ts";
 import { globMatch } from "./glob.ts";
 import { registry } from "./registry.ts";
+import { type ScanMatch, type ScanPattern, scanTextMap } from "./scan.ts";
 import type { SignalKind } from "./signal.ts";
+import { nonLatinScan } from "./text-metrics.ts";
 import { windowMs } from "./window.ts";
 
 /**
@@ -47,6 +49,57 @@ function asBoolean(value: unknown, id: string): boolean {
 		fail(`signal ${id} declared boolean but produced ${typeof value}`);
 	}
 	return value;
+}
+
+function asTextMap(
+	value: unknown,
+	id: string,
+): Readonly<Record<string, string>> {
+	if (
+		typeof value !== "object" ||
+		value === null ||
+		Array.isArray(value) ||
+		Object.values(value).some((text) => typeof text !== "string")
+	) {
+		fail(`signal ${id} declared textMap but produced something else`);
+	}
+	return value as Readonly<Record<string, string>>;
+}
+
+function isScanMatch(entry: unknown): entry is ScanMatch {
+	return (
+		typeof entry === "object" &&
+		entry !== null &&
+		typeof (entry as { kind?: unknown }).kind === "string" &&
+		typeof (entry as { value?: unknown }).value === "string" &&
+		typeof (entry as { location?: unknown }).location === "string"
+	);
+}
+
+function asScanMatches(value: unknown, id: string): readonly ScanMatch[] {
+	if (!Array.isArray(value) || !value.every(isScanMatch)) {
+		fail(`signal ${id} resolved to scanMatches but the list is malformed`);
+	}
+	return value;
+}
+
+function isScanPattern(entry: unknown): entry is ScanPattern {
+	return (
+		typeof entry === "object" &&
+		entry !== null &&
+		typeof (entry as { kind?: unknown }).kind === "string" &&
+		(entry as { pattern?: unknown }).pattern instanceof RegExp
+	);
+}
+
+function scanPatternsArg(
+	patterns: unknown,
+	id: string,
+): readonly ScanPattern[] {
+	if (!Array.isArray(patterns) || !patterns.every(isScanPattern)) {
+		fail(`signal ${id} has a scan transform with malformed patterns`);
+	}
+	return patterns;
 }
 
 function asStringList(value: unknown, id: string, kind: string): string[] {
@@ -159,6 +212,20 @@ function compareText(value: string, comparison: SerializedComparison): boolean {
 	}
 }
 
+function compareScanMatches(
+	value: readonly ScanMatch[],
+	comparison: SerializedComparison,
+): boolean {
+	switch (comparison.kind) {
+		case "empty":
+			return value.length === 0;
+		case "not":
+			return !compareScanMatches(value, innerComparison(comparison));
+		default:
+			fail(`comparison ${comparison.kind} does not apply to scanned signals`);
+	}
+}
+
 function compareBoolean(
 	value: boolean,
 	comparison: SerializedComparison,
@@ -217,6 +284,8 @@ export function evaluateComparison(
 			return compareBoolean(asBoolean(value, signalId), comparison);
 		case "textList":
 			return compareTextList(asStringList(value, signalId, kind), comparison);
+		case "scanMatches":
+			return compareScanMatches(asScanMatches(value, signalId), comparison);
 		case "timestamps":
 		case "textMap":
 			fail(
@@ -256,6 +325,30 @@ export function resolveSignalValue(
 			fail(`signal ${ref.id} is ${kind}; trimmedLength needs a text signal`);
 		}
 		return { kind: "number", value: asText(raw, ref.id).trim().length };
+	}
+	if (ref.transform.kind === "nonLatinRatio") {
+		if (kind !== "text") {
+			fail(`signal ${ref.id} is ${kind}; nonLatinRatio needs a text signal`);
+		}
+		return { kind: "number", value: nonLatinScan(asText(raw, ref.id)).ratio };
+	}
+	if (ref.transform.kind === "letterCount") {
+		if (kind !== "text") {
+			fail(`signal ${ref.id} is ${kind}; letterCount needs a text signal`);
+		}
+		return { kind: "number", value: nonLatinScan(asText(raw, ref.id)).letters };
+	}
+	if (ref.transform.kind === "scan") {
+		if (kind !== "textMap") {
+			fail(`signal ${ref.id} is ${kind}; scan needs a textMap signal`);
+		}
+		return {
+			kind: "scanMatches",
+			value: scanTextMap(
+				asTextMap(raw, ref.id),
+				scanPatternsArg(ref.transform.patterns, ref.id),
+			),
+		};
 	}
 	if (kind !== "timestamps") {
 		fail(`signal ${ref.id} is ${kind}; only timestamps signals take windows`);

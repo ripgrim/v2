@@ -6,6 +6,7 @@ import {
 	type SignalTree,
 	signalTree,
 } from "./registry.ts";
+import type { ScanMatch, ScanPattern } from "./scan.ts";
 import type { AnySignal, SignalValueType, t } from "./signal.ts";
 import { type WindowSpec, type WindowWithin, windowMs } from "./window.ts";
 
@@ -23,7 +24,11 @@ export interface SignalRef {
 	readonly transform?:
 		| { readonly kind: "last"; readonly window: WindowSpec }
 		| { readonly kind: "lastCount"; readonly window: WindowSpec }
-		| { readonly kind: "trimmedLength" };
+		| { readonly kind: "trimmedLength" }
+		| { readonly kind: "nonLatinRatio" }
+		| { readonly kind: "letterCount" }
+		/** Patterns are live data at evaluation time; serializing them is Phase 4. */
+		| { readonly kind: "scan"; readonly patterns: readonly ScanPattern[] };
 }
 
 /**
@@ -64,6 +69,18 @@ export interface TextBoundSignal<FId extends string>
 	extends BoundSignal<string, FId> {
 	/** The text's length after trimming surrounding whitespace. */
 	readonly trimmedLength: BoundSignal<number, FId>;
+	/** The ratio of non-Latin letters among all letters in the text. */
+	readonly nonLatinRatio: BoundSignal<number, FId>;
+	/** How many letters the text contains. */
+	readonly letterCount: BoundSignal<number, FId>;
+}
+
+export interface TextMapBoundSignal<FId extends string>
+	extends BoundSignal<Readonly<Record<string, string>>, FId> {
+	/** Derive the list of pattern matches, keyed by where each was found. */
+	scan(
+		patterns: readonly ScanPattern[],
+	): BoundSignal<readonly ScanMatch[], FId>;
 }
 
 export type SupportedIds<F> = F extends { produces: infer P }
@@ -87,7 +104,9 @@ type BoundFor<S, FId extends string> = S extends {
 		? TimestampsBoundSignal<FId, HistoryOf<S>>
 		: K extends "text"
 			? TextBoundSignal<FId>
-			: BoundSignal<T, FId>
+			: K extends "textMap"
+				? TextMapBoundSignal<FId>
+				: BoundSignal<T, FId>
 	: never;
 
 /** The forge-narrowed surface: signals.<scope>.<name>, producers only. */
@@ -122,6 +141,9 @@ export type RuleFactory<F> = <T>(
 
 const NUMBER_TYPE: SignalValueType<number, "number"> = { kind: "number" };
 
+const SCAN_MATCHES_TYPE: SignalValueType<readonly ScanMatch[], "scanMatches"> =
+	{ kind: "scanMatches" };
+
 function bindSignal(signal: AnySignal): Record<string, unknown> {
 	const base = {
 		ref: { id: signal.id as SignalId },
@@ -129,15 +151,42 @@ function bindSignal(signal: AnySignal): Record<string, unknown> {
 		describe: signal.describe,
 	};
 	if (signal.type.kind === "text") {
+		const metric = (
+			kind: "trimmedLength" | "nonLatinRatio" | "letterCount",
+			describe: string,
+		) => ({
+			ref: { id: signal.id as SignalId, transform: { kind } },
+			valueType: NUMBER_TYPE,
+			describe,
+		});
 		return {
 			...base,
-			trimmedLength: {
-				ref: {
-					id: signal.id as SignalId,
-					transform: { kind: "trimmedLength" },
-				},
-				valueType: NUMBER_TYPE,
-				describe: `${signal.describe}, as its length without surrounding whitespace`,
+			trimmedLength: metric(
+				"trimmedLength",
+				`${signal.describe}, as its length without surrounding whitespace`,
+			),
+			nonLatinRatio: metric(
+				"nonLatinRatio",
+				`${signal.describe}, as the ratio of non-Latin letters among its letters`,
+			),
+			letterCount: metric(
+				"letterCount",
+				`${signal.describe}, as how many letters it contains`,
+			),
+		};
+	}
+	if (signal.type.kind === "textMap") {
+		return {
+			...base,
+			scan(patterns: readonly ScanPattern[]): Record<string, unknown> {
+				return {
+					ref: {
+						id: signal.id as SignalId,
+						transform: { kind: "scan", patterns },
+					},
+					valueType: SCAN_MATCHES_TYPE,
+					describe: `${signal.describe}, scanned for pattern matches`,
+				};
 			},
 		};
 	}

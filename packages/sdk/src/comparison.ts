@@ -1,3 +1,5 @@
+import type { ScanMatch } from "./scan.ts";
+
 /**
  * The comparison vocabulary. Each verb is typed to the signal value types it
  * is valid for; a wrong pairing (matches on a number signal, under on a text
@@ -47,6 +49,11 @@ export function equals(value: number | string | boolean): {
 	args: readonly unknown[];
 } {
 	return { kind: "equals", args: [value] };
+}
+
+/** For scanned signals: true when the scan found nothing. */
+export function empty(): Comparison<readonly ScanMatch[]> {
+	return { kind: "empty", args: [] };
 }
 
 export function not<T>(comparison: Comparison<T>): Comparison<T> {

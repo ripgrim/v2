@@ -117,6 +117,19 @@ export const patchByPath = defineSignal({
 	describe: "Unified diff text keyed by the file path it belongs to",
 });
 
+/**
+ * The scan input for pattern rules. Insertion order is the scan order and
+ * the match evidence order: comment, then title, then diff patch paths in
+ * diff order. Absent sources are absent keys, never an unavailable signal.
+ */
+export const textByLocation = defineSignal({
+	id: "pr.textByLocation",
+	scope: "pr",
+	type: t.textMap,
+	describe:
+		"The event's text keyed by where it appears: comment, title, and diff patch paths",
+});
+
 // --- comment: the comment that triggered the evaluation ---------------------
 
 export const commentBody = defineSignal({
@@ -142,6 +155,7 @@ export const registry = {
 	[filesChanged.id]: filesChanged,
 	[changedPaths.id]: changedPaths,
 	[patchByPath.id]: patchByPath,
+	[textByLocation.id]: textByLocation,
 	[commentBody.id]: commentBody,
 } as const satisfies Record<string, AnySignal>;
 
@@ -163,7 +177,7 @@ export const signalTree = {
 		recentChangeRequestTimes,
 	},
 	repoRelation: { mergedInRepo, isOrgMember, isMaintainer },
-	pr: { title, filesChanged, changedPaths, patchByPath },
+	pr: { title, filesChanged, changedPaths, patchByPath, textByLocation },
 	comment: { body: commentBody },
 };
 

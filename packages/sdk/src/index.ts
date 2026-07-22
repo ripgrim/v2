@@ -17,6 +17,7 @@ export {
 	atMost,
 	between,
 	type Comparison,
+	empty,
 	equals,
 	has,
 	matches,
@@ -47,6 +48,11 @@ export {
 export { globMatch } from "./glob.ts";
 export * from "./registry.ts";
 export {
+	type ScanMatch,
+	type ScanPattern,
+	scanTextMap,
+} from "./scan.ts";
+export {
 	type AnySignal,
 	defineSignal,
 	type Signal,
@@ -58,4 +64,5 @@ export {
 	signalUnavailable,
 	t,
 } from "./signal.ts";
+export { nonLatinScan } from "./text-metrics.ts";
 export { type WindowSpec, type WindowWithin, windowMs } from "./window.ts";

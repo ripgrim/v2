@@ -17,6 +17,7 @@ import {
 	publicRepos,
 	recentChangeRequestTimes,
 	signalUnavailable,
+	textByLocation,
 	title,
 } from "@tripwire/sdk";
 import type { GithubHttp } from "./client/http.ts";
@@ -220,6 +221,23 @@ export const githubForge = defineForge<GithubHttp>()({
 				}
 			}
 			return patches;
+		},
+		[textByLocation.id]: async (ctx) => {
+			// Insertion order IS the scan order: comment, title, then patch paths.
+			const content: Record<string, string> = {};
+			if (ctx.event.kind === "comment.created") {
+				content.comment = ctx.event.comment.body;
+			}
+			if ("changeRequest" in ctx.event) {
+				content.title = ctx.event.changeRequest.title;
+				const files = await loadPrFiles(ctx);
+				for (const file of files) {
+					if (file.patch) {
+						content[file.filename] = file.patch;
+					}
+				}
+			}
+			return content;
 		},
 		[commentBody.id]: (ctx) => {
 			if (ctx.event.kind === "comment.created") {

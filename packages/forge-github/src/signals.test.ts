@@ -153,6 +153,16 @@ describe("github forge signals", () => {
 		expect(calls).toHaveLength(0);
 	});
 
+	test("textByLocation assembles the map in scan order on a PR event", async () => {
+		const { ctx } = makeCtx();
+		const content = (await produce("pr.textByLocation", ctx)) as Record<
+			string,
+			string
+		>;
+		expect(Object.keys(content)).toEqual(["title", "src/a.ts"]);
+		expect(content.title).toBe("Add feature");
+	});
+
 	test("comment.body on a PR event is unavailable, not an error", async () => {
 		const { ctx } = makeCtx();
 		await expect(produce("comment.body", ctx)).rejects.toBeInstanceOf(

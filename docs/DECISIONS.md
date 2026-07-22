@@ -2871,3 +2871,41 @@ signal's 720h declared history; the producer never returns older data, so
 counts are unchanged. SDK severities on converted built-ins are inert
 metadata today (the workflow layer decides actions); they exist because the
 rule data model requires one.
+
+## Signal SDK vocabulary complete: text metrics + scan transform (2026-07-22)
+
+The two gaps that kept english-only@1 and crypto-address@1 imperative are
+closed, per the approved option (iii): a scan is a TRANSFORM that derives
+data, not a comparison that smuggles it. New text transforms .nonLatinRatio
+and .letterCount resolve to number and reuse the verified compareNumber path
+(both project one shared nonLatinScan implementation, so ratio and letter
+count cannot drift). New textMap transform .scan(patterns) yields the
+scanMatches kind; empty() is its boolean verb. Verdict and match evidence
+come from ONE evaluation: passed from empty(), matches from resolvedValue,
+the same mechanism pr-rate-limit's count uses. The scanMatches branch in
+evaluateComparison re-narrows behind a runtime guard (Array.isArray plus
+per-entry kind/value/location shape check); scan patterns are validated the
+same way. No bare casts entered the evaluator.
+
+Patterns are LIVE data at evaluation time ({kind, pattern: RegExp}[]);
+crypto-address holds its eth/btc/sol patterns in code and supplies them per
+evaluation. Nothing round-trips a RegExp through serialization; the
+{kind, source, flags} serialized form for stored custom rules is a flagged
+Phase 4 item.
+
+New registry signal pr.textByLocation (textMap): the event's text keyed by
+where it appears. Producers (github forge, context forge) assemble it in
+scan order, comment then title then diff patch paths in diff order, because
+map insertion order IS the match evidence order. Absent sources are absent
+keys, never unavailable; crypto-address never skips. The github producer
+reuses the pr-files loader: zero new API calls. Known boundary, accepted: a
+repo file literally named "title" or "comment" at the repo root would
+collide with those map keys; the old imperative scan kept the sources in
+separate variables. Pathological, documented, not defended.
+
+Both rules converted through the one authoring surface (rule() + signals off
+the context-forge client). Skip reasons, evidence fields, rounding, sample
+truncation, and match ordering are byte-identical; all pre-existing rule
+tests pass unmodified and no golden/snapshot file was regenerated. Every
+signal-based built-in now expresses in the SDK: Phase 4 custom rules are
+unblocked.

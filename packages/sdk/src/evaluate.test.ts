@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { SignalRule } from "./client.ts";
 import {
 	between,
+	empty,
 	equals,
 	has,
 	matches,
@@ -13,6 +14,7 @@ import {
 import {
 	evaluateComparison,
 	evaluateSignalRule,
+	resolveSignalValue,
 	SignalEvaluationError,
 } from "./evaluate.ts";
 
@@ -151,5 +153,80 @@ describe("windowed transforms", () => {
 				now: NOW,
 			}).passed,
 		).toBe(true);
+	});
+});
+
+describe("text metric transforms", () => {
+	test("nonLatinRatio and letterCount project one scan", () => {
+		const input = { value: "abcφψ", now: NOW };
+		const ratio = resolveSignalValue(
+			{ id: "pr.title", transform: { kind: "nonLatinRatio" } },
+			input,
+		);
+		const letters = resolveSignalValue(
+			{ id: "pr.title", transform: { kind: "letterCount" } },
+			input,
+		);
+		expect(ratio).toEqual({ kind: "number", value: 2 / 5 });
+		expect(letters).toEqual({ kind: "number", value: 5 });
+	});
+});
+
+describe("scan transform", () => {
+	const patterns = [{ kind: "eth", pattern: /\b0x[a-fA-F0-9]{40}\b/g }];
+	const address = `0x${"a".repeat(40)}`;
+
+	test("verdict and matches come from one evaluation", () => {
+		const scanRule = {
+			name: "scan",
+			signal: {
+				id: "pr.textByLocation",
+				transform: { kind: "scan", patterns },
+			},
+			comparison: empty(),
+			severity: "high",
+		} as const;
+		const result = evaluateSignalRule(scanRule, {
+			value: { comment: `send to ${address}`, title: "clean" },
+			now: NOW,
+		});
+		expect(result.passed).toBe(false);
+		expect(result.resolvedValue).toEqual([
+			{ kind: "eth", value: address, location: "comment" },
+		]);
+	});
+
+	test("an empty map passes with no matches", () => {
+		const scanRule = {
+			name: "scan",
+			signal: {
+				id: "pr.textByLocation",
+				transform: { kind: "scan", patterns },
+			},
+			comparison: empty(),
+			severity: "high",
+		} as const;
+		const result = evaluateSignalRule(scanRule, { value: {}, now: NOW });
+		expect(result.passed).toBe(true);
+		expect(result.resolvedValue).toEqual([]);
+	});
+
+	test("malformed patterns fail loudly, never scan", () => {
+		expect(() =>
+			resolveSignalValue(
+				{
+					id: "pr.textByLocation",
+					// biome-ignore lint/suspicious/noExplicitAny: simulates a stored rule with bad patterns
+					transform: { kind: "scan", patterns: [{ kind: "x" }] as any },
+				},
+				{ value: {}, now: NOW },
+			),
+		).toThrow(SignalEvaluationError);
+	});
+
+	test("a malformed match list is rejected by the scanMatches guard", () => {
+		expect(() =>
+			evaluateComparison("scanMatches", [{ kind: "eth" }], empty(), "s"),
+		).toThrow("malformed");
 	});
 });

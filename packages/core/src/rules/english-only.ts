@@ -1,30 +1,17 @@
 import { englishOnlyConfigSchema } from "@tripwire/contracts";
+import { atMost, evaluateSignalRule, resolveSignalValue } from "@tripwire/sdk";
 import { truncate } from "@tripwire/utils";
 import { z } from "zod";
+import { readContextSignal, rule, signals } from "./context-forge.ts";
 import { defineRule } from "./define.ts";
-
-/**
- * Ratio of non-Latin letters among all letters. Deterministic and dumb on
- * purpose — a heuristic gate, not a language model.
- */
-function nonLatinRatio(text: string): { ratio: number; letters: number } {
-	let letters = 0;
-	let nonLatin = 0;
-	for (const ch of text) {
-		if (!/\p{L}/u.test(ch)) {
-			continue;
-		}
-		letters++;
-		if (!/[\p{Script=Latin}]/u.test(ch)) {
-			nonLatin++;
-		}
-	}
-	return { ratio: letters === 0 ? 0 : nonLatin / letters, letters };
-}
 
 /**
  * english-only@1 — the change request title / comment body must be
  * predominantly Latin-script. Evidence: the measured ratio and a sample.
+ * Authored as an SDK signal rule over the text signal's nonLatinRatio
+ * transform; the letters guard reads the letterCount transform through the
+ * evaluator's own resolution. One scan implementation, two projections; the
+ * verdict is unchanged.
  */
 export const englishOnly = defineRule({
 	id: "english-only",
@@ -35,23 +22,49 @@ export const englishOnly = defineRule({
 		lettersExamined: z.number(),
 		sample: z.string(),
 	}),
-	evaluate(ctx, config) {
-		const text =
+	async evaluate(ctx, config) {
+		const source =
 			ctx.event.kind === "comment.created"
-				? ctx.event.comment.body
+				? ("comment.body" as const)
 				: "changeRequest" in ctx.event
-					? ctx.event.changeRequest.title
+					? ("pr.title" as const)
 					: null;
-		if (text === null || text.trim() === "") {
+		if (source === null) {
 			return { status: "skipped", reason: "no text to examine" };
 		}
-		const { ratio, letters } = nonLatinRatio(text);
+		const read = await readContextSignal(source, ctx);
+		if (!read.ok) {
+			return { status: "skipped", reason: read.reason };
+		}
+		const text = read.value;
+		if (text.trim() === "") {
+			return { status: "skipped", reason: "no text to examine" };
+		}
+		const when =
+			source === "comment.body" ? signals.comment.body : signals.pr.title;
+		// The evaluator's own metric resolution, not a copy of the scan.
+		const letters = resolveSignalValue(when.letterCount.ref, {
+			value: text,
+			now: ctx.now,
+		}).value as number;
 		if (letters < 4) {
 			return { status: "skipped", reason: "not enough letters to judge" };
 		}
+		const requirement = rule("english only", {
+			when: when.nonLatinRatio,
+			comparison: atMost(config.maxNonLatinRatio),
+			severity: "low",
+		});
+		const { passed, resolvedValue } = evaluateSignalRule(requirement, {
+			value: text,
+			now: ctx.now,
+		});
+		// The nonLatinRatio transform yields a number by construction. The
+		// verdict compares the raw ratio; the evidence rounds for display.
+		const ratio = resolvedValue as number;
 		return {
 			status: "evaluated",
-			passed: ratio <= config.maxNonLatinRatio,
+			passed,
 			evidence: {
 				ratio: Number(ratio.toFixed(4)),
 				lettersExamined: letters,

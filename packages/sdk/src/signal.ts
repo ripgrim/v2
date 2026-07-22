@@ -20,7 +20,9 @@ export type SignalKind =
 	| "boolean"
 	| "textList"
 	| "timestamps"
-	| "textMap";
+	| "textMap"
+	/** Produced only by the scan transform, never declared by a registry signal. */
+	| "scanMatches";
 
 /** The SDK's value-type vocabulary. Every registry signal uses one of these. */
 export const t = {

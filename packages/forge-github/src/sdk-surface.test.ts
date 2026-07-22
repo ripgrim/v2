@@ -31,6 +31,7 @@ describe("github sdk surface", () => {
 			"changedPaths",
 			"filesChanged",
 			"patchByPath",
+			"textByLocation",
 			"title",
 		]);
 		expect(Object.keys(signals.comment)).toEqual(["body"]);

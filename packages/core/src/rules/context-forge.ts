@@ -2,6 +2,7 @@ import type { RepoScopedEvent } from "@tripwire/contracts";
 import {
 	accountAge,
 	changedPaths,
+	commentBody,
 	createForgeSignalCtx,
 	defineForge,
 	filesChanged,
@@ -14,6 +15,8 @@ import {
 	type SignalValue,
 	signalUnavailable,
 	Tripwire,
+	textByLocation,
+	title,
 } from "@tripwire/sdk";
 import type { RuleContext } from "../context.ts";
 
@@ -65,6 +68,36 @@ export const contextForge = defineForge<RuleContext>()({
 		[recentChangeRequestTimes.id]: (ctx) =>
 			requireContributor(ctx.forge).recentChangeRequestTimes,
 		[profileText.id]: (ctx) => requireContributor(ctx.forge).profileText ?? "",
+		[title.id]: (ctx) => {
+			if ("changeRequest" in ctx.forge.event) {
+				return ctx.forge.event.changeRequest.title;
+			}
+			signalUnavailable("this event has no change request");
+		},
+		[commentBody.id]: (ctx) => {
+			if (ctx.forge.event.kind === "comment.created") {
+				return ctx.forge.event.comment.body;
+			}
+			signalUnavailable("this event has no comment");
+		},
+		[textByLocation.id]: (ctx) => {
+			// Insertion order IS the scan order: comment, title, then patch paths.
+			// Absent sources are absent keys; an empty map is a valid value.
+			const content: Record<string, string> = {};
+			const event = ctx.forge.event;
+			if (event.kind === "comment.created") {
+				content.comment = event.comment.body;
+			}
+			if ("changeRequest" in event) {
+				content.title = event.changeRequest.title;
+			}
+			for (const file of ctx.forge.diff ?? []) {
+				if (file.patch) {
+					content[file.path] = file.patch;
+				}
+			}
+			return content;
+		},
 		[filesChanged.id]: (ctx) => requireDiff(ctx.forge).length,
 		[changedPaths.id]: (ctx) => requireDiff(ctx.forge).map((file) => file.path),
 	},
