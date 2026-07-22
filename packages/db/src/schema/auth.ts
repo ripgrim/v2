@@ -49,6 +49,17 @@ export const user = pgTable(
 		rerunCooldownExempt: boolean("rerun_cooldown_exempt")
 			.notNull()
 			.default(false),
+		/**
+		 * Better Auth `admin` plugin fields. `role` is null for every existing
+		 * account (no user carries "admin"), so the plugin's raw /api/auth/admin/*
+		 * endpoints stay deny-by-default — platform staff still gate on
+		 * `isPlatformAdmin`. The ban fields back dash's user-management; the
+		 * session-create hook reads `banned` on every sign-in, so it must exist.
+		 */
+		role: text("role"),
+		banned: boolean("banned").notNull().default(false),
+		banReason: text("ban_reason"),
+		banExpires: timestamp("ban_expires", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.defaultNow(),
@@ -75,6 +86,8 @@ export const session = pgTable("session", {
 	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 	ipAddress: text("ip_address"),
 	userAgent: text("user_agent"),
+	/** Better Auth `admin` plugin — set while an admin impersonates this user. */
+	impersonatedBy: text("impersonated_by"),
 	createdAt: timestamp("created_at", { withTimezone: true })
 		.notNull()
 		.defaultNow(),

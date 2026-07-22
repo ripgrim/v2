@@ -2909,3 +2909,40 @@ truncation, and match ordering are byte-identical; all pre-existing rule
 tests pass unmodified and no golden/snapshot file was regenerated. Every
 signal-based built-in now expresses in the SDK: Phase 4 custom rules are
 unblocked.
+SDK vocabulary complete: all 8 signal-based built-ins convert byte-identical (69ec2a0)
+
+## Signal registry expansion: 15 security signals (2026-07-22)
+
+Additive batch, all probed live against GitHub's API for an external
+contributor before inclusion (the 2FA lesson). No evaluator, comparison, or
+existing-rule changes. New signals and their fetch clusters:
+
+- user fetch (free riders): contributor.publicGists, hireable (GitHub stores
+  true or unset; unset reads false, never a skip), company, location (both
+  empty when unset).
+- pr-files fetch (free riders): pr.linesAdded, linesDeleted, linesChanged.
+- pr-commits (one new call, three signals): pr.commitCount, verifiedCommits,
+  allCommitsVerified (empty commit list is unavailable, not a pass). The
+  commit verification object is readable anonymously; 100-commit page cap,
+  same MVP ceiling as the diff.
+- one search each, unavailable on failure: contributor.prsOpened,
+  repoRelation.issuesOpenedInRepo, closedUnmergedInRepo (closed-as-spam is
+  not exposed; this is the honest proxy), commentedInRepo (counts threads
+  commented on, not comments).
+- user-events (1 to 3 calls, early-stop): contributor.recentForkTimes,
+  timestamps with history "7d". The feed reaches 90 days or 300 events,
+  whichever is smaller (about 5 days for an active account, measured), so
+  7d is the honest declaration. Truncation only undercounts, and only on
+  accounts already far past any sane threshold; the feed can lag by minutes.
+  Both caveats live in the signal's describe. Pagination stops as soon as
+  the oldest fetched event predates the 7d window.
+
+Ids stay flat and stable; the tree is presentation and rule data serializes
+only the id, so regrouping at the 40+ review breaks nothing. Registry is now
+31 signals. Search-budget note: 7 search-backed signals total against the
+separate 30/min search limit, all lazy; audit if custom rules make search
+signals popular. Dropped for non-exposure: has-custom-avatar, closed-as-spam.
+Deferred with reasons: stars given (needs Link-header access GithubHttp does
+not have), contribution calendar (GraphQL plumbing), lifetime fork count
+(low discrimination; velocity replaced it), commit-message metrics (design
+when a rule wants one).

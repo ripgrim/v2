@@ -15,24 +15,39 @@ describe("github sdk surface", () => {
 	test("github produces every registry signal, so the full tree is exposed", () => {
 		expect(Object.keys(signals.contributor).sort()).toEqual([
 			"accountAge",
+			"company",
 			"followers",
 			"following",
+			"hireable",
+			"location",
 			"mergedElsewhere",
 			"profileText",
+			"prsOpened",
+			"publicGists",
 			"publicRepos",
 			"recentChangeRequestTimes",
+			"recentForkTimes",
 		]);
 		expect(Object.keys(signals.repoRelation).sort()).toEqual([
+			"closedUnmergedInRepo",
+			"commentedInRepo",
 			"isMaintainer",
 			"isOrgMember",
+			"issuesOpenedInRepo",
 			"mergedInRepo",
 		]);
 		expect(Object.keys(signals.pr).sort()).toEqual([
+			"allCommitsVerified",
 			"changedPaths",
+			"commitCount",
 			"filesChanged",
+			"linesAdded",
+			"linesChanged",
+			"linesDeleted",
 			"patchByPath",
 			"textByLocation",
 			"title",
+			"verifiedCommits",
 		]);
 		expect(Object.keys(signals.comment)).toEqual(["body"]);
 	});

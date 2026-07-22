@@ -5,6 +5,7 @@ import { orgServices, schema } from "@tripwire/db";
 import { generateId } from "@tripwire/utils";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
 import { organization } from "better-auth/plugins/organization";
 import { eq } from "drizzle-orm";
 import { applySignupAccessDefaults } from "./access.ts";
@@ -219,6 +220,14 @@ export function createAuth(input: CreateAuthInput) {
 					},
 				},
 			}),
+			/**
+			 * Better Auth `admin` plugin — backs dash's user management (ban /
+			 * unban / impersonate / set-role) and adds the banned-on-sign-in
+			 * check. defaultRole "user" + no account carrying "admin" keeps the
+			 * raw /api/auth/admin/* endpoints deny-by-default; the app's own
+			 * isPlatformAdmin staff model is unchanged.
+			 */
+			admin(),
 			/**
 			 * Better Auth Infrastructure dashboard connector — mounts the /dash/*
 			 * admin + audit endpoints and streams auth events to the infra API.

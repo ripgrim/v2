@@ -44,6 +44,10 @@ function fakeResponses(): Record<string, unknown> {
 			followers: 3,
 			following: 9,
 			public_repos: 5,
+			public_gists: 2,
+			hireable: null,
+			company: "@acme",
+			location: null,
 			bio: "hi",
 		},
 		"/repos/mallory/mallory/contents/README.md?ref=HEAD": {
@@ -60,8 +64,41 @@ function fakeResponses(): Record<string, unknown> {
 			permission: "read",
 		},
 		"/repos/acme/widgets/pulls/42/files?per_page=100": [
-			{ filename: "src/a.ts", patch: "@@ -1 +1 @@" },
-			{ filename: "docs/b.md" },
+			{
+				filename: "src/a.ts",
+				additions: 10,
+				deletions: 4,
+				patch: "@@ -1 +1 @@",
+			},
+			{ filename: "docs/b.md", additions: 1, deletions: 0 },
+		],
+		"/repos/acme/widgets/pulls/42/commits?per_page=100": [
+			{ commit: { verification: { verified: true } } },
+			{ commit: { verification: { verified: false } } },
+			{ commit: {} },
+		],
+		[`/search/issues?q=${encodeURIComponent("author:mallory is:pr")}&per_page=1`]:
+			{ total_count: 9 },
+		[`/search/issues?q=${encodeURIComponent("repo:acme/widgets author:mallory is:issue")}&per_page=1`]:
+			{ total_count: 3 },
+		[`/search/issues?q=${encodeURIComponent("repo:acme/widgets author:mallory is:pr is:closed is:unmerged")}&per_page=1`]:
+			{ total_count: 1 },
+		[`/search/issues?q=${encodeURIComponent("repo:acme/widgets commenter:mallory")}&per_page=1`]:
+			{ total_count: 6 },
+		// A FULL page (100 events) whose oldest entry predates the 7 day
+		// history: pagination must stop after page 1 even though page 2 exists.
+		"/users/mallory/events?per_page=100&page=1": [
+			{ type: "ForkEvent", created_at: "2026-07-21T09:00:00.000Z" },
+			{ type: "PushEvent", created_at: "2026-07-21T08:00:00.000Z" },
+			{ type: "ForkEvent", created_at: "2026-07-20T12:00:00.000Z" },
+			...Array.from({ length: 96 }, (_, i) => ({
+				type: "PushEvent",
+				created_at: `2026-07-${String(19 - (i % 5)).padStart(2, "0")}T00:00:00.000Z`,
+			})),
+			{ type: "ForkEvent", created_at: "2026-07-01T00:00:00.000Z" },
+		],
+		"/users/mallory/events?per_page=100&page=2": [
+			{ type: "ForkEvent", created_at: "2026-06-30T00:00:00.000Z" },
 		],
 	};
 }
@@ -124,11 +161,25 @@ describe("github forge signals", () => {
 		expect(calls).toHaveLength(1);
 	});
 
-	test("every supported signal on a PR event costs seven calls, same as today's pre-fetch", async () => {
+	test("the original signal set on a PR event costs seven calls, same as the old pre-fetch", async () => {
 		const { ctx, calls } = makeCtx();
-		const ids = Object.keys(githubForge.produces).filter(
-			(id) => id !== "comment.body",
-		) as (keyof typeof githubForge.produces)[];
+		const ids = [
+			"contributor.accountAge",
+			"contributor.followers",
+			"contributor.following",
+			"contributor.publicRepos",
+			"contributor.profileText",
+			"contributor.mergedElsewhere",
+			"contributor.recentChangeRequestTimes",
+			"repoRelation.mergedInRepo",
+			"repoRelation.isOrgMember",
+			"repoRelation.isMaintainer",
+			"pr.title",
+			"pr.filesChanged",
+			"pr.changedPaths",
+			"pr.patchByPath",
+			"pr.textByLocation",
+		] as (keyof typeof githubForge.produces)[];
 		const values = Object.fromEntries(
 			await Promise.all(ids.map(async (id) => [id, await produce(id, ctx)])),
 		);
@@ -151,6 +202,67 @@ describe("github forge signals", () => {
 		const { ctx, calls } = makeCtx();
 		await expect(produce("pr.title", ctx)).resolves.toBe("Add feature");
 		expect(calls).toHaveLength(0);
+	});
+
+	test("every signal in the expanded registry costs thirteen calls, shared loaders deduped", async () => {
+		const { ctx, calls } = makeCtx();
+		const ids = Object.keys(githubForge.produces).filter(
+			(id) => id !== "comment.body",
+		) as (keyof typeof githubForge.produces)[];
+		const values = Object.fromEntries(
+			await Promise.all(ids.map(async (id) => [id, await produce(id, ctx)])),
+		);
+		expect(values["contributor.publicGists"]).toBe(2);
+		expect(values["contributor.hireable"]).toBe(false);
+		expect(values["contributor.company"]).toBe("@acme");
+		expect(values["contributor.location"]).toBe("");
+		expect(values["contributor.prsOpened"]).toBe(9);
+		expect(values["pr.linesAdded"]).toBe(11);
+		expect(values["pr.linesDeleted"]).toBe(4);
+		expect(values["pr.linesChanged"]).toBe(15);
+		expect(values["pr.commitCount"]).toBe(3);
+		expect(values["pr.verifiedCommits"]).toBe(1);
+		expect(values["pr.allCommitsVerified"]).toBe(false);
+		expect(values["repoRelation.issuesOpenedInRepo"]).toBe(3);
+		expect(values["repoRelation.closedUnmergedInRepo"]).toBe(1);
+		expect(values["repoRelation.commentedInRepo"]).toBe(6);
+		// user, readme, 7 searches, permission, pr-files, pr-commits, events.
+		expect(calls).toHaveLength(13);
+		expect(new Set(calls).size).toBe(13);
+	});
+
+	test("the weak account signals ride the one user fetch", async () => {
+		const { ctx, calls } = makeCtx();
+		await Promise.all([
+			produce("contributor.publicGists", ctx),
+			produce("contributor.hireable", ctx),
+			produce("contributor.company", ctx),
+			produce("contributor.location", ctx),
+			produce("contributor.accountAge", ctx),
+		]);
+		expect(calls).toHaveLength(1);
+	});
+
+	test("the commit integrity trio shares one commits fetch", async () => {
+		const { ctx, calls } = makeCtx();
+		await Promise.all([
+			produce("pr.commitCount", ctx),
+			produce("pr.verifiedCommits", ctx),
+			produce("pr.allCommitsVerified", ctx),
+		]);
+		expect(calls).toHaveLength(1);
+	});
+
+	test("the events feed stops paginating once the 7d window is covered", async () => {
+		const { ctx, calls } = makeCtx();
+		const times = await produce("contributor.recentForkTimes", ctx);
+		// Page 1 is full but its oldest event predates the window: no page 2.
+		expect(calls).toEqual(["/users/mallory/events?per_page=100&page=1"]);
+		// Only fork events inside the 7 day window, newest first.
+		expect(times).toEqual([
+			"2026-07-21T09:00:00.000Z",
+			"2026-07-20T12:00:00.000Z",
+		]);
 	});
 
 	test("textByLocation assembles the map in scan order on a PR event", async () => {
