@@ -2972,3 +2972,94 @@ The requirement travels WITH the feature, not with Phase 4 generally:
 
 crypto-address stays exactly as it is: live in-code patterns, zero ReDoS
 exposure, byte-identical.
+
+## Phase 4.2: custom rules backend (2026-07-22)
+
+A custom rule is a rule defined in DATA: the stored definition IS the
+serialized SDK shape ({ when, comparison, severity }), validated by contracts
+customRuleDefinitionSchema, stored as one jsonb column in the new
+custom_rules table (migration 0015), deserializing directly into what
+evaluateSignalRule takes. No normalized-column translation layer.
+
+Two registration paths, one catalog. Built-ins keep defineRule (code +
+configSchema + evaluate). Custom rules go: row -> customCatalogEntry
+(contracts) synthesizes a ResolvedCatalogEntry -> resolveCatalog(customRows)
+merges with RULE_CATALOG at read time. A custom entry carries every field a
+built-in entry does; configSchema is the empty object because the rule IS
+the config. `source: "custom"` exists for presentation and lifecycle (tag,
+edit-in-builder, delete) only; nothing reads it to decide behavior, and
+`grep isCustom` finds only the id-prefix helper.
+
+Evaluation: the worker's makeEvaluator is a two-source resolver. A ref
+matching a stored custom rule evaluates through evaluateCustomRule
+(apps/worker/src/jobs/custom-rules.ts): the GitHub forge's producer supplies
+the raw value through one shared memoized ForgeSignalCtx per run (a repo
+with no custom rules pays zero extra API calls; N custom rules on one signal
+cluster share one fetch, proven by test), evaluateSignalRule applies the
+transform and comparison, and the result is the same RuleResult envelope a
+built-in emits. Evidence is { observed: resolvedValue }; comparison args
+(the maintainer's thresholds) never enter evidence (§10). Signal
+unavailability and evaluation errors skip, never throw. The GithubHttp for
+producers threads index.ts -> process-event -> run-workflows as signalHttp,
+minted from the same tokenFor as reads.
+
+Toggles: enabled custom rules join deriveDefaultWorkflow as non-baseline
+toggles (ref custom-<slug>@1, config {}); workflow ownership excludes them
+by id exactly like built-ins. validateWorkflowForEnable now takes the
+catalog as a parameter (default: static RULE_CATALOG), so enable-time
+validation of a workflow referencing a custom rule passes the merged
+catalog.
+
+v1 scope enforced in the schema: safe verbs only (under over atLeast atMost
+between equals not oneOf noneOf has noneMatch); matches/scan/empty are
+rejected at parse. `not` nests exactly one level. Custom ids are
+"custom-" prefixed so they can never collide with built-in ids and every
+ref keeps the id@version grammar; version is always 1, edits update in
+place (run pages read persist-time snapshots and stored summaries).
+
+Known seams, deliberate: rerun/resume-run call makeEvaluator without the
+custom source today (a custom rule re-evaluated there skips as unknown);
+wire when those paths grow custom-rule traffic. projectRulePublic returns
+null for custom refs, so custom steps carry no publicEvidence/summary yet —
+safe-by-default §10; the generic projection lands with the UI phase.
+Boundary edges added earlier: worker -> sdk. forge-github now exports
+githubForge for the worker.
+
+## Phase 4.3: custom rules UI (2026-07-22)
+
+The builder is a sentence, not a form. CustomRuleBuilder (rules page,
+admin-gated "create rule") authors by completing "Flag when [signal]
+[in the last N] [comparison] [value], as a [severity] signal" left to
+right, each blank revealing the next; chips derive from the rule-card param
+styling. It emits the same {when, comparison, severity} the backend stores;
+saveCustomRule validates with the contracts schema plus the sdk's
+storedRuleIssue (new: sdk/stored-rule.ts — signal exists, verb fits the
+signal's kind, window within declared history), so the picker's constraints
+are re-enforced server-side.
+
+Plain-language display lives in contracts/custom-rules-display.ts, one
+source for the picker, the card sentence, and the worker's public summary:
+CUSTOM_SIGNALS (29 signals in five groups; patchByPath and textByLocation
+hidden as transform inputs; internal ids never shown) and VERBS_BY_KIND
+(type-shaped menus; a numeric signal cannot offer a text verb by
+construction, tested against the v1 safe set). Two sentences, two audiences:
+customRuleSentence carries the configured value (maintainer card/builder);
+customRuleSummary is built from the OBSERVED value only and never contains
+the threshold (§10, tested). withPublicProjection now projects custom steps
+as publicEvidence {observed} + that summary, closing the Phase 4.2 seam.
+
+Integration: RuleConfigView gained source and sentence (presentation);
+custom rules render as one more card with a custom tag, save-queue toggle,
+and a delete affordance (lifecycle). listRuleConfigViews merges custom rows
+at read time. The workflow editor palette appends the repo's custom rules to
+its rules section from the same rules query, plus a "create rule ->" link
+bridging to the builder; node faces name custom refs through a
+CustomRuleNamesContext (the static catalog cannot). setWorkflowEnabled
+validates refs against resolveCatalog(repo custom rules), so a workflow
+gating on a custom rule enables cleanly. Boundary edge added: web -> sdk
+(sdk stays pure, contracts-only).
+
+Known state: the pglite seed-story integration test is failing on this
+machine independent of these changes (verified by stashing the working tree
+and rerunning; it fails identically without the Phase 4.3 diff). It is the
+historically flaky test addressed by "realistic headroom" (4e3440a).
