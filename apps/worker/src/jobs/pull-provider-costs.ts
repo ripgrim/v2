@@ -36,6 +36,21 @@ function daysInUtcMonth(day: string): number {
 	return new Date(Date.UTC(y, m, 0)).getUTCDate();
 }
 
+/** The UTC day after `day` (YYYY-MM-DD), for a half-open time range. */
+function nextUtcDay(day: string): string {
+	const d = new Date(`${day}T00:00:00.000Z`);
+	d.setUTCDate(d.getUTCDate() + 1);
+	return d.toISOString().slice(0, 10);
+}
+
+function numFromEnv(raw: string | undefined): number | null {
+	if (raw == null || raw === "") {
+		return null;
+	}
+	const n = Number(raw);
+	return Number.isFinite(n) ? n : null;
+}
+
 function firstFiniteNumber(obj: unknown, keys: string[]): number | null {
 	if (!obj || typeof obj !== "object") {
 		return null;
@@ -50,32 +65,39 @@ function firstFiniteNumber(obj: unknown, keys: string[]): number | null {
 }
 
 /**
- * Sum OpenRouter activity spend for one UTC day. The get-user-activity beta
- * endpoint returns an array of per-day records; we sum the dollar field
- * (usage/cost/spend, whichever the record carries) for rows on `day`. Tolerant
- * of the beta shape drifting: unknown records contribute zero, never throw.
+ * Sum OpenRouter spend from an analytics/query response. The endpoint returns
+ * `{ data: { data: [ { total_usage, tokens_total, ... } ], metadata } }`. The
+ * time window is already applied by the request, so we sum every row's
+ * `total_usage` (USD) and `tokens_total`. Tolerant of the shape: unknown records
+ * contribute zero, never throw. `tokens_total` can arrive as a string.
  */
-export function extractOpenRouterDailyCost(
-	json: unknown,
-	day: string,
-): { costUsd: number; tokens: number } {
-	const records: unknown[] = Array.isArray(json)
-		? json
-		: Array.isArray((json as { data?: unknown[] })?.data)
-			? ((json as { data: unknown[] }).data ?? [])
-			: [];
+export function extractOpenRouterDailyCost(json: unknown): {
+	costUsd: number;
+	tokens: number;
+} {
+	const outer = (json as { data?: unknown })?.data;
+	const records: unknown[] = Array.isArray(
+		(outer as { data?: unknown[] })?.data,
+	)
+		? ((outer as { data: unknown[] }).data ?? [])
+		: Array.isArray(outer)
+			? (outer as unknown[])
+			: Array.isArray(json)
+				? (json as unknown[])
+				: [];
 	let costUsd = 0;
 	let tokens = 0;
 	for (const rec of records) {
 		if (!rec || typeof rec !== "object") {
 			continue;
 		}
-		const date = (rec as { date?: unknown }).date;
-		if (typeof date === "string" && !date.startsWith(day)) {
-			continue;
+		costUsd += firstFiniteNumber(rec, ["total_usage", "usage", "cost"]) ?? 0;
+		const tk = (rec as { tokens_total?: unknown; tokens?: unknown })
+			.tokens_total;
+		const n = typeof tk === "string" ? Number(tk) : tk;
+		if (typeof n === "number" && Number.isFinite(n)) {
+			tokens += n;
 		}
-		costUsd += firstFiniteNumber(rec, ["usage", "cost", "spend"]) ?? 0;
-		tokens += firstFiniteNumber(rec, ["tokens", "total_tokens"]) ?? 0;
 	}
 	return { costUsd, tokens };
 }
@@ -85,7 +107,7 @@ export interface PullConfig {
 		managementKey: string | null;
 		keyHashes: { prod: string | null; eval: string | null };
 	};
-	railway: { token: string | null; services: string[] };
+	railway: { usageUsd: number | null };
 	planetscale: {
 		tokenId: string | null;
 		token: string | null;
@@ -103,10 +125,7 @@ export function pullConfigFromEnv(): PullConfig {
 				eval: process.env.OPENROUTER_EVAL_KEY_HASH ?? null,
 			},
 		},
-		railway: {
-			token: process.env.RAILWAY_API_TOKEN ?? null,
-			services: ["worker", "api", "web"],
-		},
+		railway: { usageUsd: numFromEnv(process.env.RAILWAY_USAGE_USD) },
 		planetscale: {
 			tokenId: process.env.PLANETSCALE_SERVICE_TOKEN_ID ?? null,
 			token: process.env.PLANETSCALE_SERVICE_TOKEN ?? null,
@@ -125,16 +144,33 @@ async function pullOpenRouter(
 	if (!cfg.managementKey) {
 		return [];
 	}
-	const headers = { authorization: `Bearer ${cfg.managementKey}` };
-	const query = (keyHash: string | null) => {
-		const params = new URLSearchParams({ date: day });
-		if (keyHash) {
-			params.set("api_key_hash", keyHash);
-		}
-		return `https://openrouter.ai/api/v1/analytics/get-user-activity?${params}`;
+	const headers = {
+		authorization: `Bearer ${cfg.managementKey}`,
+		"content-type": "application/json",
 	};
-	// One row per keyed source when hashes are configured (prod vs eval COGS
-	// cross-check), else a single 'prod-key' total.
+	const nextDay = nextUtcDay(day);
+	// POST /api/v1/analytics/query with the day as a half-open time range. A key
+	// hash filter splits prod from eval; without hashes we take the account
+	// aggregate as 'prod-key' (which still includes eval until hashes are set).
+	const bodyFor = (hash: string | null) =>
+		JSON.stringify({
+			metrics: ["total_usage", "tokens_total", "request_count"],
+			...(hash
+				? { filters: [{ field: "api_key_hash", operator: "eq", value: hash }] }
+				: {}),
+			time_range: { start: `${day}T00:00:00Z`, end: `${nextDay}T00:00:00Z` },
+			granularity: "day",
+		});
+	const post = async (hash: string | null) => {
+		const res = await fetchImpl(
+			"https://openrouter.ai/api/v1/analytics/query",
+			{ method: "POST", headers, body: bodyFor(hash) },
+		);
+		if (!res.ok) {
+			throw new Error(`openrouter analytics ${res.status}`);
+		}
+		return res.json();
+	};
 	const targets: { service: string; hash: string | null }[] =
 		cfg.keyHashes.prod || cfg.keyHashes.eval
 			? [
@@ -144,12 +180,8 @@ async function pullOpenRouter(
 			: [{ service: "prod-key", hash: null }];
 	const rows: ProviderCostRow[] = [];
 	for (const target of targets) {
-		const res = await fetchImpl(query(target.hash), { headers });
-		if (!res.ok) {
-			throw new Error(`openrouter analytics ${res.status}`);
-		}
-		const json = await res.json();
-		const { costUsd, tokens } = extractOpenRouterDailyCost(json, day);
+		const json = await post(target.hash);
+		const { costUsd, tokens } = extractOpenRouterDailyCost(json);
 		rows.push({
 			provider: "openrouter",
 			service: target.service,
@@ -161,50 +193,22 @@ async function pullOpenRouter(
 	return rows;
 }
 
-async function pullRailway(
-	fetchImpl: Fetch,
-	cfg: PullConfig["railway"],
-	_day: string,
-): Promise<ProviderCostRow[]> {
-	if (!cfg.token) {
+/**
+ * Railway billing has no stable public GraphQL query, so the usage figure is
+ * operator-provided via RAILWAY_USAGE_USD (the current MTD number from the
+ * dashboard), mirroring how PlanetScale is modeled flat. Marked estimated. When
+ * the env is unset, Railway is simply skipped.
+ */
+function pullRailway(cfg: PullConfig["railway"]): ProviderCostRow[] {
+	if (cfg.usageUsd == null) {
 		return [];
 	}
-	// Railway usage has no documented daily granularity, so we pull the current
-	// month-to-date estimated usage and mark it estimated. The rollup reads the
-	// latest Railway rows for the floor gauge; deltas are derived downstream.
-	const body = JSON.stringify({
-		query: `query { estimatedUsage { measurement estimatedValue } }`,
-	});
-	const res = await fetchImpl("https://backboard.railway.com/graphql/v2", {
-		method: "POST",
-		headers: {
-			authorization: `Bearer ${cfg.token}`,
-			"content-type": "application/json",
-		},
-		body,
-	});
-	if (!res.ok) {
-		throw new Error(`railway graphql ${res.status}`);
-	}
-	const json = (await res.json()) as {
-		data?: {
-			estimatedUsage?: { measurement?: string; estimatedValue?: number }[];
-		};
-	};
-	const measurements = json.data?.estimatedUsage ?? [];
-	const total = measurements.reduce(
-		(sum, m) =>
-			sum + (typeof m.estimatedValue === "number" ? m.estimatedValue : 0),
-		0,
-	);
-	// A single account-level MTD figure; service split is not exposed by this
-	// query, so it lands under 'main'.
 	return [
 		{
 			provider: "railway",
 			service: "main",
-			costUsd: total,
-			usageJson: json,
+			costUsd: cfg.usageUsd,
+			usageJson: { note: "from RAILWAY_USAGE_USD" },
 			estimated: true,
 		},
 	];
@@ -295,8 +299,8 @@ export async function pullProviderCosts(deps: PullDeps): Promise<PullResult> {
 	await run("openrouter", Boolean(config.openrouter.managementKey), () =>
 		pullOpenRouter(fetchImpl, config.openrouter, day),
 	);
-	await run("railway", Boolean(config.railway.token), () =>
-		pullRailway(fetchImpl, config.railway, day),
+	await run("railway", config.railway.usageUsd != null, () =>
+		Promise.resolve(pullRailway(config.railway)),
 	);
 	// PlanetScale always writes the interpolated accrual, invoice or not.
 	await run("planetscale", true, () =>

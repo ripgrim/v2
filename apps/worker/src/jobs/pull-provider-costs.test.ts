@@ -26,24 +26,24 @@ describe("previousUtcDay", () => {
 });
 
 describe("extractOpenRouterDailyCost", () => {
-	test("sums the dollar field for records on the day", () => {
+	test("sums total_usage and tokens_total from the analytics/query shape", () => {
 		const json = {
-			data: [
-				{ date: "2026-07-21", usage: 0.0119, tokens: 2934 },
-				{ date: "2026-07-21", usage: 0.004, tokens: 800 },
-				{ date: "2026-07-20", usage: 5, tokens: 999 },
-			],
+			data: {
+				data: [
+					{ total_usage: 0.0119, tokens_total: "2934" },
+					{ total_usage: 0.004, tokens_total: 800 },
+				],
+				metadata: { row_count: 2 },
+			},
 		};
-		const out = extractOpenRouterDailyCost(json, "2026-07-21");
+		const out = extractOpenRouterDailyCost(json);
 		expect(out.costUsd).toBeCloseTo(0.0159, 6);
 		expect(out.tokens).toBe(3734);
 	});
 
 	test("tolerates unknown shapes without throwing", () => {
-		expect(extractOpenRouterDailyCost(null, "2026-07-21").costUsd).toBe(0);
-		expect(extractOpenRouterDailyCost({ nope: 1 }, "2026-07-21").costUsd).toBe(
-			0,
-		);
+		expect(extractOpenRouterDailyCost(null).costUsd).toBe(0);
+		expect(extractOpenRouterDailyCost({ nope: 1 }).costUsd).toBe(0);
 	});
 });
 
@@ -67,7 +67,7 @@ function fakeDb() {
 
 const DISABLED: PullConfig = {
 	openrouter: { managementKey: null, keyHashes: { prod: null, eval: null } },
-	railway: { token: null, services: ["worker", "api", "web"] },
+	railway: { usageUsd: null },
 	planetscale: { tokenId: null, token: null, org: null },
 };
 
@@ -125,7 +125,7 @@ describe("pullProviderCosts orchestration", () => {
 		};
 		const fetchImpl = mock(() =>
 			Promise.resolve(
-				jsonResponse({ data: [{ date: "2026-07-21", usage: 0.02 }] }),
+				jsonResponse({ data: { data: [{ total_usage: 0.02 }] } }),
 			),
 		);
 		const result = await pullProviderCosts({
@@ -137,6 +137,22 @@ describe("pullProviderCosts orchestration", () => {
 		});
 		expect(result.providers.openrouter).toBe("ok");
 		expect(rows).toHaveLength(2); // openrouter prod-key + planetscale
+	});
+
+	test("writes Railway from the RAILWAY_USAGE_USD override, no network", async () => {
+		const { db, rows } = fakeDb();
+		const config: PullConfig = { ...DISABLED, railway: { usageUsd: 1.42 } };
+		const fetchImpl = mock(() => Promise.resolve(jsonResponse({})));
+		const result = await pullProviderCosts({
+			db,
+			logger: noopLogger,
+			fetchImpl: fetchImpl as unknown as typeof fetch,
+			config,
+			now: new Date("2026-07-22T01:40:00Z"),
+		});
+		expect(result.providers.railway).toBe("ok");
+		expect(fetchImpl).not.toHaveBeenCalled(); // override needs no request
+		expect(rows).toHaveLength(2); // railway + planetscale
 	});
 });
 
