@@ -44,8 +44,30 @@ export function createGenerate(options: {
 	reads: WorkerReads | null;
 	readFile: (repo: string, path: string, ref: string) => Promise<string | null>;
 	event: RepoScopedEvent;
+	/** Best-effort metering of request bytes sent to OpenRouter. Optional. */
+	countBytesOut?: (bytes: number) => void;
 }): AiReviewGenerate {
-	const openrouter = createOpenRouter({ apiKey: options.apiKey });
+	const countBytesOut = options.countBytesOut;
+	// Wrap fetch only to size the request body; the response is untouched.
+	const meteredFetch = countBytesOut
+		? (
+				input: Parameters<typeof fetch>[0],
+				init?: Parameters<typeof fetch>[1],
+			) => {
+				if (typeof init?.body === "string") {
+					try {
+						countBytesOut(Buffer.byteLength(init.body));
+					} catch {
+						// metering must never break the model call
+					}
+				}
+				return fetch(input, init);
+			}
+		: undefined;
+	const openrouter = createOpenRouter({
+		apiKey: options.apiKey,
+		...(meteredFetch ? { fetch: meteredFetch as typeof fetch } : {}),
+	});
 	const repo = options.event.repo.fullName;
 	const number =
 		"changeRequest" in options.event

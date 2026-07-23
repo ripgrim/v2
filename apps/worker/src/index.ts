@@ -32,6 +32,7 @@ import { rerunChangeRequest } from "./jobs/rerun.ts";
 import { resumeRun } from "./jobs/resume-run.ts";
 import { rollup } from "./jobs/rollup.ts";
 import { sweepActions } from "./jobs/sweep-actions.ts";
+import * as metering from "./metering.ts";
 
 /**
  * @tripwire/worker — pg-boss consumers, where I/O meets the pure core. Request
@@ -79,9 +80,13 @@ if (import.meta.main) {
 			}
 			return await tokens.getToken(repo.installationId);
 		};
-		reads = new GithubReads({ tokenFor });
-		adapter = createGithubAdapter({ tokenFor });
-		signalHttp = new GithubHttp({ tokenFor });
+	// Shared options carry the metering hook, so EVERY GitHub call (reads,
+		// adapter actions, ai-review tool loop, custom-rule signal producers)
+		// folds into the active run counter.
+		const httpOptions = { tokenFor, onCall: metering.addGithubCall };
+		reads = new GithubReads(httpOptions);
+		adapter = createGithubAdapter(httpOptions);
+		signalHttp = new GithubHttp(httpOptions);
 		/**
 		 * Boot health (live-test surprise #3): validate the App credentials with
 		 * one cheap authenticated call so a worker running on stale/broken env is
@@ -129,6 +134,7 @@ if (import.meta.main) {
 						reads,
 						readFile: (repo, path, ref) => adapter.readFile(repo, path, ref),
 						event,
+						countBytesOut: metering.addOpenRouterBytesOut,
 					})
 			: null;
 	logger.info(
