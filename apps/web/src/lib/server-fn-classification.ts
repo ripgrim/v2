@@ -45,6 +45,7 @@ export const SERVER_FN_CLASSIFICATION: Record<string, ServerFnClass> = {
 	getAnalyticsActivity: "member",
 	getLatestRunId: "member",
 	listRuleConfigViews: "member",
+	listCustomRuleViews: "member",
 	getRulesHeaderStats: "member",
 	listRepoWorkflows: "member",
 	getRepoWorkflow: "member",
@@ -52,6 +53,9 @@ export const SERVER_FN_CLASSIFICATION: Record<string, ServerFnClass> = {
 	getRepoResponseConfig: "member",
 
 	// ── admin (org mutations) ────────────────────────────────────────────
+	saveCustomRule: "admin",
+	setCustomRuleEnabled: "admin",
+	deleteCustomRule: "admin",
 	updateOrg: "admin",
 	getOrgCascade: "admin", // pre-delete enumeration — admin surface
 	deleteOrg: "admin",
