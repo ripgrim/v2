@@ -44,8 +44,11 @@ export {
 	defineForge,
 	type ForgeDefinition,
 	type ForgeSignalCtx,
+	type ForgeSuggestCtx,
 	type ProducerMap,
 	type SignalProducer,
+	type SuggesterMap,
+	type SuggestionKind,
 } from "./forge.ts";
 export { globMatch } from "./glob.ts";
 export {

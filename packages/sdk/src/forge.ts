@@ -37,6 +37,26 @@ export type ProducerMap<Client> = {
 	[Id in keyof SignalRegistry]?: SignalProducer<Client, SignalRegistry[Id]>;
 };
 
+/** The value sets a forge can offer as builder suggestions. */
+export type SuggestionKind = "branches" | "extensions" | "logins";
+
+/** Repo-scoped context for a suggester: no event, just the pre-authed client. */
+export interface ForgeSuggestCtx<Client> {
+	/** The forge's native client, pre-authenticated by the backend. */
+	readonly forge: Client;
+	/** The repo whose values to suggest, forge-native form (owner/name). */
+	readonly repo: string;
+}
+
+/**
+ * One optional suggester per suggestion kind. Capability by omission at two
+ * levels: a forge may omit `suggest` entirely, or omit individual kinds. A
+ * missing suggester means the builder falls back to a plain input.
+ */
+export type SuggesterMap<Client> = Partial<
+	Record<SuggestionKind, (ctx: ForgeSuggestCtx<Client>) => Promise<string[]>>
+>;
+
 export interface ForgeDefinition<
 	Client,
 	P extends ProducerMap<Client>,
@@ -46,6 +66,8 @@ export interface ForgeDefinition<
 	 * to one forge cannot be passed to another forge's rule(). */
 	readonly id: FId;
 	readonly produces: P;
+	/** Optional value suggesters, keyed by suggestion kind. */
+	readonly suggest?: SuggesterMap<Client>;
 }
 
 /**
@@ -59,6 +81,7 @@ export function defineForge<Client>() {
 	return <P extends ProducerMap<Client>, FId extends string>(def: {
 		id: FId;
 		produces: P;
+		suggest?: SuggesterMap<Client>;
 	}): ForgeDefinition<Client, P, FId> => def;
 }
 

@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import {
+	getRepoSuggestions,
 	getRulesHeaderStats,
 	listRuleConfigViews,
 } from "#/lib/rules.functions";
@@ -12,6 +13,9 @@ export const rulesQueryKeys = {
 	stats: () => [...rulesQueryKeys.all, "stats"] as const,
 	stat: (org: string, repoId: string) =>
 		[...rulesQueryKeys.stats(), org, repoId] as const,
+	suggestions: () => [...rulesQueryKeys.all, "suggestions"] as const,
+	suggestion: (org: string, repoId: string, kind: string) =>
+		[...rulesQueryKeys.suggestions(), org, repoId, kind] as const,
 };
 
 export const ruleConfigsQueryOptions = (org: string, repoId: string) =>
@@ -30,4 +34,18 @@ export const rulesStatsQueryOptions = (org: string, repoId: string) =>
 			getRulesHeaderStats({ data: { org, repoId }, signal }),
 		staleTime: 15_000,
 		enabled: repoId !== "",
+	});
+
+export const repoSuggestionsQueryOptions = (
+	org: string,
+	repoId: string,
+	kind: string,
+) =>
+	queryOptions({
+		queryKey: rulesQueryKeys.suggestion(org, repoId, kind),
+		queryFn: ({ signal }) =>
+			getRepoSuggestions({ data: { org, repoId, kind }, signal }),
+		// Branch lists change slowly and the worker refreshes them on push.
+		staleTime: 60_000,
+		enabled: repoId !== "" && kind !== "",
 	});

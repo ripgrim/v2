@@ -290,3 +290,24 @@ export const upgradeRuleConfig = createServerFn({ method: "POST" })
 			return { ok: true };
 		},
 	);
+
+/**
+ * Cached builder suggestions for a repo and kind (branch names, etc.). Read
+ * only: the worker populates the cache with the installation token, so the web
+ * never calls the forge. Empty until the worker has refreshed, and the builder
+ * falls back to free text.
+ */
+export const getRepoSuggestions = createServerFn({ method: "GET" })
+	.middleware([accessGuardMiddleware, orgMemberMiddleware])
+	.inputValidator(
+		(input: { org: string; repoId: string; kind: string }) => input,
+	)
+	.handler(async ({ data, context }): Promise<string[]> => {
+		await requireOrgRepoById(
+			(context as { org: OrgWithRole }).org.id,
+			data.repoId,
+		);
+		const { repoServices } = await import("@tripwire/db");
+		const { getDb } = await import("#/lib/server/db");
+		return repoServices.getRepoSuggestions(getDb().db, data.repoId, data.kind);
+	});

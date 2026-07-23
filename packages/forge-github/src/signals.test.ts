@@ -425,6 +425,29 @@ describe("github forge signals", () => {
 	});
 });
 
+describe("suggest", () => {
+	test("branches suggester lists branch names from one repo read", async () => {
+		const calls: string[] = [];
+		const http = new GithubHttp({
+			tokenFor: async () => "t",
+			fetchImpl: (async (input: string | URL | Request) => {
+				const path = String(input).replace("https://api.github.com", "");
+				calls.push(path);
+				if (path === "/repos/acme/widgets/branches?per_page=100") {
+					return Response.json([{ name: "main" }, { name: "next" }]);
+				}
+				return new Response("not found", { status: 404 });
+			}) as unknown as typeof fetch,
+		});
+		const branches = await githubForge.suggest?.branches?.({
+			forge: http,
+			repo: "acme/widgets",
+		});
+		expect(branches).toEqual(["main", "next"]);
+		expect(calls).toEqual(["/repos/acme/widgets/branches?per_page=100"]);
+	});
+});
+
 describe("defineForge type flow", () => {
 	test("a producer's return type is enforced against the signal's declared type", () => {
 		// Compile-time proof, mirrored from the approved spike.

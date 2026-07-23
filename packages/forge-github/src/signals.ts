@@ -649,6 +649,17 @@ export const githubForge = defineForge<GithubHttp>()({
 			signalUnavailable("this event has no comment");
 		},
 	},
+	suggest: {
+		// Branch names for the builder's branch signals. One cheap installation
+		// read; the worker caches the result so the web never calls GitHub.
+		branches: async (ctx) => {
+			const data = (await ctx.forge.get(
+				ctx.repo,
+				`/repos/${ctx.repo}/branches?per_page=100`,
+			)) as { name: string }[];
+			return data.map((branch) => branch.name);
+		},
+	},
 });
 
 export type GithubForge = typeof githubForge;

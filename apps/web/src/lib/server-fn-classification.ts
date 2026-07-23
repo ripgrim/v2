@@ -47,6 +47,7 @@ export const SERVER_FN_CLASSIFICATION: Record<string, ServerFnClass> = {
 	listRuleConfigViews: "member",
 	listCustomRuleViews: "member",
 	getRulesHeaderStats: "member",
+	getRepoSuggestions: "member",
 	listRepoWorkflows: "member",
 	getRepoWorkflow: "member",
 	listModerationQueue: "member",

@@ -120,6 +120,13 @@
       "when": 1784770727001,
       "tag": "0016_smooth_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784803623959,
+      "tag": "0017_striped_senator_kelly",
+      "breakpoints": true
     }
   ]
 }
