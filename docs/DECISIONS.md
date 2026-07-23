@@ -2806,3 +2806,260 @@ contributor label per failed rule, no plus-N collapse (collapsing hides which
 rules fired — the confusion the mode exists to kill); the hidden marker is
 appended in EVERY mode, custom included — the §7 upsert lifecycle depends on
 it.
+
+## Signal SDK Phase 1: registry + defineForge + new @tripwire/sdk (2026-07-21)
+
+The rule SDK build (spike approved 2026-07-21) needs a home the closed §3
+layout does not have: a package importable by BOTH forge adapters and, later,
+external rule authors. `core` is worker-only and `forge` is interface-only by
+law, so neither fits. New package `packages/sdk` (@tripwire/sdk): the neutral
+signal registry (`defineSignal`, runtime `type`/`scope`/`describe`, 15
+signals), `defineForge` (credential-free producers over `ctx.forge`, memoized
+`ctx.load`), and in Phase 2 the `Tripwire` client. It is pure like core: no
+I/O, no octokit, imports contracts only. Boundary edges added:
+`sdk -> contracts`; `forge-github -> sdk`; `worker -> sdk`.
+
+Producer maps are keyed `[signal.id]` (literal-typed string on the signal
+object), not the signal object itself — TS2464 rejects object computed keys
+and object keys collide at runtime as "[object Object]". The `.id` key keeps
+the locked intent: key derived from the signal, producer return type enforced
+against the signal's declared value type via the registry mapped type.
+
+The GitHub forge (`forge-github/src/signals.ts`) is the first defineForge
+consumer. Fetch URLs mirror client/reads.ts verbatim; shared loader keys make
+a full-signal evaluation cost 7 calls, the same 6 profile calls + 1 diff call
+the §5.8 pre-fetch spends today (the commits call is not needed by any signal
+rule). Degradation semantics preserved per signal: mergedElsewhere fails ->
+unavailable (rule skips), mergedInRepo fails -> 0, recent CRs fail -> [],
+permission fails -> "none", profile readme fails -> bio fallback.
+
+## Signal SDK Phases 2-3: client, evaluator, built-ins converted (2026-07-21)
+
+Phase 2 (the SDK): `Tripwire` client in @tripwire/sdk, generic over its
+forge; `signals.<scope>.<name>` narrowed to the forge's producers via key
+remapping; `rule(name, {when, comparison, severity})` emits pure inert data.
+Bound signals carry a `~forge` phantom pinned to the forge's literal id, so a
+raw registry signal AND a signal bound to a different forge are both compile
+errors in rule(). Comparison vocabulary: under over atLeast atMost equals not
+matches has oneOf noneOf between, plus noneMatch (globs over list signals).
+Windowed signals: `.last(w)` exists only on timestamps signals; a LITERAL
+over-history window is a COMPILE error (tuple-arithmetic on the window spec,
+error surfaces as an object marker naming the declared history); a dynamic
+window falls back to a definition-time throw. `.last(w).count` and text
+`.trimmedLength` yield number signals. The evaluator re-narrows every
+produced value through a discriminated dispatch on the runtime `type.kind`
+before any comparison reads it; comparison arguments are validated the same
+way. No bare casts on that path.
+
+Phase 3 (conversion): account-age@1, min-merged-prs@2, pr-rate-limit@1,
+max-files-changed@1, honeypot@1, profile-readme@1 now author their decision
+as SDK signal rules and evaluate through the SDK evaluator, via the CONTEXT
+FORGE (core/src/rules/context-forge.ts): defineForge with RuleContext as the
+client, producers enforced against the registry, SignalUnavailableError
+mapping to the rules' historical skip reasons byte for byte. Envelopes
+(schemas, evidence shapes, publicEvidence, summarize, remedy, waitHint) are
+verbatim; all pre-existing rule tests pass unchanged; zero golden/snapshot
+regenerations. Boundary edge added: core -> sdk (sdk is pure, so core's
+purity law holds). Left alone: min-merged-prs@1 (frozen by its own
+byte-for-byte law), ai-review@1/@2 (the separate AI surface), english-only@1
+(needs a derived text metric, e.g. nonLatinRatio, plus a letters-count guard)
+and crypto-address@1 (needs a scanning comparison over textMap that emits
+match evidence) — both reported as SDK vocabulary gaps, deliberately not
+bodged. The honeypot glob matcher moved verbatim to sdk/glob.ts; verdict and
+evidence share the one function. pr-rate-limit caps its window at the
+signal's 720h declared history; the producer never returns older data, so
+counts are unchanged. SDK severities on converted built-ins are inert
+metadata today (the workflow layer decides actions); they exist because the
+rule data model requires one.
+
+## Signal SDK vocabulary complete: text metrics + scan transform (2026-07-22)
+
+The two gaps that kept english-only@1 and crypto-address@1 imperative are
+closed, per the approved option (iii): a scan is a TRANSFORM that derives
+data, not a comparison that smuggles it. New text transforms .nonLatinRatio
+and .letterCount resolve to number and reuse the verified compareNumber path
+(both project one shared nonLatinScan implementation, so ratio and letter
+count cannot drift). New textMap transform .scan(patterns) yields the
+scanMatches kind; empty() is its boolean verb. Verdict and match evidence
+come from ONE evaluation: passed from empty(), matches from resolvedValue,
+the same mechanism pr-rate-limit's count uses. The scanMatches branch in
+evaluateComparison re-narrows behind a runtime guard (Array.isArray plus
+per-entry kind/value/location shape check); scan patterns are validated the
+same way. No bare casts entered the evaluator.
+
+Patterns are LIVE data at evaluation time ({kind, pattern: RegExp}[]);
+crypto-address holds its eth/btc/sol patterns in code and supplies them per
+evaluation. Nothing round-trips a RegExp through serialization; the
+{kind, source, flags} serialized form for stored custom rules is a flagged
+Phase 4 item.
+
+New registry signal pr.textByLocation (textMap): the event's text keyed by
+where it appears. Producers (github forge, context forge) assemble it in
+scan order, comment then title then diff patch paths in diff order, because
+map insertion order IS the match evidence order. Absent sources are absent
+keys, never unavailable; crypto-address never skips. The github producer
+reuses the pr-files loader: zero new API calls. Known boundary, accepted: a
+repo file literally named "title" or "comment" at the repo root would
+collide with those map keys; the old imperative scan kept the sources in
+separate variables. Pathological, documented, not defended.
+
+Both rules converted through the one authoring surface (rule() + signals off
+the context-forge client). Skip reasons, evidence fields, rounding, sample
+truncation, and match ordering are byte-identical; all pre-existing rule
+tests pass unmodified and no golden/snapshot file was regenerated. Every
+signal-based built-in now expresses in the SDK: Phase 4 custom rules are
+unblocked.
+SDK vocabulary complete: all 8 signal-based built-ins convert byte-identical (69ec2a0)
+
+## Signal registry expansion: 15 security signals (2026-07-22)
+
+Additive batch, all probed live against GitHub's API for an external
+contributor before inclusion (the 2FA lesson). No evaluator, comparison, or
+existing-rule changes. New signals and their fetch clusters:
+
+- user fetch (free riders): contributor.publicGists, hireable (GitHub stores
+  true or unset; unset reads false, never a skip), company, location (both
+  empty when unset).
+- pr-files fetch (free riders): pr.linesAdded, linesDeleted, linesChanged.
+- pr-commits (one new call, three signals): pr.commitCount, verifiedCommits,
+  allCommitsVerified (empty commit list is unavailable, not a pass). The
+  commit verification object is readable anonymously; 100-commit page cap,
+  same MVP ceiling as the diff.
+- one search each, unavailable on failure: contributor.prsOpened,
+  repoRelation.issuesOpenedInRepo, closedUnmergedInRepo (closed-as-spam is
+  not exposed; this is the honest proxy), commentedInRepo (counts threads
+  commented on, not comments).
+- user-events (1 to 3 calls, early-stop): contributor.recentForkTimes,
+  timestamps with history "7d". The feed reaches 90 days or 300 events,
+  whichever is smaller (about 5 days for an active account, measured), so
+  7d is the honest declaration. Truncation only undercounts, and only on
+  accounts already far past any sane threshold; the feed can lag by minutes.
+  Both caveats live in the signal's describe. Pagination stops as soon as
+  the oldest fetched event predates the 7d window.
+
+Ids stay flat and stable; the tree is presentation and rule data serializes
+only the id, so regrouping at the 40+ review breaks nothing. Registry is now
+31 signals. Search-budget note: 7 search-backed signals total against the
+separate 30/min search limit, all lazy; audit if custom rules make search
+signals popular. Dropped for non-exposure: has-custom-avatar, closed-as-spam.
+Deferred with reasons: stars given (needs Link-header access GithubHttp does
+not have), contribution calendar (GraphQL plumbing), lifetime fork count
+(low discrimination; velocity replaced it), commit-message metrics (design
+when a rule wants one).
+
+## Pattern serialization + ReDoS protection: deferred with the feature that needs them (2026-07-22)
+
+A serialization pass for scan patterns ({ kind, source, flags } plus caps
+and a star-height heuristic) was built and then REVERTED the same day, on
+purpose. The trace: ReDoS is only a risk when someone untrusted supplies a
+regex. Every pattern in the system today is trusted code (crypto-address's
+in-code PATTERNS; honeypot uses maintainer-configured globs, not regexes).
+The only surface that would create an untrusted regex is user-authored scan
+patterns in custom rules, and that feature does not exist. Protection built
+now guards nothing.
+
+The requirement travels WITH the feature, not with Phase 4 generally:
+- Phase 4 v1 scope: custom rules over the signal + comparison vocabulary,
+  NO user regex authoring. No untrusted-regex surface, no RE2 needed.
+- If user-authored scan patterns ever ship (v2), that feature carries its
+  own hard gate: pattern serialization with rehydration-time validation AND
+  a linear-time engine (RE2) for untrusted patterns. Discovery for that pass
+  is done and recorded here: JSON turns a live RegExp into {}; source+flags
+  round-trips faithfully; matchAll requires the g flag; an evaluation-time
+  timeout is disqualified because JS regex execution is synchronous and
+  uninterruptible, so a killable worker would force the sync resolve path
+  async (the largest blast radius of any option).
+
+crypto-address stays exactly as it is: live in-code patterns, zero ReDoS
+exposure, byte-identical.
+
+## Phase 4.2: custom rules backend (2026-07-22)
+
+A custom rule is a rule defined in DATA: the stored definition IS the
+serialized SDK shape ({ when, comparison, severity }), validated by contracts
+customRuleDefinitionSchema, stored as one jsonb column in the new
+custom_rules table (migration 0015), deserializing directly into what
+evaluateSignalRule takes. No normalized-column translation layer.
+
+Two registration paths, one catalog. Built-ins keep defineRule (code +
+configSchema + evaluate). Custom rules go: row -> customCatalogEntry
+(contracts) synthesizes a ResolvedCatalogEntry -> resolveCatalog(customRows)
+merges with RULE_CATALOG at read time. A custom entry carries every field a
+built-in entry does; configSchema is the empty object because the rule IS
+the config. `source: "custom"` exists for presentation and lifecycle (tag,
+edit-in-builder, delete) only; nothing reads it to decide behavior, and
+`grep isCustom` finds only the id-prefix helper.
+
+Evaluation: the worker's makeEvaluator is a two-source resolver. A ref
+matching a stored custom rule evaluates through evaluateCustomRule
+(apps/worker/src/jobs/custom-rules.ts): the GitHub forge's producer supplies
+the raw value through one shared memoized ForgeSignalCtx per run (a repo
+with no custom rules pays zero extra API calls; N custom rules on one signal
+cluster share one fetch, proven by test), evaluateSignalRule applies the
+transform and comparison, and the result is the same RuleResult envelope a
+built-in emits. Evidence is { observed: resolvedValue }; comparison args
+(the maintainer's thresholds) never enter evidence (§10). Signal
+unavailability and evaluation errors skip, never throw. The GithubHttp for
+producers threads index.ts -> process-event -> run-workflows as signalHttp,
+minted from the same tokenFor as reads.
+
+Toggles: enabled custom rules join deriveDefaultWorkflow as non-baseline
+toggles (ref custom-<slug>@1, config {}); workflow ownership excludes them
+by id exactly like built-ins. validateWorkflowForEnable now takes the
+catalog as a parameter (default: static RULE_CATALOG), so enable-time
+validation of a workflow referencing a custom rule passes the merged
+catalog.
+
+v1 scope enforced in the schema: safe verbs only (under over atLeast atMost
+between equals not oneOf noneOf has noneMatch); matches/scan/empty are
+rejected at parse. `not` nests exactly one level. Custom ids are
+"custom-" prefixed so they can never collide with built-in ids and every
+ref keeps the id@version grammar; version is always 1, edits update in
+place (run pages read persist-time snapshots and stored summaries).
+
+Known seams, deliberate: rerun/resume-run call makeEvaluator without the
+custom source today (a custom rule re-evaluated there skips as unknown);
+wire when those paths grow custom-rule traffic. projectRulePublic returns
+null for custom refs, so custom steps carry no publicEvidence/summary yet —
+safe-by-default §10; the generic projection lands with the UI phase.
+Boundary edges added earlier: worker -> sdk. forge-github now exports
+githubForge for the worker.
+
+## Phase 4.3: custom rules UI (2026-07-22)
+
+The builder is a sentence, not a form. CustomRuleBuilder (rules page,
+admin-gated "create rule") authors by completing "Flag when [signal]
+[in the last N] [comparison] [value], as a [severity] signal" left to
+right, each blank revealing the next; chips derive from the rule-card param
+styling. It emits the same {when, comparison, severity} the backend stores;
+saveCustomRule validates with the contracts schema plus the sdk's
+storedRuleIssue (new: sdk/stored-rule.ts — signal exists, verb fits the
+signal's kind, window within declared history), so the picker's constraints
+are re-enforced server-side.
+
+Plain-language display lives in contracts/custom-rules-display.ts, one
+source for the picker, the card sentence, and the worker's public summary:
+CUSTOM_SIGNALS (29 signals in five groups; patchByPath and textByLocation
+hidden as transform inputs; internal ids never shown) and VERBS_BY_KIND
+(type-shaped menus; a numeric signal cannot offer a text verb by
+construction, tested against the v1 safe set). Two sentences, two audiences:
+customRuleSentence carries the configured value (maintainer card/builder);
+customRuleSummary is built from the OBSERVED value only and never contains
+the threshold (§10, tested). withPublicProjection now projects custom steps
+as publicEvidence {observed} + that summary, closing the Phase 4.2 seam.
+
+Integration: RuleConfigView gained source and sentence (presentation);
+custom rules render as one more card with a custom tag, save-queue toggle,
+and a delete affordance (lifecycle). listRuleConfigViews merges custom rows
+at read time. The workflow editor palette appends the repo's custom rules to
+its rules section from the same rules query, plus a "create rule ->" link
+bridging to the builder; node faces name custom refs through a
+CustomRuleNamesContext (the static catalog cannot). setWorkflowEnabled
+validates refs against resolveCatalog(repo custom rules), so a workflow
+gating on a custom rule enables cleanly. Boundary edge added: web -> sdk
+(sdk stays pure, contracts-only).
+
+Known state: the pglite seed-story integration test is failing on this
+machine independent of these changes (verified by stashing the working tree
+and rerunning; it fails identically without the Phase 4.3 diff). It is the
+historically flaky test addressed by "realistic headroom" (4e3440a).

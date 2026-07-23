@@ -14,6 +14,7 @@ import { Glob } from "bun";
  *   utils        ← everything except contracts
  *   forge        ← forge-github, worker
  *   core         ← worker ONLY
+ *   sdk          ← forge-github, worker  (signal registry + defineForge; pure)
  *   db           ← worker, api, web
  *   forge-github ← worker, api
  *   ui           ← web
@@ -25,14 +26,15 @@ const ALLOWED: Record<string, readonly string[]> = {
 	contracts: [],
 	utils: ["contracts"],
 	forge: ["contracts"],
-	core: ["contracts", "utils"],
-	"forge-github": ["contracts", "utils", "forge"],
+	core: ["contracts", "utils", "sdk"],
+	sdk: ["contracts"],
+	"forge-github": ["contracts", "utils", "forge", "sdk"],
 	db: ["contracts", "utils"],
 	ui: [],
 	// apps
-	web: ["auth", "contracts", "utils", "db", "ui"],
+	web: ["auth", "contracts", "utils", "db", "ui", "sdk"],
 	api: ["auth", "contracts", "utils", "db", "forge-github"],
-	worker: ["contracts", "utils", "core", "db", "forge", "forge-github"],
+	worker: ["contracts", "utils", "core", "db", "forge", "forge-github", "sdk"],
 };
 
 const KNOWN = new Set(Object.keys(ALLOWED));

@@ -1,8 +1,8 @@
 import { prRateLimitConfigSchema } from "@tripwire/contracts";
+import { atMost, evaluateSignalRule, resolveSignalValue } from "@tripwire/sdk";
 import { z } from "zod";
+import { readContextSignal, rule, signals } from "./context-forge.ts";
 import { defineRule } from "./define.ts";
-
-const HOUR_MS = 3_600_000;
 
 /**
  * Coefficient of variation of the intervals between timestamps — near-zero
@@ -26,10 +26,18 @@ function intervalCov(timesMs: number[]): number | null {
 	return Math.sqrt(variance) / mean;
 }
 
+/** The recentChangeRequestTimes signal guarantees 30 days (720h) of history. */
+const HISTORY_HOURS = 720;
+
 /**
  * pr-rate-limit@1 — no more than `maxPerWindow` change requests from the
  * contributor within `windowHours`. Evidence includes the interval CoV that
- * flags spray patterns (§6's example evidence).
+ * flags spray patterns (§6's example evidence). Authored as an SDK signal
+ * rule: recentChangeRequestTimes .last(window).count atMost the limit. The
+ * evidence count is the exact value the verdict compared, and the CoV runs
+ * over the evaluator's own window resolution — no hand-rolled cutoff. The
+ * window is capped at the signal's declared history; the producer never
+ * returns older data, so the count is unchanged.
  */
 export const prRateLimit = defineRule({
 	id: "pr-rate-limit",
@@ -41,22 +49,41 @@ export const prRateLimit = defineRule({
 		windowHours: z.number(),
 		intervalCov: z.number().nullable(),
 	}),
-	evaluate(ctx, config) {
-		if (ctx.contributor === null) {
-			return { status: "skipped", reason: "contributor profile unavailable" };
+	async evaluate(ctx, config) {
+		const read = await readContextSignal(
+			"contributor.recentChangeRequestTimes",
+			ctx,
+		);
+		if (!read.ok) {
+			return { status: "skipped", reason: read.reason };
 		}
-		const cutoff = Date.parse(ctx.now) - config.windowHours * HOUR_MS;
-		const inWindow = ctx.contributor.recentChangeRequestTimes
-			.map((t) => Date.parse(t))
-			.filter((t) => !Number.isNaN(t) && t >= cutoff);
+		const cappedHours = Math.min(config.windowHours, HISTORY_HOURS);
+		const windowed = signals.contributor.recentChangeRequestTimes.last(
+			`${cappedHours}h`,
+		);
+		const requirement = rule("pr rate limit", {
+			when: windowed.count,
+			comparison: atMost(config.maxPerWindow),
+			severity: "high",
+		});
+		const { passed, resolvedValue } = evaluateSignalRule(requirement, {
+			value: read.value,
+			now: ctx.now,
+		});
+		// Same resolution the verdict used: the evaluator's window, not a copy.
+		const inWindow = resolveSignalValue(windowed.ref, {
+			value: read.value,
+			now: ctx.now,
+		}).value as readonly string[];
 		return {
 			status: "evaluated",
-			passed: inWindow.length <= config.maxPerWindow,
+			passed,
 			evidence: {
-				count: inWindow.length,
+				// The lastCount transform yields a number by construction.
+				count: resolvedValue as number,
 				maxPerWindow: config.maxPerWindow,
 				windowHours: config.windowHours,
-				intervalCov: intervalCov(inWindow),
+				intervalCov: intervalCov(inWindow.map((time) => Date.parse(time))),
 			},
 		};
 	},

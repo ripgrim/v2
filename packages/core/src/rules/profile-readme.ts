@@ -1,11 +1,15 @@
 import { profileReadmeConfigSchema } from "@tripwire/contracts";
+import { atLeast, evaluateSignalRule } from "@tripwire/sdk";
 import { z } from "zod";
+import { readContextSignal, rule, signals } from "./context-forge.ts";
 import { defineRule } from "./define.ts";
 
 /**
  * profile-readme@1 — the contributor's profile must carry at least
  * `minLength` characters of README/bio text. Identity investment is cheap to
- * fake once but expensive at bot-farm scale.
+ * fake once but expensive at bot-farm scale. Authored as an SDK signal rule
+ * over contributor.profileText's trimmedLength; the verdict is unchanged and
+ * the evidence length is the exact value the verdict compared.
  */
 export const profileReadme = defineRule({
 	id: "profile-readme",
@@ -16,17 +20,28 @@ export const profileReadme = defineRule({
 		length: z.number(),
 		minLength: z.number(),
 	}),
-	evaluate(ctx, config) {
-		if (ctx.contributor === null) {
-			return { status: "skipped", reason: "contributor profile unavailable" };
+	async evaluate(ctx, config) {
+		const read = await readContextSignal("contributor.profileText", ctx);
+		if (!read.ok) {
+			return { status: "skipped", reason: read.reason };
 		}
-		const text = ctx.contributor.profileText?.trim() ?? "";
+		const requirement = rule("profile readme", {
+			when: signals.contributor.profileText.trimmedLength,
+			comparison: atLeast(config.minLength),
+			severity: "low",
+		});
+		const { passed, resolvedValue } = evaluateSignalRule(requirement, {
+			value: read.value,
+			now: ctx.now,
+		});
+		// The trimmedLength transform yields a number by construction.
+		const length = resolvedValue as number;
 		return {
 			status: "evaluated",
-			passed: text.length >= config.minLength,
+			passed,
 			evidence: {
-				hasProfileText: text.length > 0,
-				length: text.length,
+				hasProfileText: length > 0,
+				length,
 				minLength: config.minLength,
 			},
 		};
