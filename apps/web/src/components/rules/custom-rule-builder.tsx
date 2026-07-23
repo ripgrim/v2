@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import {
 	CUSTOM_SIGNALS,
 	type CustomRuleDefinition,
@@ -25,6 +26,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
+import { repoSuggestionsQueryOptions } from "#/lib/rules.query";
 import { cn } from "#/lib/utils";
 
 /**
@@ -240,12 +242,16 @@ export interface CustomRuleBuilderProps {
 	open: boolean;
 	onClose: () => void;
 	onSave: (draft: CustomRuleDraft) => Promise<string | null>;
+	org: string;
+	repoId: string;
 }
 
 export function CustomRuleBuilder({
 	open,
 	onClose,
 	onSave,
+	org,
+	repoId,
 }: CustomRuleBuilderProps) {
 	const [state, setState] = useState<BuilderState>(EMPTY_STATE);
 	const [saving, setSaving] = useState(false);
@@ -257,6 +263,11 @@ export function CustomRuleBuilder({
 	const verbs = state.signal ? verbsForSignal(state.signal) : [];
 	const valueMessage = valueIssue(state);
 	const isPercentSignal = state.signal?.unit === "%";
+	// Real repo values for enum-ish signals, cached behind the forge. An empty
+	// result (no suggester, or not refreshed yet) just leaves free-text entry.
+	const { data: suggestions } = useQuery(
+		repoSuggestionsQueryOptions(org, repoId, state.signal?.suggests ?? ""),
+	);
 	const numericInput =
 		(state.signal?.kind === "number" || state.signal?.kind === "timestamps") &&
 		state.verb !== null &&
@@ -410,6 +421,7 @@ export function CustomRuleBuilder({
 								<ComboboxChipsInput
 									onValuesChange={(next) => set({ values: next })}
 									placeholder={valuePlaceholder(state.signal, state.verb.kind)}
+									suggestions={suggestions}
 									values={state.values}
 								/>
 							) : state.verb.kind === "between" ? (

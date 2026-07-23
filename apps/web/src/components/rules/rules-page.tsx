@@ -265,6 +265,8 @@ export function RulesPage() {
 						onClose={() => setBuilderOpen(false)}
 						onSave={saveDraft}
 						open={builderOpen}
+						org={org}
+						repoId={repoId}
 					/>
 
 					{repo && !repo.armed ? (

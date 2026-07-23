@@ -14,6 +14,7 @@ import type { Pool } from "pg";
 import type { Logger } from "pino";
 import type { WorkerReads } from "../context.ts";
 import { emitPendingCheck, emitPrSurface } from "./pr-surface.ts";
+import { refreshBranchSuggestions } from "./refresh-suggestions.ts";
 import { runWorkflows } from "./run-workflows.ts";
 
 export interface ProcessEventDeps {
@@ -96,6 +97,25 @@ export async function processEvent(
 
 	if ("installation" in normalized) {
 		await syncInstallation(db, normalized, logger);
+		// Seed branch suggestions for freshly added repos, so the builder has
+		// them before the first PR arrives.
+		if (
+			deps.signalHttp &&
+			(normalized.kind === "installation.created" ||
+				normalized.kind === "installation-repositories.added")
+		) {
+			for (const added of normalized.repositories) {
+				const repo = await repoServices.getRepoByFullName(db, added.fullName);
+				if (repo) {
+					await refreshBranchSuggestions(
+						db,
+						deps.signalHttp,
+						repo.id,
+						added.fullName,
+					);
+				}
+			}
+		}
 		return;
 	}
 
@@ -168,6 +188,23 @@ export async function processEvent(
 	// or no run at all — exempt / no matching workflow) so the feed row can
 	// update in place. Carries the event id; the SSE fan-out re-fetches the row.
 	await pool.query("SELECT pg_notify('runs', $1)", [event.id]);
+
+	// Keep branch suggestions fresh: a change request means a push landed, which
+	// is when branches move. Off the verdict's critical path (already emitted).
+	if (deps.signalHttp && "changeRequest" in normalized) {
+		const repo = await repoServices.getRepoByFullName(
+			db,
+			normalized.repo.fullName,
+		);
+		if (repo) {
+			await refreshBranchSuggestions(
+				db,
+				deps.signalHttp,
+				repo.id,
+				normalized.repo.fullName,
+			);
+		}
+	}
 }
 
 async function syncInstallation(

@@ -106,6 +106,31 @@ export const responseConfigs = pgTable(
 );
 
 /**
+ * Cached value suggestions for the rule builder (branch names, extensions,
+ * logins), one row per repo per kind. The worker holds the installation token
+ * and refreshes these on push/install; the web only reads the table, so the
+ * forge boundary stays intact. A missing row means the builder falls back to a
+ * plain input.
+ */
+export const repoSuggestions = pgTable(
+	"repo_suggestions",
+	{
+		id: text("id").primaryKey(),
+		repoId: text("repo_id")
+			.notNull()
+			.references(() => repos.id),
+		kind: text("kind").notNull(),
+		values: jsonb("values").$type<string[]>().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		uniqueIndex("repo_suggestions_repo_kind_unique").on(t.repoId, t.kind),
+	],
+);
+
+/**
  * Custom rules: rules defined in data, per repo. `definition` is the
  * serialized SDK shape (contracts customRuleDefinitionSchema, validated on
  * write); a row deserializes directly to what evaluateSignalRule takes.

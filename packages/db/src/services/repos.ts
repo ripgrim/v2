@@ -11,6 +11,7 @@ import type { Db } from "../client.ts";
 import { organizationInstallations } from "../schema/organizations.ts";
 import {
 	customRules,
+	repoSuggestions,
 	repos,
 	responseConfigs,
 	ruleConfigs,
@@ -350,6 +351,42 @@ export async function upsertResponseConfig(
 		.onConflictDoUpdate({
 			target: [responseConfigs.repoId],
 			set: { config, updatedAt: new Date() },
+		});
+}
+
+/**
+ * Cached builder suggestions for a repo and kind (e.g. "branches"). Empty when
+ * the worker has not refreshed them yet, so the builder falls back to free text.
+ */
+export async function getRepoSuggestions(
+	db: Db,
+	repoId: string | null,
+	kind: string,
+): Promise<string[]> {
+	if (!repoId) {
+		return [];
+	}
+	const rows = await db
+		.select()
+		.from(repoSuggestions)
+		.where(
+			and(eq(repoSuggestions.repoId, repoId), eq(repoSuggestions.kind, kind)),
+		);
+	return rows[0]?.values ?? [];
+}
+
+export async function upsertRepoSuggestions(
+	db: Db,
+	repoId: string,
+	kind: string,
+	values: string[],
+): Promise<void> {
+	await db
+		.insert(repoSuggestions)
+		.values({ id: generateId(), repoId, kind, values, updatedAt: new Date() })
+		.onConflictDoUpdate({
+			target: [repoSuggestions.repoId, repoSuggestions.kind],
+			set: { values, updatedAt: new Date() },
 		});
 }
 
