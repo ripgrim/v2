@@ -27,6 +27,7 @@ import { createGenerate } from "./ai/generate.ts";
 import type { WorkerReads } from "./context.ts";
 import { backfillRepo } from "./jobs/backfill-repo.ts";
 import { deliverWebhooks } from "./jobs/deliver-webhook.ts";
+import { economicsRollup } from "./jobs/economics-rollup.ts";
 import { processEvent } from "./jobs/process-event.ts";
 import { pullProviderCosts } from "./jobs/pull-provider-costs.ts";
 import { rerunChangeRequest } from "./jobs/rerun.ts";
@@ -250,6 +251,14 @@ if (import.meta.main) {
 	await boss.schedule("pull-provider-costs", "40 1 * * *", {}, {});
 	await boss.work("pull-provider-costs", async () => {
 		await pullProviderCosts({ db, logger });
+	});
+
+	/** Economics: roll the prior UTC day into economics_daily with drift, credit
+	 * balance, and reconciliation. 02:20 UTC, after the pull. */
+	await boss.createQueue("economics-rollup");
+	await boss.schedule("economics-rollup", "20 2 * * *", {}, {});
+	await boss.work("economics-rollup", async () => {
+		await economicsRollup({ db, logger });
 	});
 
 	/**

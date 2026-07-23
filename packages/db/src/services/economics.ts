@@ -1,6 +1,10 @@
 import type { UsageSource } from "@tripwire/contracts";
+import {
+	PLANETSCALE_CREDITS_START,
+	PLANETSCALE_MONTHLY,
+} from "@tripwire/contracts";
 import { generateId } from "@tripwire/utils";
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, desc, eq, like, ne, sql } from "drizzle-orm";
 import type { Db } from "../client.ts";
 import {
 	aiReviewUsage,
@@ -329,8 +333,15 @@ export async function upsertProviderCost(
 		});
 }
 
-/** The last recorded credit balance, for the running decrement. Null if none. */
-export async function getLastCreditBalance(db: Db): Promise<number | null> {
+/**
+ * The last recorded credit balance strictly before `beforeDay`, for the running
+ * decrement. Reading only earlier days makes the rollup idempotent: re-running a
+ * day recomputes the same balance instead of decrementing twice. Null if none.
+ */
+export async function getLastCreditBalance(
+	db: Db,
+	beforeDay?: string,
+): Promise<number | null> {
 	const [row] = await db
 		.select({ balance: economicsDaily.creditBalanceUsd })
 		.from(economicsDaily)
@@ -338,9 +349,223 @@ export async function getLastCreditBalance(db: Db): Promise<number | null> {
 			and(
 				sql`${economicsDaily.orgId} is null`,
 				sql`${economicsDaily.creditBalanceUsd} is not null`,
+				beforeDay ? sql`${economicsDaily.day} < ${beforeDay}` : undefined,
 			),
 		)
-		.orderBy(sql`${economicsDaily.day} desc`)
+		.orderBy(desc(economicsDaily.day))
 		.limit(1);
 	return row?.balance == null ? null : Number(row.balance);
+}
+
+function daysInUtcMonth(day: string): number {
+	const [y, m] = day.split("-").map(Number);
+	if (!y || !m) {
+		return 30;
+	}
+	return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+const num = (v: unknown): number => (v == null ? 0 : Number(v));
+/** Map key for the org grain: null org uses the totals sentinel. */
+const orgKey = (orgId: string | null): string => orgId ?? "~platform";
+
+export interface RollupResult {
+	day: string;
+	orgRows: number;
+	meteredCostUsd: number;
+	pulledCostUsd: number;
+	driftPct: number | null;
+	creditBalanceUsd: number;
+}
+
+/**
+ * Roll one UTC day into economics_daily (economics-surface-contracts.md): one
+ * row per org active that day, plus a null-org totals row carrying platform
+ * totals, the unattributed bucket, and reconciliation (pulled cost, drift,
+ * credit balance, Railway usage). COGS sums always filter source = 'prod'.
+ * Idempotent: it deletes the day's rows and rewrites them in one transaction, so
+ * a re-run is exact, not additive.
+ */
+export async function rollupEconomicsDay(
+	db: Db,
+	day: string,
+	opts?: { creditsStart?: number; planetscaleMonthly?: number },
+): Promise<RollupResult> {
+	const creditsStart = opts?.creditsStart ?? PLANETSCALE_CREDITS_START;
+	const monthly = opts?.planetscaleMonthly ?? PLANETSCALE_MONTHLY;
+	const onDay = (col: string) => sql.raw(`${col}::date = '${day}'`);
+
+	// A. runs per org (attributed via repo.org_id; null = unattributed).
+	const runRows = await db
+		.select({
+			orgId: repos.orgId,
+			runs: sql<number>`count(*)::int`,
+		})
+		.from(runs)
+		.leftJoin(repos, eq(repos.fullName, runs.repoFullName))
+		.where(onDay("runs.created_at"))
+		.groupBy(repos.orgId);
+
+	// B. prod ai-review metrics per org.
+	const aiRows = await db
+		.select({
+			orgId: aiReviewUsage.orgId,
+			aiRuns: sql<number>`count(distinct ${aiReviewUsage.runId})::int`,
+			promptTokens: sql<number>`coalesce(sum(${aiReviewUsage.promptTokens}),0)::int`,
+			completionTokens: sql<number>`coalesce(sum(${aiReviewUsage.completionTokens}),0)::int`,
+			cost: sql<string>`coalesce(sum(${aiReviewUsage.costUsd}),0)`,
+		})
+		.from(aiReviewUsage)
+		.where(
+			and(
+				eq(aiReviewUsage.source, "prod"),
+				onDay("ai_review_usage.created_at"),
+			),
+		)
+		.groupBy(aiReviewUsage.orgId);
+
+	// Merge the two grains per org.
+	interface OrgAgg {
+		orgId: string | null;
+		runs: number;
+		aiRuns: number;
+		promptTokens: number;
+		completionTokens: number;
+		cost: number;
+	}
+	const byOrg = new Map<string, OrgAgg>();
+	const get = (orgId: string | null): OrgAgg => {
+		const key = orgKey(orgId);
+		let agg = byOrg.get(key);
+		if (!agg) {
+			agg = {
+				orgId,
+				runs: 0,
+				aiRuns: 0,
+				promptTokens: 0,
+				completionTokens: 0,
+				cost: 0,
+			};
+			byOrg.set(key, agg);
+		}
+		return agg;
+	};
+	for (const r of runRows) {
+		get(r.orgId).runs += num(r.runs);
+	}
+	for (const a of aiRows) {
+		const agg = get(a.orgId);
+		agg.aiRuns += num(a.aiRuns);
+		agg.promptTokens += num(a.promptTokens);
+		agg.completionTokens += num(a.completionTokens);
+		agg.cost += num(a.cost);
+	}
+
+	// C. pulled OpenRouter cost for the day, prod scope (eval-key excluded).
+	const [pulled] = await db
+		.select({
+			cost: sql<string>`coalesce(sum(${providerCostsDaily.costUsd}),0)`,
+		})
+		.from(providerCostsDaily)
+		.where(
+			and(
+				eq(providerCostsDaily.day, day),
+				eq(providerCostsDaily.provider, "openrouter"),
+				ne(providerCostsDaily.service, "eval-key"),
+			),
+		);
+	const pulledCostUsd = num(pulled?.cost);
+
+	// D. latest Railway usage figure for the day (the floor gauge).
+	const [railway] = await db
+		.select({ cost: providerCostsDaily.costUsd })
+		.from(providerCostsDaily)
+		.where(
+			and(
+				eq(providerCostsDaily.day, day),
+				eq(providerCostsDaily.provider, "railway"),
+			),
+		)
+		.orderBy(desc(providerCostsDaily.pulledAt))
+		.limit(1);
+	const railwayUsageUsd = railway ? num(railway.cost) : null;
+
+	// Totals + unattributed.
+	let totalRuns = 0;
+	let totalAiRuns = 0;
+	let totalPrompt = 0;
+	let totalCompletion = 0;
+	let totalCost = 0;
+	let unattributedRuns = 0;
+	let unattributedCost = 0;
+	for (const agg of byOrg.values()) {
+		totalRuns += agg.runs;
+		totalAiRuns += agg.aiRuns;
+		totalPrompt += agg.promptTokens;
+		totalCompletion += agg.completionTokens;
+		totalCost += agg.cost;
+		if (agg.orgId === null) {
+			unattributedRuns += agg.runs;
+			unattributedCost += agg.cost;
+		}
+	}
+
+	// Drift excludes the OpenRouter credit-fee multiplier by design.
+	const driftPct =
+		pulledCostUsd > 0
+			? ((pulledCostUsd - totalCost) / pulledCostUsd) * 100
+			: null;
+
+	// Credit decrement from the prior day only (idempotent on re-run).
+	const prev = await getLastCreditBalance(db, day);
+	const creditBalanceUsd =
+		(prev ?? creditsStart) - monthly / daysInUtcMonth(day);
+
+	const money6 = (n: number) => n.toFixed(6);
+	const money2 = (n: number) => n.toFixed(2);
+
+	await db.transaction(async (tx) => {
+		await tx.delete(economicsDaily).where(eq(economicsDaily.day, day));
+		// Per-org rows (skip the null-org agg; it folds into the totals row).
+		for (const agg of byOrg.values()) {
+			if (agg.orgId === null) {
+				continue;
+			}
+			await tx.insert(economicsDaily).values({
+				day,
+				orgId: agg.orgId,
+				runs: agg.runs,
+				aiReviewedRuns: agg.aiRuns,
+				promptTokens: agg.promptTokens,
+				completionTokens: agg.completionTokens,
+				meteredCostUsd: money6(agg.cost),
+			});
+		}
+		// The null-org totals + reconciliation row.
+		await tx.insert(economicsDaily).values({
+			day,
+			orgId: null,
+			runs: totalRuns,
+			aiReviewedRuns: totalAiRuns,
+			promptTokens: totalPrompt,
+			completionTokens: totalCompletion,
+			meteredCostUsd: money6(totalCost),
+			unattributedRuns,
+			unattributedCostUsd: money6(unattributedCost),
+			pulledCostUsd: money6(pulledCostUsd),
+			driftPct: driftPct === null ? null : driftPct.toFixed(2),
+			creditBalanceUsd: money2(creditBalanceUsd),
+			railwayUsageUsd:
+				railwayUsageUsd === null ? null : money2(railwayUsageUsd),
+		});
+	});
+
+	return {
+		day,
+		orgRows: [...byOrg.values()].filter((a) => a.orgId !== null).length,
+		meteredCostUsd: totalCost,
+		pulledCostUsd,
+		driftPct,
+		creditBalanceUsd,
+	};
 }

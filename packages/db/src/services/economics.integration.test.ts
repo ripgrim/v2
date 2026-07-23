@@ -8,7 +8,7 @@ import {
 	type Db,
 	type TestDatabase,
 } from "../index.ts";
-import { aiReviewUsage } from "../schema/economics.ts";
+import { aiReviewUsage, economicsDaily } from "../schema/economics.ts";
 import { events } from "../schema/events.ts";
 import { repos } from "../schema/repos.ts";
 import { runSteps, runs } from "../schema/runs.ts";
@@ -18,6 +18,7 @@ import {
 	recordAiReviewUsage,
 	recordRunAiReviewUsage,
 	recordUsageCounters,
+	rollupEconomicsDay,
 	upsertProviderCost,
 } from "./economics.ts";
 
@@ -316,6 +317,140 @@ describe("recordRunAiReviewUsage (live metering)", () => {
 		expect(
 			await recordRunAiReviewUsage(db, { runId, orgId: ORG, source: "prod" }),
 		).toBe(0);
+	});
+});
+
+describe("rollupEconomicsDay", () => {
+	const DAY = "2026-06-15";
+	const AT = `${DAY}T12:00:00.000Z`;
+
+	async function seedRunOnDay(repoFullName: string): Promise<string> {
+		const eventId = generateId();
+		await db.insert(events).values({
+			id: eventId,
+			deliveryId: `d-${eventId}`,
+			rawKind: "pull_request",
+			raw: {},
+		});
+		const runId = generateId();
+		await db.insert(runs).values({
+			id: runId,
+			eventId,
+			repoFullName,
+			status: "completed",
+			verdict: "block",
+			workflowSnapshot: [],
+			createdAt: new Date(AT),
+		});
+		return runId;
+	}
+
+	async function seedUsage(input: {
+		runId: string;
+		orgId: string | null;
+		source: "prod" | "eval";
+		cost: number;
+	}) {
+		const stepId = await seedStep({
+			runId: input.runId,
+			ruleId: "ai-review@2",
+			evidence: envelope({}),
+		});
+		await db.insert(aiReviewUsage).values({
+			id: generateId(),
+			runStepId: stepId,
+			runId: input.runId,
+			orgId: input.orgId,
+			model: "x-ai/grok-4.5",
+			httpRequests: 1,
+			promptTokens: 2000,
+			completionTokens: 300,
+			cachedTokens: null,
+			costUsd: input.cost.toFixed(6),
+			source: input.source,
+			createdAt: new Date(AT),
+		});
+	}
+
+	test("rolls per-org rows, totals, unattributed, drift, credit, railway", async () => {
+		// org_econ: 3 runs, 2 AI (prod), 1 eval (excluded from COGS).
+		const a1 = await seedRunOnDay(REPO);
+		const a2 = await seedRunOnDay(REPO);
+		const a3 = await seedRunOnDay(REPO);
+		await seedUsage({ runId: a1, orgId: ORG, source: "prod", cost: 0.003 });
+		await seedUsage({ runId: a2, orgId: ORG, source: "prod", cost: 0.003 });
+		await seedUsage({ runId: a3, orgId: ORG, source: "eval", cost: 0.5 });
+		// Unattributed: a repo with no repos row, so the left join yields org null.
+		const u1 = await seedRunOnDay("acme/orphan");
+		await seedRunOnDay("acme/orphan");
+		await seedUsage({ runId: u1, orgId: null, source: "prod", cost: 0.001 });
+
+		// Pulled invoices for the day.
+		await upsertProviderCost(db, {
+			day: DAY,
+			provider: "openrouter",
+			service: "prod-key",
+			usageJson: {},
+			costUsd: 0.0119,
+			estimated: false,
+		});
+		await upsertProviderCost(db, {
+			day: DAY,
+			provider: "openrouter",
+			service: "eval-key",
+			usageJson: {},
+			costUsd: 0.5,
+			estimated: false,
+		});
+		await upsertProviderCost(db, {
+			day: DAY,
+			provider: "railway",
+			service: "main",
+			usageJson: {},
+			costUsd: 1.42,
+			estimated: true,
+		});
+
+		const result = await rollupEconomicsDay(db, DAY);
+		expect(result.orgRows).toBe(1);
+
+		const rows = await db
+			.select()
+			.from(economicsDaily)
+			.where(eq(economicsDaily.day, DAY));
+		const orgRow = rows.find((r) => r.orgId === ORG);
+		const totals = rows.find((r) => r.orgId === null);
+
+		expect(orgRow?.runs).toBe(3);
+		expect(orgRow?.aiReviewedRuns).toBe(2); // eval excluded
+		expect(orgRow?.meteredCostUsd).toBe("0.006000");
+
+		expect(totals?.runs).toBe(5); // 3 org + 2 unattributed
+		expect(totals?.aiReviewedRuns).toBe(3); // 2 org prod + 1 unattributed prod
+		expect(totals?.meteredCostUsd).toBe("0.007000");
+		expect(totals?.unattributedRuns).toBe(2);
+		expect(totals?.unattributedCostUsd).toBe("0.001000");
+		expect(totals?.pulledCostUsd).toBe("0.0119"); // eval-key excluded
+		expect(totals?.driftPct).toBe("41.18"); // (0.0119 - 0.007) / 0.0119
+		expect(totals?.railwayUsageUsd).toBe("1.42");
+		// June has 30 days; 1000 - 45/30 = 998.50. No prior day, so from start.
+		expect(totals?.creditBalanceUsd).toBe("998.50");
+	});
+
+	test("is idempotent: re-run rewrites the day identically", async () => {
+		const before = await db
+			.select()
+			.from(economicsDaily)
+			.where(eq(economicsDaily.day, DAY));
+		await rollupEconomicsDay(db, DAY);
+		const after = await db
+			.select()
+			.from(economicsDaily)
+			.where(eq(economicsDaily.day, DAY));
+		expect(after).toHaveLength(before.length);
+		const t = after.find((r) => r.orgId === null);
+		expect(t?.creditBalanceUsd).toBe("998.50"); // not decremented twice
+		expect(t?.runs).toBe(5);
 	});
 });
 
