@@ -137,6 +137,7 @@ function InstallCta({ org }: { org: string }) {
 				install?.status === "ready" ? (
 					<Button
 						nativeButton={false}
+						// biome-ignore lint/a11y/useAnchorContent: the button's children render into the anchor
 						render={<a href={install.url} />}
 						size="sm"
 					>

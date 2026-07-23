@@ -83,7 +83,7 @@ if (import.meta.main) {
 			}
 			return await tokens.getToken(repo.installationId);
 		};
-	// Shared options carry the metering hook, so EVERY GitHub call (reads,
+		// Shared options carry the metering hook, so EVERY GitHub call (reads,
 		// adapter actions, ai-review tool loop, custom-rule signal producers)
 		// folds into the active run counter.
 		const httpOptions = { tokenFor, onCall: metering.addGithubCall };
