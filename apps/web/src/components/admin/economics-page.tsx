@@ -35,26 +35,32 @@ export function EconomicsPage() {
 			key: "cost-per-run",
 			label: "cost per AI-reviewed run",
 			value: o ? usd(o.costPerRunUsd, 4) : "–",
-			sub: o ? `ceiling ${usd(o.costCeilingUsd, 4)}` : "",
+			sub: o
+				? `average model spend per reviewed change request. target under ${usd(o.costCeilingUsd, 4)}.`
+				: "",
 			tone: overCeiling ? "text-danger" : undefined,
 		},
 		{
 			key: "metered",
-			label: "metered this month",
+			label: "AI spend this month",
 			value: o ? usd(o.meteredMtdUsd, 2) : "–",
-			sub: o ? `of ${usd(o.accruedMtdUsd, 2)} accrued` : "",
+			sub: o
+				? `model spend recorded so far. part of the ${usd(o.accruedMtdUsd, 2)} total once fixed hosting is added.`
+				: "",
 		},
 		{
 			key: "drift",
 			label: "drift",
 			value: o?.driftPct == null ? "n/a" : `${o.driftPct.toFixed(1)}%`,
-			sub: "metered vs pulled",
+			sub: "gap between what we recorded and the provider invoice. under 10% is healthy.",
 		},
 		{
 			key: "runs",
 			label: "runs this month",
 			value: o ? String(o.runs) : "–",
-			sub: o ? `${o.aiReviewedRuns} AI-reviewed` : "",
+			sub: o
+				? `gate runs on change requests. ${o.aiReviewedRuns} of them used AI review.`
+				: "",
 		},
 	];
 
@@ -64,7 +70,8 @@ export function EconomicsPage() {
 				<header className="mb-6">
 					<h1 className="font-semibold text-2xl tracking-tight">Economics</h1>
 					<p className="text-muted-foreground text-sm">
-						platform unit economics. staff only.
+						what the platform costs to run and where the money goes. staff only.
+						numbers roll up once a day, so today reads low until tonight.
 					</p>
 				</header>
 
@@ -89,7 +96,7 @@ export function EconomicsPage() {
 
 				<div className="mt-6 grid gap-3 md:grid-cols-2">
 					<div className="rounded-xl border bg-card p-4">
-						<div className="mb-2 flex items-baseline justify-between">
+						<div className="flex items-baseline justify-between">
 							<p className="font-medium text-sm">credit burn-down</p>
 							<p className="text-muted-foreground text-xs tabular-nums">
 								{o?.creditBalanceUsd == null
@@ -99,6 +106,11 @@ export function EconomicsPage() {
 										}mo`}
 							</p>
 						</div>
+						<p className="mt-0.5 mb-2 text-muted-foreground text-xs">
+							PlanetScale credit left, day by day. it falls as the database bill
+							accrues. the label is dollars remaining and months of runway at
+							the current rate.
+						</p>
 						<DitherChart
 							className="h-24 w-full"
 							color="purple"
@@ -107,10 +119,14 @@ export function EconomicsPage() {
 					</div>
 
 					<div className="rounded-xl border bg-card p-4">
-						<div className="mb-2 flex items-baseline justify-between">
+						<div className="flex items-baseline justify-between">
 							<p className="font-medium text-sm">OpenRouter daily spend</p>
 							<p className="text-muted-foreground text-xs">vs $1.00 cap</p>
 						</div>
+						<p className="mt-0.5 mb-2 text-muted-foreground text-xs">
+							AI model cost per day, from the provider invoice. a day above the
+							$1.00 cap raises an alert in the digest.
+						</p>
 						<DitherChart
 							className="h-24 w-full"
 							color="orange"
@@ -122,7 +138,7 @@ export function EconomicsPage() {
 				</div>
 
 				<div className="mt-3 rounded-xl border bg-card p-4">
-					<div className="mb-2 flex items-baseline justify-between">
+					<div className="flex items-baseline justify-between">
 						<p className="font-medium text-sm">Railway floor</p>
 						<p className="text-muted-foreground text-xs tabular-nums">
 							{o?.railwayUsageUsd == null
@@ -130,6 +146,11 @@ export function EconomicsPage() {
 								: `${usd(o.railwayUsageUsd)} / ${usd(o.railwayFloorUsd)}`}
 						</p>
 					</div>
+					<p className="mt-0.5 mb-2 text-muted-foreground text-xs">
+						hosting usage against the $5.00 that the plan includes each month.
+						spend past the floor starts adding to the bill. n/a until
+						RAILWAY_USAGE_USD is set.
+					</p>
 					<div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
 						<div
 							className={cn(
@@ -153,7 +174,8 @@ function CostByOrgTable({ rows }: { rows: CostByOrgRow[] }) {
 			<div className="border-b px-4 py-3">
 				<p className="font-medium text-sm">cost by org</p>
 				<p className="text-muted-foreground text-xs">
-					this month. the unattributed row is unclaimed installs.
+					AI model spend split by organization this month. the unattributed row
+					is usage from installs no org has claimed yet.
 				</p>
 			</div>
 			<table className="w-full text-sm">
