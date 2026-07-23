@@ -80,6 +80,31 @@ describe("text and boolean paths", () => {
 		);
 	});
 
+	test("a wrong-typed equals arg fails loud, never silently mismatches", () => {
+		// A number arg on a text equals used to === to a silent false; now it throws.
+		expect(() =>
+			evaluateComparison("text", "5", { kind: "equals", args: [5] }, "s"),
+		).toThrow(SignalEvaluationError);
+		// A string arg on a boolean equals likewise throws instead of never firing.
+		expect(() =>
+			evaluateComparison(
+				"boolean",
+				true,
+				{ kind: "equals", args: ["true"] },
+				"s",
+			),
+		).toThrow(SignalEvaluationError);
+		// not() wrapping a wrong-typed equals throws through the recursion.
+		expect(() =>
+			evaluateComparison(
+				"boolean",
+				true,
+				{ kind: "not", args: [{ kind: "equals", args: ["true"] }] },
+				"s",
+			),
+		).toThrow(SignalEvaluationError);
+	});
+
 	test("containsAny is substring-any over the list", () => {
 		const banned = containsAny(["strawberry", "Generated with Claude Code"]);
 		expect(

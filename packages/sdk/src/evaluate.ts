@@ -130,6 +130,14 @@ function textArg(comparison: SerializedComparison): string {
 	return arg;
 }
 
+function booleanArg(comparison: SerializedComparison): boolean {
+	const arg = comparison.args[0];
+	if (typeof arg !== "boolean") {
+		fail(`comparison ${comparison.kind} needs a boolean argument`);
+	}
+	return arg;
+}
+
 function regexArg(comparison: SerializedComparison): RegExp {
 	const arg = comparison.args[0];
 	if (!(arg instanceof RegExp)) {
@@ -204,7 +212,9 @@ function compareText(value: string, comparison: SerializedComparison): boolean {
 				(needle) => typeof needle === "string" && value.includes(needle),
 			);
 		case "equals":
-			return value === comparison.args[0];
+			// textArg throws on a wrong-typed arg rather than === mismatching to a
+			// silent false, so a misconfigured rule fails loud, not quiet.
+			return value === textArg(comparison);
 		case "oneOf":
 			return listArg(comparison).includes(value);
 		case "noneOf":
@@ -236,7 +246,7 @@ function compareBoolean(
 ): boolean {
 	switch (comparison.kind) {
 		case "equals":
-			return value === comparison.args[0];
+			return value === booleanArg(comparison);
 		case "not":
 			return !compareBoolean(value, innerComparison(comparison));
 		default:
