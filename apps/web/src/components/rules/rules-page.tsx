@@ -112,6 +112,11 @@ export function RulesPage() {
 		.filter((r) => r.management === "managed")
 		.map((r) => r.name);
 
+	// The list splits by provenance (§9): built-in rules ship with Tripwire,
+	// custom rules are maintainer-authored. Both keep the active `sort` order.
+	const builtInRules = sorted.filter((r) => r.source !== "custom");
+	const customRules = sorted.filter((r) => r.source === "custom");
+
 	/**
 	 * One batch, N per-rule writes: group pending keys by rule, run a queued
 	 * upgrade first (it re-pins the version), then the rule's config write. A
@@ -280,30 +285,33 @@ export function RulesPage() {
 					) : null}
 
 					<div className="flex flex-col gap-6">
-						{hasEnabledWorkflow ? (
-							<div className="rounded-lg border bg-surface-1 px-4 py-2.5">
-								<p className="text-muted-foreground text-xs">
-									{workflowBannerCopy(ownedRuleNames)}
-								</p>
-							</div>
-						) : null}
 						{statsQuery.data ? (
-							<RuleHeaderStats
-								animate={fetchedStats.current}
-								stats={statsQuery.data}
-							/>
-						) : null}
-						{statsQuery.data && statsQuery.data.matches24h.value === 0 ? (
-							<p className="rounded-lg border border-dashed px-4 py-3 text-center text-muted-foreground text-xs">
-								no change requests evaluated in the last 24h — these rules take
-								effect on the next one that opens.
-							</p>
+							<div className="flex flex-col gap-2">
+								<RuleHeaderStats
+									animate={fetchedStats.current}
+									stats={statsQuery.data}
+								/>
+								{statsQuery.data.matches24h.value === 0 ? (
+									<p className="text-muted-foreground text-xs">
+										no change requests evaluated in the last 24h — these rules
+										take effect on the next one that opens.
+									</p>
+								) : null}
+							</div>
 						) : null}
 						<div className="flex items-center justify-end">
 							<RuleFilters onSortChange={setSort} sort={sort} />
 						</div>
-						<div className="flex flex-col gap-3">
-							{sorted.map((rule) => (
+						<section className="flex flex-col gap-3">
+							<div className="flex flex-col gap-1">
+								<h2 className="font-medium text-sm">built-in rules</h2>
+								{hasEnabledWorkflow ? (
+									<p className="text-muted-foreground text-xs">
+										{workflowBannerCopy(ownedRuleNames)}
+									</p>
+								) : null}
+							</div>
+							{builtInRules.map((rule) => (
 								<RuleCard
 									canEdit={isAdmin}
 									key={rule.ruleId}
@@ -313,7 +321,28 @@ export function RulesPage() {
 									rule={rule}
 								/>
 							))}
-						</div>
+						</section>
+						<section className="flex flex-col gap-3">
+							<h2 className="font-medium text-sm">custom rules</h2>
+							{customRules.length > 0 ? (
+								customRules.map((rule) => (
+									<RuleCard
+										canEdit={isAdmin}
+										key={rule.ruleId}
+										onDelete={removeCustomRule}
+										org={org}
+										repo={repoName}
+										rule={rule}
+									/>
+								))
+							) : (
+								<p className="text-muted-foreground text-xs">
+									{isAdmin
+										? "no custom rules yet. create one to match your repo's own patterns."
+										: "no custom rules yet."}
+								</p>
+							)}
+						</section>
 					</div>
 				</div>
 				<UnsavedChangesBar />

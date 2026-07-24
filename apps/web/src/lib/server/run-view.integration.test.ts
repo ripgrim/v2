@@ -164,6 +164,23 @@ describe("loadRunView — §10 access model", () => {
 		expect(view?.access).toBe("full");
 	});
 
+	test("full view surfaces the re-run scope; public strips it (§6/§10)", async () => {
+		const pub = await loadRunView(db, publicRunId, NO_SESSION);
+		expect(pub?.orgSlug).toBeNull();
+		expect(pub?.repoName).toBeNull();
+		expect(pub?.canRerun).toBe(false);
+
+		// A session gets the scope, but user-1 has no admin membership ⇒ no re-run.
+		const full = await loadRunView(db, publicRunId, SESSION);
+		expect(full?.repoName).toBe("pub");
+		expect(full?.canRerun).toBe(false);
+
+		// Open-dev posture treats the viewer as admin ⇒ re-run is offered.
+		const dev = await loadRunView(db, publicRunId, OPEN_DEV);
+		expect(dev?.repoName).toBe("pub");
+		expect(dev?.canRerun).toBe(true);
+	});
+
 	test("no session + private repo ⇒ nothing (indistinguishable from missing)", async () => {
 		expect(await loadRunView(db, privateRunId, NO_SESSION)).toBeNull();
 		expect((await loadRunView(db, privateRunId, SESSION))?.access).toBe("full");

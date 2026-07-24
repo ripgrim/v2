@@ -1,30 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { NormalizedEvent } from "@tripwire/contracts";
 import { useState } from "react";
 import { VerdictChip } from "#/components/activity/verdict-chip";
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "#/components/ui/dialog";
-import { toast } from "#/components/ui/toast";
-import type {
-	ActivityFeedData,
-	ActivityGroup,
-	ActivityItem,
-} from "#/lib/activity.functions";
-import {
-	getRerunPreview,
-	rerunChangeRequest,
-	rerunRulesLine,
-} from "#/lib/activity.functions";
-import { activityQueryKeys } from "#/lib/activity.query";
+import type { ActivityGroup, ActivityItem } from "#/lib/activity.functions";
 import { formatRelativeTime } from "#/lib/format-relative-time";
 import { cn } from "#/lib/utils";
 
@@ -103,19 +81,7 @@ function LinkWrap({
 	return <div className={className}>{children}</div>;
 }
 
-/** Admin-only re-run wiring: the URL scope the mutation needs. Null ⇒ hidden. */
-export interface RerunScope {
-	org: string;
-	repo: string;
-}
-
-export function ActivityStack({
-	group,
-	rerun = null,
-}: {
-	group: ActivityGroup;
-	rerun?: RerunScope | null;
-}) {
+export function ActivityStack({ group }: { group: ActivityGroup }) {
 	const [showAll, setShowAll] = useState(false);
 	const entries = group.timeline;
 	const canTruncate = entries.length > VISIBLE;
@@ -123,7 +89,7 @@ export function ActivityStack({
 
 	return (
 		<div className="overflow-hidden rounded-xl border bg-card">
-			<StackHeader group={group} rerun={rerun} />
+			<StackHeader group={group} />
 			{truncated ? (
 				<TruncatedBody entries={entries} onShowMore={() => setShowAll(true)} />
 			) : (
@@ -164,16 +130,8 @@ function RevealPill({
 }
 
 /** The top card: the change request's identity + its CURRENT verdict. Carries
- * the surface fill; the rows below sit on the darker base with no dividers.
- * The re-run affordance sits OUTSIDE the LinkWrap (no button-in-link nesting);
- * its confirm step opens a modal so the header stays uncrowded. */
-function StackHeader({
-	group,
-	rerun,
-}: {
-	group: ActivityGroup;
-	rerun: RerunScope | null;
-}) {
+ * the surface fill; the rows below sit on the darker base with no dividers. */
+function StackHeader({ group }: { group: ActivityGroup }) {
 	const evaluating = group.currentRunId != null && group.currentVerdict == null;
 	return (
 		<div className="bg-surface-1">
@@ -198,183 +156,9 @@ function StackHeader({
 					</span>
 					<VerdictSlot pending={evaluating} verdict={group.currentVerdict} />
 				</LinkWrap>
-				{rerun ? <RerunControl group={group} scope={rerun} /> : null}
 			</div>
 		</div>
 	);
-}
-
-/**
- * Re-run confirm in the Dialog primitive (portaled — the card's
- * overflow-hidden can't clip it). The header keeps only the compact button;
- * the dialog carries the cost copy per the founder requirement — this spends
- * real evaluation and updates the public review surfaces — and the confirm
- * sits in the destructive register.
- */
-function RerunControl({
-	group,
-	scope,
-}: {
-	group: ActivityGroup;
-	scope: RerunScope;
-}) {
-	const [open, setOpen] = useState(false);
-	const [unavailable, setUnavailable] = useState<string | null>(null);
-	const queryClient = useQueryClient();
-	const preview = useQuery({
-		queryKey: ["rerun-preview", scope.org, scope.repo],
-		queryFn: () =>
-			getRerunPreview({ data: { org: scope.org, repo: scope.repo } }),
-		enabled: open,
-		staleTime: 15_000,
-	});
-	const mutation = useMutation({
-		mutationFn: rerunChangeRequest,
-		onSuccess: (result) => {
-			if (result.status === "queued") {
-				setOpen(false);
-				// Instant feedback: point the group at the pre-materialized run and
-				// mark it evaluating until the SSE `run` event lands the verdict.
-				queryClient.setQueryData<ActivityFeedData>(
-					activityQueryKeys.feed(scope.org, scope.repo),
-					(current) =>
-						markGroupEvaluating(current, group.subjectNumber, result.runId),
-				);
-				void queryClient.invalidateQueries({
-					queryKey: activityQueryKeys.feed(scope.org, scope.repo),
-				});
-				toast("re-run queued — this card updates when it lands");
-			} else if (result.status === "cooldown") {
-				setOpen(false);
-				toast(
-					`re-run available again in ~${Math.max(1, Math.ceil(result.retryInSeconds / 60))} min`,
-				);
-			} else if (result.status === "no-workflow") {
-				setUnavailable(
-					"no enabled rules — nothing to evaluate. enable a rule or workflow first.",
-				);
-			} else if (result.status === "no-event") {
-				setUnavailable(
-					"no evaluatable event for this change request — open or update it first.",
-				);
-			} else {
-				setUnavailable("this repo isn't armed — arm it first.");
-			}
-		},
-		onError: () => {
-			toast("re-run failed to queue — try again");
-		},
-	});
-
-	const rulesCopy =
-		unavailable ??
-		(preview.data
-			? `${rerunRulesLine(preview.data.ruleNames)}. this may cost ai review usage. the pr's review comment and check will be updated.`
-			: "this runs your current rules again and may cost ai review usage. the pr's review comment and check will be updated.");
-
-	return (
-		<Dialog
-			onOpenChange={(next) => {
-				setOpen(next);
-				if (!next) {
-					setUnavailable(null);
-				}
-			}}
-			open={open}
-		>
-			<DialogTrigger
-				className="shrink-0 rounded-md bg-red-500/10 px-2.5 py-1 font-medium text-red-600 text-xs transition-colors hover:bg-red-500/20 dark:text-red-400"
-				type="button"
-			>
-				re-run rules
-			</DialogTrigger>
-			<DialogContent>
-				<DialogHeader>
-					<DialogTitle>re-run rules?</DialogTitle>
-					<DialogDescription className="truncate">
-						#{group.subjectNumber} {group.title}
-					</DialogDescription>
-				</DialogHeader>
-				<p className="px-5 pb-4 text-muted-foreground text-sm">{rulesCopy}</p>
-				<DialogFooter>
-					<DialogClose
-						className="text-muted-foreground text-xs transition-colors hover:text-foreground"
-						type="button"
-					>
-						cancel
-					</DialogClose>
-					{unavailable ? null : (
-						<button
-							className="rounded-md bg-red-500/10 px-3 py-1.5 font-medium text-red-600 text-xs transition-colors hover:bg-red-500/20 dark:text-red-400"
-							disabled={mutation.isPending}
-							onClick={() =>
-								mutation.mutate({
-									data: {
-										org: scope.org,
-										repo: scope.repo,
-										number: group.subjectNumber,
-									},
-								})
-							}
-							type="button"
-						>
-							{mutation.isPending ? "queueing…" : "confirm re-run"}
-						</button>
-					)}
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
-/** Optimistic: swap the group's current run to the queued re-run. */
-function markGroupEvaluating(
-	data: ActivityFeedData | undefined,
-	subjectNumber: number,
-	runId: string,
-): ActivityFeedData {
-	const items = data?.items ?? [];
-	return {
-		items: items.map((item) => {
-			if (item.type !== "group" || item.group.subjectNumber !== subjectNumber) {
-				return item;
-			}
-			const group = item.group;
-			// Attach the pending run to the latest change-request timeline entry so
-			// the pulse shows on the row that carried the previous verdict.
-			const crIdx = [...group.timeline]
-				.map((t, i) => ({ t, i }))
-				.reverse()
-				.find(({ t }) => "changeRequest" in t.event)?.i;
-			const timeline =
-				crIdx == null
-					? group.timeline
-					: group.timeline.map((entry, i) =>
-							i === crIdx
-								? {
-										...entry,
-										run: {
-											runId,
-											verdict: null,
-											status: "queued",
-											reason: null,
-										},
-										pending: true,
-									}
-								: entry,
-						);
-			return {
-				type: "group" as const,
-				group: {
-					...group,
-					currentRunId: runId,
-					currentVerdict: null,
-					timeline,
-					latestActivityAt: new Date().toISOString(),
-				},
-			};
-		}),
-	};
 }
 
 function TruncatedBody({

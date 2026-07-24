@@ -11,7 +11,7 @@ import { EmptyState } from "#/components/common/empty-state";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import type { ActivityFeedItem } from "#/lib/activity.functions";
 import { activityQueryOptions, useActivityStream } from "#/lib/activity.query";
-import { orgContextQueryOptions, orgRepoQueryOptions } from "#/lib/org.query";
+import { orgRepoQueryOptions } from "#/lib/org.query";
 import { cn } from "#/lib/utils";
 
 const routeApi = getRouteApi("/$org/$repo/activity");
@@ -51,8 +51,6 @@ export function ActivityPage() {
 		activityQueryOptions(org, repoName),
 	);
 	const { data: repo } = useQuery(orgRepoQueryOptions(org, repoName));
-	const { data: orgContext } = useQuery(orgContextQueryOptions(org));
-	const isAdmin = orgContext?.role === "admin";
 	useActivityStream(org, repoName, repo?.fullName);
 	const [filter, setFilter] = useState<Filter>("all");
 	const unarmed = Boolean(repo && !repo.armed);
@@ -130,11 +128,7 @@ export function ActivityPage() {
 					<div className="flex flex-col gap-3">
 						{items.map((item) =>
 							item.type === "group" ? (
-								<ActivityStack
-									group={item.group}
-									key={itemKey(item)}
-									rerun={isAdmin ? { org, repo: repoName } : null}
-								/>
+								<ActivityStack group={item.group} key={itemKey(item)} />
 							) : (
 								<ActivityRow
 									item={item.entry}

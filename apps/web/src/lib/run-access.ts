@@ -86,6 +86,10 @@ export function toPublicRunView(view: RunView): RunView {
 		snapshot: null,
 		// §10: the FACT of a manual re-run is public; the actor never is.
 		rerunBy: null,
+		// Deciding is gated — public viewers carry no re-run scope or permission.
+		orgSlug: null,
+		repoName: null,
+		canRerun: false,
 		steps: view.steps.map(toPublicStep),
 	};
 }

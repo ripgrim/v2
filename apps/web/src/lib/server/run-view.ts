@@ -1,5 +1,5 @@
 import type { Verdict, WorkflowDefinition } from "@tripwire/contracts";
-import { type Db, repoServices, runServices } from "@tripwire/db";
+import { type Db, orgServices, repoServices, runServices } from "@tripwire/db";
 import {
 	resolveRunAccess,
 	toFullRunView,
@@ -24,14 +24,11 @@ export async function loadRunView(
 		return null;
 	}
 	const hasSession = session.userId !== null;
-	let repoPrivate: boolean | null = null;
-	if (session.authEnabled && !hasSession) {
-		const repo = await repoServices.getRepoByFullName(
-			db,
-			result.run.repoFullName,
-		);
-		repoPrivate = repo?.private ?? null;
-	}
+	// The repo row backs both the no-session privacy gate and the full view's
+	// re-run scope (org slug + repo name + the admin check).
+	const repo = await repoServices.getRepoByFullName(db, result.run.repoFullName);
+	const repoPrivate =
+		session.authEnabled && !hasSession ? (repo?.private ?? null) : null;
 	const access = resolveRunAccess({
 		authEnabled: session.authEnabled,
 		hasSession,
@@ -39,6 +36,26 @@ export async function loadRunView(
 	});
 	if (access === "denied") {
 		return null;
+	}
+
+	// §6 — re-run is admin-only and addressed by org slug + repo name. Resolve
+	// the scope for the full view only; the public view carries none of it and
+	// `canRerun` stays false. Open-dev (auth disabled) treats the viewer as admin.
+	let orgSlug: string | null = null;
+	let repoName: string | null = null;
+	let canRerun = false;
+	if (access === "full" && repo?.orgId) {
+		orgSlug = await orgSlugById(db, repo.orgId);
+		repoName = repo.name;
+		const admin = !session.authEnabled
+			? true
+			: session.userId
+				? (await orgServices.getMemberRole(db, {
+						orgId: repo.orgId,
+						userId: session.userId,
+					})) === "admin"
+				: false;
+		canRerun = admin && result.run.subjectNumber !== null;
 	}
 	const nodeLabels = snapshotNodeLabels(result.run.workflowSnapshot);
 	const view: RunView = {
@@ -57,6 +74,9 @@ export async function loadRunView(
 			result.run.triggeredBy && access === "full"
 				? await resolveTriggeredByName(db, result.run.triggeredBy)
 				: null,
+		orgSlug,
+		repoName,
+		canRerun,
 		steps: result.steps.map((step) => ({
 			id: step.id,
 			nodeId: step.nodeId,
@@ -147,6 +167,19 @@ function deliveryStatus(action: {
 		return { state: "failed", reason: failure };
 	}
 	return { state: "queued" };
+}
+
+/** The owning org's URL slug — feeds the run view's re-run scope (the mutation
+ * is addressed by slug, §6). */
+async function orgSlugById(db: Db, orgId: string): Promise<string | null> {
+	const { schema } = await import("@tripwire/db");
+	const { eq } = await import("drizzle-orm");
+	const rows = await db
+		.select({ slug: schema.organization.slug })
+		.from(schema.organization)
+		.where(eq(schema.organization.id, orgId))
+		.limit(1);
+	return rows[0]?.slug ?? null;
 }
 
 /** The re-run admin's display name; falls back to the raw id ("dev", "cli:…"). */

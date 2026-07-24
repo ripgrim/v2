@@ -1,10 +1,25 @@
-import { useQuery } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { DashboardLayout } from "#/components/layouts/dashboard-layout";
 import { RunPageSkeleton } from "#/components/runs/run-page-skeleton";
 import { StepCard } from "#/components/runs/step-card";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "#/components/ui/dialog";
 import { toast } from "#/components/ui/toast";
+import {
+	getRerunPreview,
+	rerunChangeRequest,
+	rerunRulesLine,
+} from "#/lib/activity.functions";
 import { formatRelativeTime } from "#/lib/format-relative-time";
 import { mergeLiveSteps } from "#/lib/run-live-steps";
 import { runToMarkdown } from "#/lib/run-markdown";
@@ -125,7 +140,17 @@ function RunBody({ run }: { run: RunView }) {
 							failed
 						</span>
 					) : null}
-					<CopyRunButton run={run} />
+					<div className="ml-auto flex shrink-0 items-center gap-2">
+						<CopyRunButton run={run} />
+						{run.canRerun && run.orgSlug && run.repoName ? (
+							<RerunRunButton
+								number={run.subjectNumber}
+								org={run.orgSlug}
+								repo={run.repoName}
+								subtitle={`#${run.subjectNumber} · ${run.repoFullName}`}
+							/>
+						) : null}
+					</div>
 				</div>
 				<p className="mt-1 text-muted-foreground text-sm">
 					{run.repoFullName}
@@ -250,11 +275,120 @@ function CopyRunButton({ run }: { run: RunView }) {
 	};
 	return (
 		<button
-			className="ml-auto shrink-0 rounded-md bg-surface-1 px-2.5 py-1 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground"
+			className="shrink-0 rounded-md bg-surface-1 px-2.5 py-1 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground"
 			onClick={onCopy}
 			type="button"
 		>
 			{copied ? "copied" : "copy markdown"}
 		</button>
+	);
+}
+
+/**
+ * Admin re-run of the change request, moved here from the activity feed (§6):
+ * the trigger sits beside "copy markdown" and wears the same quiet toolbar
+ * style, while the confirm keeps the destructive register — it spends real
+ * evaluation and updates the PR's review comment and check. On queue it routes
+ * to the freshly materialized run so the maintainer watches it evaluate live.
+ */
+function RerunRunButton({
+	org,
+	repo,
+	number,
+	subtitle,
+}: {
+	org: string;
+	repo: string;
+	number: number | null;
+	subtitle: string;
+}) {
+	const navigate = useNavigate();
+	const [open, setOpen] = useState(false);
+	const [unavailable, setUnavailable] = useState<string | null>(null);
+	const preview = useQuery({
+		queryKey: ["rerun-preview", org, repo],
+		queryFn: () => getRerunPreview({ data: { org, repo } }),
+		enabled: open,
+		staleTime: 15_000,
+	});
+	const mutation = useMutation({
+		mutationFn: rerunChangeRequest,
+		onSuccess: (result) => {
+			if (result.status === "queued") {
+				setOpen(false);
+				toast("re-run queued — opening the new run");
+				void navigate({ params: { runId: result.runId }, to: "/runs/$runId" });
+			} else if (result.status === "cooldown") {
+				setOpen(false);
+				toast(
+					`re-run available again in ~${Math.max(1, Math.ceil(result.retryInSeconds / 60))} min`,
+				);
+			} else if (result.status === "no-workflow") {
+				setUnavailable(
+					"no enabled rules — nothing to evaluate. enable a rule or workflow first.",
+				);
+			} else if (result.status === "no-event") {
+				setUnavailable(
+					"no evaluatable event for this change request — open or update it first.",
+				);
+			} else {
+				setUnavailable("this repo isn't armed — arm it first.");
+			}
+		},
+		onError: () => {
+			toast("re-run failed to queue — try again");
+		},
+	});
+
+	const rulesCopy =
+		unavailable ??
+		(preview.data
+			? `${rerunRulesLine(preview.data.ruleNames)}. this may cost ai review usage. the pr's review comment and check will be updated.`
+			: "this runs your current rules again and may cost ai review usage. the pr's review comment and check will be updated.");
+
+	return (
+		<Dialog
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) {
+					setUnavailable(null);
+				}
+			}}
+			open={open}
+		>
+			<DialogTrigger
+				className="shrink-0 rounded-md bg-surface-1 px-2.5 py-1 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground"
+				type="button"
+			>
+				re-run rules
+			</DialogTrigger>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>re-run rules?</DialogTitle>
+					<DialogDescription className="truncate">{subtitle}</DialogDescription>
+				</DialogHeader>
+				<p className="px-5 pb-4 text-muted-foreground text-sm">{rulesCopy}</p>
+				<DialogFooter>
+					<DialogClose
+						className="text-muted-foreground text-xs transition-colors hover:text-foreground"
+						type="button"
+					>
+						cancel
+					</DialogClose>
+					{unavailable || number == null ? null : (
+						<button
+							className="rounded-md bg-red-500/10 px-3 py-1.5 font-medium text-red-600 text-xs transition-colors hover:bg-red-500/20 dark:text-red-400"
+							disabled={mutation.isPending}
+							onClick={() =>
+								mutation.mutate({ data: { org, repo, number } })
+							}
+							type="button"
+						>
+							{mutation.isPending ? "queueing…" : "confirm re-run"}
+						</button>
+					)}
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

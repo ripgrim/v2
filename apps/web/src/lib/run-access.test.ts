@@ -173,6 +173,9 @@ const fullView: RunView = {
 	access: "full",
 	rerun: true,
 	rerunBy: "Maintainer",
+	orgSlug: "acme",
+	repoName: "pub",
+	canRerun: true,
 	steps: [ruleStep, aiReviewStep],
 	actions: [
 		{
@@ -204,6 +207,17 @@ describe("toPublicRunView", () => {
 		expect(publicView.rerunBy).toBeNull();
 		// the full view keeps both.
 		expect(toFullRunView(fullView).rerunBy).toBe("Maintainer");
+	});
+
+	test("strips the re-run SCOPE — deciding is gated (§6/§10)", () => {
+		expect(publicView.orgSlug).toBeNull();
+		expect(publicView.repoName).toBeNull();
+		expect(publicView.canRerun).toBe(false);
+		// the full view carries the scope the admin re-run needs.
+		const full = toFullRunView(fullView);
+		expect(full.orgSlug).toBe("acme");
+		expect(full.repoName).toBe("pub");
+		expect(full.canRerun).toBe(true);
 	});
 
 	test("keeps ai-review findings + summary, drops the raw trace and snapshot", () => {

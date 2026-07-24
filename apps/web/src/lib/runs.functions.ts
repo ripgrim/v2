@@ -51,6 +51,15 @@ export interface RunView {
 	rerun: boolean;
 	/** The triggering admin's display name — full view only (§10). */
 	rerunBy: string | null;
+	/**
+	 * §6 re-run scope — the org slug + repo name the admin-gated re-run mutation
+	 * is addressed by. The run route carries only a runId, so the full view
+	 * surfaces the scope; the public view carries none of it (both null).
+	 */
+	orgSlug: string | null;
+	repoName: string | null;
+	/** Whether THIS viewer may re-run: admin, full view, and a CR to target. */
+	canRerun: boolean;
 	steps: RunStepView[];
 	actions: {
 		kind: string;
