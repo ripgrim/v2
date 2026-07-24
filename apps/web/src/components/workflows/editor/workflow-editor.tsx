@@ -387,6 +387,8 @@ function EditorBody({
 		<div className="flex h-full min-h-0 flex-col">
 			<EditorHeader
 				blockers={blockers}
+				customRules={customRules}
+				definition={definition}
 				dirty={dirty}
 				enabled={enabled}
 				name={name}

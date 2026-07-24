@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import type { ValidationIssue } from "@tripwire/contracts";
+import type { ValidationIssue, WorkflowDefinition } from "@tripwire/contracts";
 import { useState } from "react";
+import { CopyWorkflowButton } from "#/components/workflows/editor/copy-workflow-button";
 import { toast } from "#/components/ui/toast";
+import type { CustomRuleDisplay } from "#/lib/workflow-markdown";
 
 /**
  * Slim editor header — back link, inline-editable name, enabled pill +
@@ -13,6 +15,10 @@ export interface EditorHeaderProps {
 	org: string;
 	repo: string;
 	name: string;
+	/** The loaded (secret-redacted) definition — for the copy-markdown action. */
+	definition: WorkflowDefinition;
+	/** Repo custom rules resolved to name + sentence, for the markdown copy. */
+	customRules: readonly CustomRuleDisplay[];
 	enabled: boolean;
 	readOnly: boolean;
 	dirty: boolean;
@@ -29,6 +35,8 @@ export function EditorHeader({
 	org,
 	repo,
 	name,
+	definition,
+	customRules,
 	enabled,
 	readOnly,
 	dirty,
@@ -100,6 +108,10 @@ export function EditorHeader({
 				</span>
 			) : null}
 			<div className="ml-auto flex shrink-0 items-center gap-2">
+				<CopyWorkflowButton
+					customRules={customRules}
+					definition={definition}
+				/>
 				{readOnly ? (
 					<span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-[11px] text-muted-foreground">
 						read-only
